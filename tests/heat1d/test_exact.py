@@ -88,3 +88,14 @@ def test_a_medium_without_interfaces_integrates_too():
     x = np.array([-1.0, 0.0, 1.0])
     np.testing.assert_allclose(inverse_alpha_integral(m, x), [0.0, 4.0, 8.0])
     np.testing.assert_allclose(equilibrium_exact(m, 1.0, 0.0, x), [1.0, 0.5, 0.0])
+
+
+@pytest.mark.parametrize("gap", [1e-16, 1e-15, 1e-14, 1e-13, 1e-12, 1e-10])
+def test_a_point_a_hair_from_an_interface_does_not_corrupt_the_integral(gap):
+    # A thin panel next to the interface must be integrated with its own piece;
+    # F(1) = 1.5 / 1 + 0.5 / 0.1 = 6.5 regardless of where else F is asked for.
+    m = jump_alpha(1.0, 0.1, x0=0.5)
+    f = inverse_alpha_integral(m, np.array([0.5 - gap, 0.5 + gap, 1.0]))
+    assert f[-1] == pytest.approx(6.5, abs=2e-15)
+    assert f[0] == pytest.approx(1.5 - gap, abs=2e-15)
+    assert f[1] == pytest.approx(1.5 + 10 * gap, abs=2e-15)

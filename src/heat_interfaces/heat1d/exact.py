@@ -23,7 +23,9 @@ def inverse_alpha_integral(
 
     [-1, 1] is cut at the interfaces and at the requested points; every cut
     interval is split into ``n_panels`` equal panels carrying ``n_gauss``
-    Gauss–Legendre nodes. Interface values of alpha are never sampled.
+    Gauss–Legendre nodes. Nothing is snapped: a panel between a point and a
+    nearby interface, however thin, is integrated with the piece it lies in,
+    and interface values of alpha are never sampled.
     """
     x = np.asarray(x, dtype=float)
     if x.size and (x.min() < X_MIN or x.max() > X_MAX):

@@ -9,6 +9,7 @@ quadrature reference ``u = A + B ∫ dξ/alpha``. The jump-aware stencils
 
 from .domain import (
     DISSERTATION_BC,
+    PLACEMENT_TOL,
     Constant,
     Grid1D,
     Medium1D,
@@ -35,6 +36,7 @@ from .solve import dirichlet_system, normalized_l2, solve_equilibrium
 
 __all__ = [
     "DISSERTATION_BC",
+    "PLACEMENT_TOL",
     "Constant",
     "Grid1D",
     "Medium1D",

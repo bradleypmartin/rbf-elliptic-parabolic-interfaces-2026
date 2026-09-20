@@ -54,8 +54,8 @@ def dxx_matrix(grid: Grid1D) -> sp.csr_array:
 
 
 def alpha_matrix(grid: Grid1D, medium: Medium1D) -> sp.dia_array:
-    """``A = diag(alpha(x_j))``; a node on an interface takes the owner's value."""
-    return sp.diags_array(medium.alpha(grid.x))
+    """``A = diag(alpha(x_j))``, evaluated on the snapped nodes (``Grid1D.snapped``)."""
+    return sp.diags_array(medium.alpha(grid.snapped(medium.interfaces)))
 
 
 def naive_operator(grid: Grid1D, medium: Medium1D) -> sp.csr_array:
@@ -70,6 +70,7 @@ def direct_operator(grid: Grid1D, medium: Medium1D) -> sp.csr_array:
     Correct to fourth order wherever alpha is smooth and blind to a jump: the
     stencils across an interface see only the owning piece's value and slope.
     """
-    a = sp.diags_array(medium.alpha(grid.x))
-    a_x = sp.diags_array(medium.alpha_x(grid.x))
+    x = grid.snapped(medium.interfaces)
+    a = sp.diags_array(medium.alpha(x))
+    a_x = sp.diags_array(medium.alpha_x(x))
     return (a @ dxx_matrix(grid) + a_x @ dx_matrix(grid)).tocsr()

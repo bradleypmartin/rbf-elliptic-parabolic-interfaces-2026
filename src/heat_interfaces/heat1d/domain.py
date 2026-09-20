@@ -20,6 +20,15 @@ import numpy as np
 
 X_MIN, X_MAX = -1.0, 1.0
 
+PLACEMENT_TOL = 1e-9
+"""How close to a node or a cell midpoint counts as "on" it, as a fraction of h.
+
+The one tolerance for interface placement: ``Grid1D.placement``,
+``node_counts`` and ``Grid1D.snapped`` all use it. Materials never snap;
+``PiecewiseAlpha`` decides ownership by exact equality, so the quadrature
+reference samples the piece a point is really in.
+"""
+
 Side = Literal["left", "right"]
 Placement = Literal["node", "cell"]
 
@@ -39,9 +48,23 @@ class Grid1D:
         """
         return _offset(xi, self.n)
 
-    def placement(self, xi: float, tol: float = 1e-9) -> Placement | None:
+    def placement(self, xi: float, tol: float = PLACEMENT_TOL) -> Placement | None:
         """``"node"``, ``"cell"`` (mid-cell) or ``None`` for anything else."""
         return _placement(xi, self.n, tol)
+
+    def snapped(
+        self, interfaces: Sequence[float], tol: float = PLACEMENT_TOL
+    ) -> np.ndarray:
+        """The nodes, with any within ``tol * h`` of an interface moved onto it.
+
+        ``linspace`` lands a node on an interface only up to rounding; the
+        operators evaluate alpha here so such a node gets the owner's value.
+        """
+        x = self.x.copy()
+        for xi in interfaces:
+            near = np.abs(x - xi) <= tol * self.h
+            x[near] = xi
+        return x
 
 
 def _offset(xi: float, n: int) -> float:
@@ -78,7 +101,7 @@ def node_counts(
     return [
         n
         for n in range(max(n_min, 5), n_max + 1)
-        if all(_placement(xi, n, 1e-9) == placement for xi in interfaces)
+        if all(_placement(xi, n, PLACEMENT_TOL) == placement for xi in interfaces)
     ]
 
 
@@ -97,13 +120,19 @@ def grid_for(
 
 
 class Medium1D(Protocol):
-    """What the operators and the quadrature reference need from a material."""
+    """What the operators, the reference and the interface stencils need of a material.
+
+    ``taylor`` serves E1.2's continuity matrices; a smooth edge (E3) has the
+    same expansion from either side and may ignore ``side``.
+    """
 
     interfaces: tuple[float, ...]
 
     def alpha(self, x: np.ndarray) -> np.ndarray: ...
 
     def alpha_x(self, x: np.ndarray) -> np.ndarray: ...
+
+    def taylor(self, i: int, side: Side, degree: int) -> np.ndarray: ...
 
 
 class Piece(Protocol):
@@ -223,19 +252,20 @@ class PiecewiseAlpha:
         elif len(self.at_interface) != len(self.interfaces):
             raise ValueError("one owner per interface is needed")
 
-    def piece_index(self, x: np.ndarray, atol: float = 1e-12) -> np.ndarray:
+    def piece_index(self, x: np.ndarray) -> np.ndarray:
         """Index of the piece that supplies alpha at each ``x``.
 
-        A point within ``atol`` of an interface counts as on it, so a grid
-        node that lands there up to rounding gets the owner's value.
+        Ownership is decided by exact equality: only a point *at* an
+        interface asks. Grids snap their nodes first (``Grid1D.snapped``);
+        quadrature samples never sit on an interface.
         """
         x = np.asarray(x, dtype=float)
         idx = np.searchsorted(np.asarray(self.interfaces), x, side="right")
         for i, (xi, side) in enumerate(
             zip(self.interfaces, self.at_interface, strict=True)
         ):
-            owner = i if side == "left" else i + 1
-            idx = np.where(np.abs(x - xi) <= atol, owner, idx)
+            if side == "left":
+                idx = np.where(x == xi, i, idx)
         return idx
 
     def alpha(self, x: np.ndarray) -> np.ndarray:

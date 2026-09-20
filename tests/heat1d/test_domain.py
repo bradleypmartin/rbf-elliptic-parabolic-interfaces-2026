@@ -2,7 +2,9 @@ import numpy as np
 import pytest
 
 from heat_interfaces.heat1d.domain import (
+    PLACEMENT_TOL,
     Constant,
+    Grid1D,
     PiecewiseAlpha,
     Sinusoid,
     Smooth,
@@ -104,8 +106,27 @@ def test_jump_alpha_and_validation():
         PiecewiseAlpha((1.0,), (Constant(1), Constant(2)))
 
 
-def test_a_node_within_rounding_of_an_interface_takes_the_owner_value():
+def test_ownership_is_exact_and_grids_snap_instead():
     m = dissertation_alpha()
-    np.testing.assert_allclose(m.alpha([0.5 - 1e-14, 0.5 + 1e-14]), [0.1, 0.1])
-    np.testing.assert_allclose(m.alpha([-1e-14, 1e-14]), [0.1, 0.1])
-    assert float(m.alpha(0.5 + 1e-9)) == 1.0
+    # The medium never snaps: a hair off the interface is the other piece.
+    np.testing.assert_allclose(m.alpha([0.5 - 1e-14, 0.5 + 1e-14]), [0.1, 1.0])
+    np.testing.assert_allclose(m.alpha([-1e-14, 1e-14]), [1.0, 0.1])
+    # A grid node that lands on an interface up to rounding is moved onto it.
+    g = equispaced_grid(101)
+    x = g.x.copy()
+    x[75] += 1e-16
+    nudged = Grid1D(n=g.n, x=x, h=g.h)
+    snapped = nudged.snapped(m.interfaces)
+    assert snapped[75] == 0.5 and snapped[50] == 0.0
+    assert np.count_nonzero(snapped != x) == 1
+    assert float(m.alpha(snapped[75])) == pytest.approx(0.1)
+    assert float(m.alpha(x[75])) == 1.0
+
+
+def test_placement_and_snapping_share_one_tolerance():
+    xi = 0.37
+    for n in node_counts([xi], "node", 5, 2000):
+        g = equispaced_grid(n)
+        j = int(np.argmin(np.abs(g.x - xi)))
+        assert g.snapped([xi])[j] == xi
+        assert g.placement(xi, tol=PLACEMENT_TOL / 100) in ("node", None)

@@ -3,6 +3,7 @@ import pytest
 
 from heat_interfaces.heat1d.domain import (
     Constant,
+    Grid1D,
     PiecewiseAlpha,
     Smooth,
     dissertation_alpha,
@@ -67,23 +68,28 @@ def test_operators_are_fourth_order_when_alpha_is_smooth():
         lambda x: 2 + np.cos(np.pi * x), (lambda x: -np.pi * np.sin(np.pi * x),)
     )
     m = PiecewiseAlpha((), (alpha,))
-    errs = []
+    errs = {"naive": [], "direct": []}
     for n in (41, 81, 161):
         g = equispaced_grid(n)
         x = g.x
         u = np.sin(np.pi * x)
-        exact = -(np.pi**2) * (2 + np.cos(np.pi * x)) * np.sin(
-            np.pi * x
-        ) - np.pi**2 * np.sin(np.pi * x) * np.cos(np.pi * x)
-        inner = slice(4, -4)
-        errs.append(
-            [
-                np.max(np.abs((op(g, m) @ u - exact)[inner]))
-                for op in (naive_operator, direct_operator)
-            ]
+        exact = -(np.pi**2) * (2 + np.cos(np.pi * x)) * np.sin(np.pi * x) - np.pi**2 * (
+            np.sin(np.pi * x) * np.cos(np.pi * x)
         )
-    rates = np.log2(np.array(errs[:-1]) / np.array(errs[1:]))
-    assert np.all(rates > 3.8)
+        errs["naive"].append(np.abs(naive_operator(g, m) @ u - exact))
+        errs["direct"].append(np.abs(direct_operator(g, m) @ u - exact))
+
+    def rates(name, rows):
+        e = np.array([np.max(err[rows]) for err in errs[name]])
+        return np.log2(e[:-1] / e[1:])
+
+    # The direct stencil is fourth order everywhere but the two one-sided rows.
+    assert np.all(rates("direct", slice(2, -2)) > 3.8)
+    # Dx A Dx at rows 2-3 differentiates the one-sided Dx rows, whose error
+    # constants differ from the centred ones: those two rows lose an order.
+    assert np.all(rates("naive", slice(4, -4)) > 3.8)
+    assert np.all(rates("naive", slice(2, 4)) > 2.8)
+    assert np.all(rates("naive", slice(2, 4)) < 3.8)
 
 
 def test_naive_operator_sees_the_jump_and_the_direct_one_does_not():
@@ -100,3 +106,14 @@ def test_small_grids_still_assemble(n):
     g = equispaced_grid(n)
     assert dx_matrix(g).shape == (n, n)
     assert naive_operator(g, jump_alpha(1.0, 2.0)).shape == (n, n)
+
+
+def test_alpha_matrix_gives_a_nudged_interface_node_the_owner_value():
+    m = dissertation_alpha()
+    g = equispaced_grid(101)
+    x = g.x.copy()
+    x[75] += 1e-16
+    a = alpha_matrix(Grid1D(n=g.n, x=x, h=g.h), m)
+    assert a.diagonal()[75] == float(m.alpha(0.5))  # the layer owns x = 0.5
+    assert a.diagonal()[75] != float(m.alpha(x[75]))  # unsnapped it would be 1
+    np.testing.assert_allclose(a.diagonal(), alpha_matrix(g, m).diagonal())
