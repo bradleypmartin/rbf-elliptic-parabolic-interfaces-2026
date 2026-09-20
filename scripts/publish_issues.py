@@ -23,6 +23,7 @@ from pathlib import Path
 
 EPIC_RE = re.compile(r"^## (E\d+): (.+?)\s*$")
 TICKET_RE = re.compile(r"^### (E\d+\.\d+) (.+?)\s*$")
+NUMBER_RE = re.compile(r"^(.*?)\s*\(#(\d+)\)$")  # a published heading ends in (#n)
 META_RE = re.compile(r"^(Labels|Size|Depends on): (.*?)\s*$")
 SECTION_RE = re.compile(r"^## (?!E\d+:)")  # any other level-2 heading ends section 6
 DEP_RE = re.compile(r"E\d+(?:\.\d+)?")
@@ -33,6 +34,7 @@ class Ticket:
     id: str
     title: str
     body: str
+    number: int | None = None
     labels: list[str] = field(default_factory=list)
     size: str = ""
     depends_on: list[str] = field(default_factory=list)
@@ -43,7 +45,15 @@ class Epic:
     id: str
     title: str
     body: str
+    number: int | None = None
     tickets: list[Ticket] = field(default_factory=list)
+
+
+def split_number(title: str) -> tuple[str, int | None]:
+    """Strip a trailing ``(#n)`` from a heading, returning the title and n."""
+    if m := NUMBER_RE.match(title):
+        return m.group(1), int(m.group(2))
+    return title, None
 
 
 def parse_plan(text: str) -> list[Epic]:
@@ -67,7 +77,8 @@ def parse_plan(text: str) -> list[Epic]:
         if m := EPIC_RE.match(line):
             flush()
             ticket = None
-            epic = Epic(id=m.group(1), title=m.group(2), body="")
+            title, number = split_number(m.group(2))
+            epic = Epic(id=m.group(1), title=title, body="", number=number)
             epics.append(epic)
             continue
         if epic is not None and SECTION_RE.match(line):
@@ -79,7 +90,8 @@ def parse_plan(text: str) -> list[Epic]:
             continue
         if m := TICKET_RE.match(line):
             flush()
-            ticket = Ticket(id=m.group(1), title=m.group(2), body="")
+            title, number = split_number(m.group(2))
+            ticket = Ticket(id=m.group(1), title=title, body="", number=number)
             epic.tickets.append(ticket)
             meta_zone = True
             continue
@@ -129,6 +141,11 @@ def main(argv: list[str] | None = None) -> int:
         "--create", action="store_true", help="call gh; default is a dry run"
     )
     parser.add_argument("--json", action="store_true", help="dry run as JSON")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="create even though headings already carry issue numbers",
+    )
     args = parser.parse_args(argv)
 
     epics = parse_plan(args.plan.read_text())
@@ -162,15 +179,27 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             for e in epics:
-                print(f"{e.id}: {e.title}  ({len(e.tickets)} tickets)")
+                tag = f" #{e.number}" if e.number else ""
+                print(f"{e.id}{tag}: {e.title}  ({len(e.tickets)} tickets)")
                 for t in e.tickets:
                     deps = ", ".join(t.depends_on) or "none"
                     labels = ", ".join(t.labels)
-                    print(f"  {t.id} [{t.size or '?'}; {labels}] {t.title}")
+                    tag = f" #{t.number}" if t.number else ""
+                    print(f"  {t.id}{tag} [{t.size or '?'}; {labels}] {t.title}")
                     print(f"      depends on: {deps}")
             n = sum(len(e.tickets) for e in epics)
             print(f"\n{len(epics)} epics, {n} tickets. Re-run with --create.")
         return 0
+
+    published = [x.id for e in epics for x in (e, *e.tickets) if x.number is not None]
+    if published and not args.force:
+        print(
+            f"{len(published)} headings already carry issue numbers "
+            f"(first: {published[0]}); refusing to create duplicates. "
+            "Use --force for a fresh repository.",
+            file=sys.stderr,
+        )
+        return 2
 
     numbers: dict[str, int] = {}
     for e in epics:
