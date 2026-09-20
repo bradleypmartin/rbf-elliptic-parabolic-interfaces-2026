@@ -4,8 +4,8 @@ Scoped 2026-09-20. This is the working plan: what the 2016 work did, what is
 new here, the decisions taken up front, the risks, and the epics and tickets
 in dependency order. Section 6 is machine-readable: `scripts/publish_issues.py`
 turns each `## E<k>:` heading into a GitHub epic and each `### E<k>.<n>` into
-a ticket linked to it (dry run by default). Issue numbers get filled in here
-once published.
+a ticket linked to it (dry run by default). Published 2026-09-20: the issue
+number sits at the end of each heading (epics #2–#7, tickets #8–#52).
 
 ## 1. Purpose and deliverables
 
@@ -270,12 +270,12 @@ Dependency order is E0 → E1 → E2 → E3 → E4 → E5, with E3 startable as 
 as E1 lands and E5.1–E5.3 startable alongside E4. Sizes: S about one short
 session, M one session, L several or compute-heavy.
 
-## E0: Scaffold, sources and plan
+## E0: Scaffold, sources and plan (#2)
 
 The repository skeleton, the source index and this plan. E0.1 is the PR that
 adds this file.
 
-### E0.1 Repository scaffold, CLAUDE.md, README, plan
+### E0.1 Repository scaffold, CLAUDE.md, README, plan (#8)
 Labels: documentation
 Size: S
 Depends on: —
@@ -290,7 +290,7 @@ Depends on: —
 - `uv sync && uv run pytest && uv run ruff check .` are green from a clean clone.
 - `papers/fetch_papers.sh` reports both local PDFs present with matching checksums.
 
-### E0.2 Confirm a public source for the EABE 2017 manuscript and finish the paper index
+### E0.2 Confirm a public source for the EABE 2017 manuscript and finish the paper index (#9)
 Labels: documentation
 Size: S
 Depends on: E0.1
@@ -306,7 +306,7 @@ formulas from the PDF and the MATLAB and add them to `docs/paper-index.md`.
 - `papers/README.md` states the source status of the EABE PDF.
 - `docs/paper-index.md` carries the case-2 interface formulas and the case-3 boundary signs.
 
-### E0.3 Publish the epics and tickets to GitHub
+### E0.3 Publish the epics and tickets to GitHub (#10)
 Labels: documentation
 Size: S
 Depends on: E0.1
@@ -319,7 +319,7 @@ bodies' checklists.
 - Every `## E<k>` and `### E<k>.<n>` in this file has an issue, tickets reference their epic, epics carry a checklist.
 - This file's section 6 lists the numbers.
 
-## E1: The 1-D heat port (dissertation ch. 4)
+## E1: The 1-D heat port (dissertation ch. 4) (#3)
 
 `heat1d/`: the operator `d/dx α d/dx` on [−1, 1] with Dirichlet ends, the
 naive FD4 assembled as `Dx A Dx`, the translated piecewise-polynomial
@@ -327,7 +327,7 @@ stencils for jumps with a smoothly varying α, the equilibrium solve and the
 time-dependent solve, and the reproduction of Fig. 4-5–4-7. Also the MATLAB
 folder's single-interface time-dependent problem as a second test.
 
-### E1.1 heat1d: grid, materials, naive FD4 operator, equilibrium solve, quadrature reference
+### E1.1 heat1d: grid, materials, naive FD4 operator, equilibrium solve, quadrature reference (#11)
 Labels: enhancement
 Size: M
 Depends on: E0.1
@@ -348,7 +348,7 @@ interfaces.
 - Tests: constant α reproduces the linear solution to rounding; the quadrature reference converges at the quadrature's order; naive FD4 on the dissertation's problem is first order (Fig. 4-7's top line).
 - The direct-stencil failure mode is a test, not a surprise.
 
-### E1.2 heat1d: jump-aware stencils from continuity matrices (translated basis, smooth α, two interfaces)
+### E1.2 heat1d: jump-aware stencils from continuity matrices (translated basis, smooth α, two interfaces) (#12)
 Labels: enhancement
 Size: L
 Depends on: E1.1
@@ -365,7 +365,7 @@ numbers (eq. 17–18, 21, 23 to two decimals) as tests.
 - Tests: the translated basis keeps u and α u_x continuous; constant α recovers FD4; the EABE eq. 23 matrix matches; the equilibrium problem converges at fourth order (Fig. 4-7's lower line) and the 101-node solution has no oscillation (Fig. 4-5).
 - Docstrings cite the equation numbers.
 
-### E1.3 heat1d: time-dependent solve (BD4), the MATLAB single-interface problem, operator spectra
+### E1.3 heat1d: time-dependent solve (BD4), the MATLAB single-interface problem, operator spectra (#13)
 Labels: enhancement
 Size: M
 Depends on: E1.2
@@ -380,7 +380,7 @@ against the BD4 region as the dissertation does in 2-D.
 **Done when**
 - Tests: BD4 is fourth order in time on a manufactured solution; naive first order and jump-aware fourth order in space on the MATLAB problem; all eigenvalues of the jump-aware operator have negative real part.
 
-### E1.4 heat1d: driver, figures, and the port notes
+### E1.4 heat1d: driver, figures, and the port notes (#14)
 Labels: documentation
 Size: S
 Depends on: E1.3
@@ -393,7 +393,7 @@ orange = naive, as in the companion.
 **Done when**
 - The three figures regenerate in seconds; the notes table has both columns.
 
-## E2: The 2-D heat port (dissertation ch. 5, EABE 2017)
+## E2: The 2-D heat port (dissertation ch. 5, EABE 2017) (#4)
 
 `heat2d/`: scattered nodes on the x-periodic strip with Dirichlet rows,
 Gaussian RBF-FD with polynomial augmentation, the naive operator as
@@ -401,7 +401,7 @@ Gaussian RBF-FD with polynomial augmentation, the naive operator as
 multi-interface translation, warped RBFs, direct and iterative solvers, BD4,
 and the three test cases with the published figures reproduced.
 
-### E2.1 heat2d: domain, interfaces, straddling node sets, boundaries, x-periodic kNN
+### E2.1 heat2d: domain, interfaces, straddling node sets, boundaries, x-periodic kNN (#15)
 Labels: enhancement
 Size: L
 Depends on: E0.2
@@ -417,7 +417,7 @@ only (`cKDTree` with a boxsize in x and none in y, or tiling). Diff
 **Done when**
 - Tests: node counts and straddle spacing as specified; every interface node pair sits orthogonally across the curve; kNN wraps in x and not in y; case-1/2/3 node sets plot like Fig. 5-3, 8 and 12.
 
-### E2.2 heat2d: Gaussian RBF-FD weights with polynomials, naive operator, Dirichlet rows, direct solve
+### E2.2 heat2d: Gaussian RBF-FD weights with polynomials, naive operator, Dirichlet rows, direct solve (#16)
 Labels: enhancement
 Size: L
 Depends on: E2.1
@@ -433,7 +433,7 @@ sinh solution) before any interface exists.
 **Done when**
 - Tests: weights reproduce derivatives of degree-5 polynomials to rounding; the control problem converges at the expected order; the case-1 problem with naive stencils is first order (the top line of EABE Fig. 10's analogue).
 
-### E2.3 heat2d: interface-aware stencils for the scalar operator with curvature and multi-interface translation
+### E2.3 heat2d: interface-aware stencils for the scalar operator with curvature and multi-interface translation (#17)
 Labels: enhancement
 Size: L
 Depends on: E2.2
@@ -451,7 +451,7 @@ Fig. 10 and 14 compare them.
 **Done when**
 - Tests: the translated basis is continuous with continuous normal flux along a curved interface to O(h^p); a flat interface makes the two variants identical; case 1 converges at fourth order (EABE Fig. 7).
 
-### E2.4 heat2d: warped RBFs across interfaces, and the plain-RBF / non-straddling ablation
+### E2.4 heat2d: warped RBFs across interfaces, and the plain-RBF / non-straddling ablation (#18)
 Labels: enhancement
 Size: M
 Depends on: E2.3
@@ -464,7 +464,7 @@ straddling" vs "with warp and straddling") can be reproduced.
 **Done when**
 - Tests: a warped RBF's α ∂ₙφ is continuous at the interface to rounding; the ablation runs on case 2 at three resolutions.
 
-### E2.5 heat2d case 1: elliptic and parabolic convergence against the analytic solution, operator spectrum vs BD4
+### E2.5 heat2d case 1: elliptic and parabolic convergence against the analytic solution, operator spectrum vs BD4 (#19)
 Labels: enhancement
 Size: M
 Depends on: E2.3
@@ -477,7 +477,7 @@ Fig. 5-5 twin and the Fig. 5-6 eigenvalue plot at 4900 nodes.
 **Done when**
 - Tests: elliptic and parabolic errors fourth order across 1250–20,000 nodes; eigenvalues lie inside the BD4 region at dt = 0.02.
 
-### E2.6 heat2d case 2: curved interfaces, FD4 / flat / curved convergence, warp ablation, performance plot
+### E2.6 heat2d case 2: curved interfaces, FD4 / flat / curved convergence, warp ablation, performance plot (#20)
 Labels: enhancement
 Size: M
 Depends on: E2.4
@@ -490,7 +490,7 @@ timings.
 **Done when**
 - FD4 and flat-assumption lines at first order, curvature-included at fourth, with the numbers in `docs/port-notes.md` §2 next to the 2016 ones.
 
-### E2.7 heat2d case 3: the thin insulating ring with an inner Dirichlet circle
+### E2.7 heat2d case 3: the thin insulating ring with an inner Dirichlet circle (#21)
 Labels: enhancement
 Size: L
 Depends on: E2.6
@@ -502,7 +502,7 @@ flat vs curved RBF-FD as in Fig. 14; the 40,000-node mesh plot.
 **Done when**
 - The Fig. 14 twin with our FD4 cap stated; the curvature-included line fourth order.
 
-### E2.8 heat2d: iterative solvers, the control problem, and Appendix B's diagonal-dominance preconditioner
+### E2.8 heat2d: iterative solvers, the control problem, and Appendix B's diagonal-dominance preconditioner (#22)
 Labels: enhancement
 Size: M
 Depends on: E2.7
@@ -516,7 +516,7 @@ re-implemented on sparse rows. Fig. 15–18 twins with our timings.
 **Done when**
 - Without preconditioning bicgstab fails and gmres is slow on case 3, both recover with Appendix B's preconditioner (qualitatively as published); DDR before and after is tabulated.
 
-### E2.9 heat2d: the extremizing-parameter sweep and continuity-matrix conditioning
+### E2.9 heat2d: the extremizing-parameter sweep and continuity-matrix conditioning (#23)
 Labels: enhancement
 Size: S
 Depends on: E2.7
@@ -528,7 +528,7 @@ the mean condition number of the continuity matrices vs s at N = 10,000
 **Done when**
 - Both figures regenerate; the breakdown near s = 10¹¹ is reproduced or its absence explained in the notes.
 
-### E2.10 (stretch) heat2d: the cornered interface with circular-segment approximations
+### E2.10 (stretch) heat2d: the cornered interface with circular-segment approximations (#24)
 Labels: enhancement
 Size: M
 Depends on: E2.6
@@ -541,7 +541,7 @@ section covers corners whether or not this lands.
 **Done when**
 - Fig. 5-22's twin, second order for both, with the approximation rule documented.
 
-### E2.11 heat2d: drivers and the port notes
+### E2.11 heat2d: drivers and the port notes (#25)
 Labels: documentation
 Size: S
 Depends on: E2.9
@@ -554,13 +554,13 @@ table (figure, 2016 number, ours, rate) and the decisions log.
 **Done when**
 - Every published 2-D figure in section 1's list has a regenerating twin and a row in the table.
 
-## E3: Sub-grid smooth edges in 1-D: seeds for the diffusion operator
+## E3: Sub-grid smooth edges in 1-D: seeds for the diffusion operator (#5)
 
 The 1-D stiff-edge study: formulation, references at any δ, the naive knee
 (parabolic), the seed stencils, the coefficient treatments, and the
 degenerate elliptic case stated for what it is.
 
-### E3.1 stiff 1-D: formulation note for the diffusion seeds
+### E3.1 stiff 1-D: formulation note for the diffusion seeds (#26)
 Labels: documentation
 Size: M
 Depends on: E1.2
@@ -576,7 +576,7 @@ Cite the companion's manuscript for the wave case.
 **Done when**
 - The note's §1 is complete with the predictions a later section can be checked against.
 
-### E3.2 stiff 1-D: smooth-edged α, and elliptic and parabolic references at any δ
+### E3.2 stiff 1-D: smooth-edged α, and elliptic and parabolic references at any δ (#27)
 Labels: enhancement
 Size: M
 Depends on: E1.3
@@ -590,7 +590,7 @@ integrator for the parabolic one, converged to 1e−10 and cached under
 **Done when**
 - Tests: δ = 0 reproduces the jump medium; the parabolic reference is converged (two resolutions agree to 1e−10); the quadrature reference is exact for a jump.
 
-### E3.3 stiff 1-D: the naive knee, and the δ = 0 construction on a smooth edge
+### E3.3 stiff 1-D: the naive knee, and the δ = 0 construction on a smooth edge (#28)
 Labels: enhancement
 Size: M
 Depends on: E3.2
@@ -602,7 +602,7 @@ weights and in solution error, as a function of δ/h).
 **Done when**
 - The parabolic knee at h ≈ δ is measured with rates above and below; the elliptic naive lines are recorded; the δ = 0 construction's first-order-in-δ/h error is tabulated.
 
-### E3.4 stiff 1-D: seed stencils and dispatch
+### E3.4 stiff 1-D: seed stencils and dispatch (#29)
 Labels: enhancement
 Size: L
 Depends on: E3.3
@@ -615,7 +615,7 @@ stencils whose nodes see an edge; both edges of a thin layer in one march.
 **Done when**
 - Tests: constant α gives Fornberg's weights; the jump limit recovers E1.2's weights at first order in δ; the equilibrium solve is exact to 1e−12 at every δ; the parabolic error is fourth order at every δ with a δ-independent constant; condition numbers of the stencil solves are Vandermonde-like.
 
-### E3.5 stiff 1-D: coefficient treatments (harmonic and arithmetic cell means, widened edge, band-limited α)
+### E3.5 stiff 1-D: coefficient treatments (harmonic and arithmetic cell means, widened edge, band-limited α) (#30)
 Labels: enhancement
 Size: M
 Depends on: E3.4
@@ -628,7 +628,7 @@ samples, errors against the true-δ reference, elliptic and parabolic.
 **Done when**
 - Tests: T1 is exact on the 1-D equilibrium problem with a piecewise-constant α; each treatment reduces to its δ = 0 form; the parabolic table has every treatment at every δ.
 
-### E3.6 stiff 1-D: driver, figures, results write-up
+### E3.6 stiff 1-D: driver, figures, results write-up (#31)
 Labels: documentation
 Size: M
 Depends on: E3.5
@@ -641,14 +641,14 @@ rates.
 **Done when**
 - The driver runs in under a minute from cached references; §2 states the knee, the seeds' rates, the comparator ranking, and the elliptic remark.
 
-## E4: Sub-grid smooth edges in 2-D: scalar seeds on scattered nodes
+## E4: Sub-grid smooth edges in 2-D: scalar seeds on scattered nodes (#6)
 
 The 2-D stiff-edge study for `∇·(α ∇)`: design, references, the naive
 baseline, the seeds for a straight feature, seed-augmented stencils and the
 solvability question, the flat sweep, the curved feature, the doubly sub-grid
 ring, the treatments on scattered nodes.
 
-### E4.1 stiff 2-D: design note for the scalar seeds
+### E4.1 stiff 2-D: design note for the scalar seeds (#32)
 Labels: documentation
 Size: M
 Depends on: E3.1
@@ -663,7 +663,7 @@ warped-RBF interaction) as numbered hypotheses for E4.5–E4.8.
 **Done when**
 - The note's §3 fixes notation (local frame, anchor, ψ) and lists the hypotheses with the experiment that tests each.
 
-### E4.2 stiff 2-D: smooth flat edges and the separable 1-D references
+### E4.2 stiff 2-D: smooth flat edges and the separable 1-D references (#33)
 Labels: enhancement
 Size: M
 Depends on: E2.5
@@ -676,7 +676,7 @@ Chebyshev collocation to 1e−12 (`heat2d/exact.py`).
 **Done when**
 - Tests: δ = 0 recovers the analytic case-1 solution; the reference is converged; the medium's edge is smooth to rounding.
 
-### E4.3 stiff 2-D: the naive baseline through a smooth flat edge
+### E4.3 stiff 2-D: the naive baseline through a smooth flat edge (#34)
 Labels: enhancement
 Size: M
 Depends on: E4.2
@@ -688,7 +688,7 @@ nodes, and what does the resolution floor hide?
 **Done when**
 - The baseline table with rates per δ; the notes say what separates resolved from unresolved edges most sharply (the companion found a spurious field did; here the candidates are the flux jump and the y-profile error).
 
-### E4.4 stiff 2-D: scalar seeds for a straight feature
+### E4.4 stiff 2-D: scalar seeds for a straight feature (#35)
 Labels: enhancement
 Size: L
 Depends on: E4.1
@@ -702,7 +702,7 @@ seed Gram matrix on a stencil.
 **Done when**
 - Tests: the four checks above pass at δ ∈ {h/8, h, 8h}; the march for one stencil takes milliseconds.
 
-### E4.5 stiff 2-D: seed-augmented stencils, operators, and the solvability question
+### E4.5 stiff 2-D: seed-augmented stencils, operators, and the solvability question (#36)
 Labels: enhancement
 Size: L
 Depends on: E4.4
@@ -716,7 +716,7 @@ spectra of naive, jump-aware and seed operators against the BD4 region.
 **Done when**
 - The hypotheses of E4.1 on conditioning and spectra are each answered with a table; if direct solves degrade, the notes say at what δ/h and the plan is revised before E4.6.
 
-### E4.6 stiff 2-D: the flat δ sweep, elliptic and parabolic
+### E4.6 stiff 2-D: the flat δ sweep, elliptic and parabolic (#37)
 Labels: enhancement
 Size: L
 Depends on: E4.5
@@ -728,7 +728,7 @@ parabolic, against the separable references; the crossover and the rule
 **Done when**
 - The sweep tables with rates; the rule stated with its evidence; the resolved-edge penalty of the seeds measured.
 
-### E4.7 stiff 2-D: the curved feature
+### E4.7 stiff 2-D: the curved feature (#38)
 Labels: enhancement
 Size: L
 Depends on: E4.6
@@ -742,7 +742,7 @@ jump-aware run for δ = 0 and a Fourier × Chebyshev product-grid solve for
 **Done when**
 - Curved numbers compared with the flat ones at equal δ; route (a)'s geometry error located or shown absent on these node sets.
 
-### E4.8 stiff 2-D: the doubly sub-grid ring and the extremizing sweep with seeds
+### E4.8 stiff 2-D: the doubly sub-grid ring and the extremizing sweep with seeds (#39)
 Labels: enhancement
 Size: M
 Depends on: E4.7
@@ -754,7 +754,7 @@ the breakdown move, and is the seeds' march conditioning the new limit?
 **Done when**
 - The Fig. 19–20 twins with a seeds line; the notes state where each construction fails and why.
 
-### E4.9 stiff 2-D: coefficient treatments on scattered nodes
+### E4.9 stiff 2-D: coefficient treatments on scattered nodes (#40)
 Labels: enhancement
 Size: M
 Depends on: E4.6
@@ -766,7 +766,7 @@ and curved sweeps; against the same references.
 **Done when**
 - The comparator tables per δ, elliptic and parabolic; the crossover of each treatment against sampling.
 
-### E4.10 stiff 2-D: drivers, figures, results write-up
+### E4.10 stiff 2-D: drivers, figures, results write-up (#41)
 Labels: documentation
 Size: M
 Depends on: E4.9
@@ -779,13 +779,13 @@ every table and the run times.
 **Done when**
 - Every 2-D number the manuscript will quote is in the note with a section to trace to.
 
-## E5: The manuscript
+## E5: The manuscript (#7)
 
 `paper/`: amsart, tectonic, a verified bibliography, a novelty ledger, a
 results cache with scripted figures and tables, section-by-section drafting
 against the canonical notes, assembly, arXiv packaging.
 
-### E5.1 manuscript: scaffold `paper/`
+### E5.1 manuscript: scaffold `paper/` (#42)
 Labels: documentation
 Size: S
 Depends on: E3.6
@@ -798,7 +798,7 @@ hand, `main.pdf` committed on every change.
 **Done when**
 - `tectonic main.tex` builds; `make_arxiv.py` refuses the stubs.
 
-### E5.2 manuscript: literature and novelty ledger
+### E5.2 manuscript: literature and novelty ledger (#43)
 Labels: documentation
 Size: L
 Depends on: E3.1
@@ -816,7 +816,7 @@ wording allowed. Decide T3's fate here.
 **Done when**
 - Every bib entry carries a dated `VERIFIED` note; §6 exists; R1 has a written answer.
 
-### E5.3 manuscript: results cache, scripted figures and tables, number check
+### E5.3 manuscript: results cache, scripted figures and tables, number check (#44)
 Labels: enhancement
 Size: M
 Depends on: E4.10
@@ -830,7 +830,7 @@ quotes.
 **Done when**
 - `paper_figures.py --check` passes from a clean `paper/data/`; a test covers the cache schema.
 
-### E5.4 manuscript: §1–2, introduction and setting
+### E5.4 manuscript: §1–2, introduction and setting (#45)
 Labels: documentation
 Size: M
 Depends on: E5.2
@@ -843,7 +843,7 @@ stencils, scope of the implementation; prior-work paragraph from
 **Done when**
 - No stub remains in §1–2; every number carries a `% TRACE`.
 
-### E5.5 manuscript: §3, seeds for the diffusion operator in one dimension
+### E5.5 manuscript: §3, seeds for the diffusion operator in one dimension (#46)
 Labels: documentation
 Size: M
 Depends on: E5.4
@@ -855,7 +855,7 @@ finite-volume twin, the seed-basis figure.
 **Done when**
 - §3 complete with traces; the exactness remark cites the FV literature found in E5.2.
 
-### E5.6 manuscript: §4, one-dimensional results
+### E5.6 manuscript: §4, one-dimensional results (#47)
 Labels: documentation
 Size: M
 Depends on: E5.5
@@ -866,7 +866,7 @@ treatments' table; the elliptic sanity figure as a remark.
 **Done when**
 - §4 complete; `paper_numbers.py` covers every ratio quoted.
 
-### E5.7 manuscript: §5, seeds in two dimensions
+### E5.7 manuscript: §5, seeds in two dimensions (#48)
 Labels: documentation
 Size: M
 Depends on: E5.6
@@ -877,7 +877,7 @@ seed-section figure.
 **Done when**
 - §5 complete with traces to `docs/stiff-diffusion.md` §3.
 
-### E5.8 manuscript: §6, two-dimensional results
+### E5.8 manuscript: §6, two-dimensional results (#49)
 Labels: documentation
 Size: L
 Depends on: E5.7
@@ -889,7 +889,7 @@ treatments; all tables from fragments.
 **Done when**
 - §6 complete; every figure and table placed from `paper/figures/`.
 
-### E5.9 manuscript: §7, discussion, limitations, future work, conclusions
+### E5.9 manuscript: §7, discussion, limitations, future work, conclusions (#50)
 Labels: documentation
 Size: M
 Depends on: E5.8
@@ -901,7 +901,7 @@ leave open), future work in the order to do it, conclusions quoting
 **Done when**
 - §7 complete; no claim outside §6b.
 
-### E5.10 manuscript: assembly and consistency pass
+### E5.10 manuscript: assembly and consistency pass (#51)
 Labels: documentation
 Size: S
 Depends on: E5.9
@@ -913,7 +913,7 @@ where the cache disagrees.
 **Done when**
 - `paper_numbers.py` and `paper_figures.py --check` green; a read of the PDF end to end finds no stub, no `\todo`.
 
-### E5.11 manuscript: arXiv packaging and the pre-submission decisions
+### E5.11 manuscript: arXiv packaging and the pre-submission decisions (#52)
 Labels: documentation
 Size: S
 Depends on: E5.10
@@ -936,3 +936,7 @@ The script reads section 6 of this file. Epics are created first so each
 ticket's body can name its epic and its dependencies by issue number; each
 epic's body then gets a checklist of its tickets. Labels are the repository's
 `enhancement` and `documentation`.
+
+Done on 2026-09-20 (E0.3, #10). The headings above now carry their issue
+numbers, and the script refuses `--create` while they do, so a re-run cannot
+duplicate them; `--force` overrides for a fresh repository.

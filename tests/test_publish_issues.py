@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from publish_issues import parse_plan, ticket_body  # noqa: E402
+from publish_issues import main, parse_plan, split_number, ticket_body  # noqa: E402
 
 SAMPLE = """\
 # Plan
@@ -93,3 +93,34 @@ def test_the_real_plan_parses_with_unique_ids_and_backward_dependencies():
             assert t.size in {"S", "M", "L"}, t.id
             for d in t.depends_on:
                 assert d in known, (t.id, d)
+
+
+def test_split_number_strips_a_published_suffix_only():
+    assert split_number("Scaffold (#2)") == ("Scaffold", 2)
+    assert split_number("Scaffold") == ("Scaffold", None)
+    assert split_number("Case (#3) study") == ("Case (#3) study", None)
+
+
+def test_published_headings_carry_numbers_and_block_create(tmp_path, capsys):
+    published = SAMPLE.replace("## E0: Scaffold", "## E0: Scaffold (#2)").replace(
+        "### E0.1 Do the scaffold", "### E0.1 Do the scaffold (#8)"
+    )
+    epics = parse_plan(published)
+    assert (epics[0].title, epics[0].number) == ("Scaffold", 2)
+    assert (epics[0].tickets[0].title, epics[0].tickets[0].number) == (
+        "Do the scaffold",
+        8,
+    )
+    assert epics[0].tickets[1].number is None
+    plan = tmp_path / "plan.md"
+    plan.write_text(published)
+    assert main(["--plan", str(plan), "--create"]) == 2
+    assert "refusing to create duplicates" in capsys.readouterr().err
+
+
+def test_the_real_plan_is_fully_published():
+    plan = Path(__file__).resolve().parents[1] / "docs" / "plan.md"
+    epics = parse_plan(plan.read_text())
+    numbers = [x.number for e in epics for x in (e, *e.tickets)]
+    assert None not in numbers
+    assert len(numbers) == len(set(numbers)) == 51

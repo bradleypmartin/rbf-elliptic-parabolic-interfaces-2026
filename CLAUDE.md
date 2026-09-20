@@ -14,7 +14,9 @@ Two deliverables: the code and the manuscript. **No talk, no slides.**
 
 The plan, with every decision, risk, epic and ticket, is
 [`docs/plan.md`](docs/plan.md). Read its sections 3–5 before touching E3–E5
-work. Tickets are published from it by `scripts/publish_issues.py`.
+work. Its epics and tickets are GitHub issues since 2026-09-20 (epics #2–#7,
+tickets #8–#52; the number is on each heading), published by
+`scripts/publish_issues.py`, which now refuses to run again without `--force`.
 
 ## Sources
 
