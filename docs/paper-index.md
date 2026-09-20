@@ -28,9 +28,25 @@ companion wave-equation work; only what this repo needs is listed.
 
 ## Martin & Fornberg 2017, EABE (`martin-fornberg-2017-rbf-fd-heat-equilibrium-eabe-submitted.pdf`, 49 pp.)
 
-The submitted manuscript of Eng. Anal. Bound. Elem. 79 (2017) 38–48. Same
+The author post-print of Eng. Anal. Bound. Elem. 79 (2017) 38–48, fetched
+from CU Scholar (`papers/README.md`; byte-identical to Brad's copy). Same
 method as dissertation ch. 5 with the s-sweep added; the definitive source
 for the 2-D test-case parameters. Equation numbers below are the paper's.
+Read off the rendered pages on 2026-09-20 (E0.2, #9), since text extraction
+drops signs and piecewise braces:
+
+- **Case 2 interfaces** (not stated in either text; from MATLAB
+  `curvedinterface1/2`, `ExeprepRBFHeatLaplace3/4.m` with `cFlag ≠ 0`):
+  `y = 0.6 + 0.02 sin 2πx` and `y = 0.8 + 0.02 sin 2πx`, slope
+  `0.04π cos 2πx`, angle `atan(y′)`; the band keeps its 0.2 thickness. The
+  band's α (eq. 35) is `0.2 + 0.1 sin 2πx sin 2πy`, 1 elsewhere; Dirichlet
+  `u = sin 2πx` at y = 1, 0 at y = 0 (eq. 36).
+- **Case 3** (eq. 37–39, PDF p. 33): `r = [(x − 0.5)² + (y − 0.5)²]^½`;
+  `α = 1/1500 + (1/3000) sin 2πx sin 2πy` for `0.349 ≤ r ≤ 0.35`, 1
+  otherwise; **`u = sin 6πx` at both y = 1 and y = 0 (same sign)**, `u = 0`
+  on the inner circle r = 0.05.
+- **Case 1** (eq. 32–34): `α = 0.2` for y ∈ [0.6, 0.8], 1 otherwise;
+  `u = sin 2πx` at y = 1, 0 at y = 0.
 
 | PDF pages | Section | Use for |
 | --- | --- | --- |
@@ -42,7 +58,7 @@ for the 2-D test-case parameters. Equation numbers below are the paper's.
 | 24–26 | **§2.2.4 warped RBFs** (coordinate stretching across the interface enforcing flux continuity to first order; Fig. 6) | E2.4 |
 | 26–28 | §3 setup: eq. 31 eps = 0.4/d (d = nearest-neighbour distance), 42 nodes / degree 5 interior, 30 / degree 4 across interfaces and near boundaries, curvature included by default; **§3.1 case 1**: eq. 32–34 (analytic solution), Fig. 7 | E2.5 |
 | 29–32 | **§3.2 case 2**: eq. 35–36, Fig. 8–9; Fig. 10 FD4 / flat / curved vs 160,000-node reference (extrapolation: 10¹¹ nodes for 1e−8); Fig. 11 warp-and-straddle ablation | E2.6 |
-| 33–37 | **§3.3 case 3**: eq. 37–39 (ring, inner circle, sin 6πx boundaries: check the sign of the y = 0 condition in the PDF, the text extraction loses it); multi-interface translation; Fig. 12–14 | E2.7 |
+| 33–37 | **§3.3 case 3**: eq. 37–39 (ring, inner circle, `sin 6πx` at both y = 0 and y = 1, confirmed from the rendered page); multi-interface translation; Fig. 12–14 | E2.7 |
 | 38–42 | **§3.3.2 iterative solvers** (19 nodes / degree 3; control problem; gmres, bicgstab; the preconditioner reference is the dissertation's Appendix B; Fig. 15–18) | E2.8 |
 | 42–45 | **§3.3.3 the extremizing parameter** eq. 40 (s = 10³ … 10¹¹, layer thickness 1/s, alpha ~ 1/(1.5 s)); Fig. 19 errors vs N per s; Fig. 20 condition number of the continuity matrices ~ O(s²) | E2.9, E4.8 |
 | 45–46 | §4 conclusions (open issues: corners, higher-order RBF modification, 3-D cost, preconditioning, extreme contrasts) | Manuscript §7 |
@@ -57,10 +73,21 @@ for the 2-D test-case parameters. Equation numbers below are the paper's.
   naive twin; `weights.m` is Fornberg's algorithm. The dissertation's §4.2
   equilibrium problem (two interfaces, smooth alpha) is not in this folder;
   E1.2 rebuilds it from the text.
-- `heatEq2DMatlab/ExeprepRBFHeatLaplace{1..4}.m` (~60 kB each, local
-  functions: `curvedinterface1/2`, `mos2dsqperiodic7` repulsion,
-  `createRBFLoperator1`, continuity matrices, periodic kNN by tiling,
-  `pointFinder1/2`), `RBFHeat1exe.m` / `RBFHeat2exe.m` (RK4 drivers with a
-  ramped Dirichlet row), `FDheat1.m` (the FD4 comparison), `laplaceSetup.m`,
-  `ExecuteRBFFDsolutionHeat{1,2}.m`. The version differences between
-  `Laplace1` … `Laplace4` are undocumented; E2.1 diffs them before porting.
+- `heatEq2DMatlab/`: `ExeprepRBFHeatLaplace.m` is the driver script (defaults:
+  N = 1250, `yLI = 0.6`, `yUI = 0.8`, `rho2 = 1/5` i.e. α = 0.2 in the band,
+  `GAshp = 0.4`, 19-node / degree-3 stencils, `polydegreeInt = 2`,
+  `numIntNodes = round(0.95 √N)` per straddling row, `RBFwarpFlag = 1`,
+  flags `thinFlag`, `curvedFlag`, `closedFlag`). It calls
+  `ExeprepRBFHeatLaplace4.m` (~60 kB of local functions: `curvedinterface1/2`,
+  `mos2dsqperiodic7` repulsion, `createRBFLoperator1`, the continuity
+  matrices, periodic kNN by tiling, `pointFinder1/2`). Version differences,
+  checked 2026-09-20: `Laplace1` has flat interfaces only; `Laplace2` is the
+  `closedFlag ≠ 0` variant the driver switches to; `Laplace3` and `Laplace4`
+  share the curved interface functions (comment-only diff) and differ
+  elsewhere (boundary stencil arguments). **The case-3 ring, the inner circle
+  and the s-sweep are not in this folder**; that code is not preserved, so
+  E2.7–E2.9 build from the paper alone. `RBFHeat1exe.m` / `RBFHeat2exe.m` are
+  RK4 drivers with a ramped Dirichlet row, `FDheat1.m` the FD4 comparison,
+  `laplaceSetup.m` the case-1 analytic solution (the 6 × 6 system for
+  c₁ … c₆). The paper's 42 / degree-5 and 30 / degree-4 stencils are not the
+  driver's defaults; the port follows the paper.
