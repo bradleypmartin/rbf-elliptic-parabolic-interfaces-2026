@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- project-specific ---
+# Reference PDFs (public repo; see papers/README.md for sources and checksums)
+papers/*.pdf
+# Generated figures, reference solutions, cached operators, results
+outputs/
+# Manuscript intermediates and the arXiv staging tree (paper/main.pdf is committed)
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
+paper/arxiv/
+paper/arxiv.tar.gz
