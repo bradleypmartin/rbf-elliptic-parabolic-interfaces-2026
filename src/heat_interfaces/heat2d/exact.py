@@ -147,8 +147,9 @@ class RingMode:
     ``R`` and ``α R'`` are continuous at every radius, and the whole is
     scaled so that ``u = 1`` at ``(r, θ) = (scale_radius, 0)``. Across an
     insulating ring ``R`` climbs by about ``m α_out / α_ring`` times the
-    ring's width times ``r^(m-1)``: 1.05 at case 3's ring for ``m = 2``,
-    against 0.12 inside.
+    ring's width times ``r^(m-1)``, relative to ``r^m`` inside: at case 3's
+    ring for ``m = 2`` that is 1.05 against 0.12, which the scaling turns
+    into 0.665 against 0.078 in ``radial``.
     """
 
     radii: tuple[float, ...]
@@ -173,16 +174,16 @@ class RingMode:
         object.__setattr__(self, "_coefficients", self._solve())
 
     def _solve(self) -> np.ndarray:
-        # Walk outward: V = R and F = α (a r^m − b r^-m) (the flux times r/m)
-        # are continuous, and the next ring's pair follows from them.
+        # Walk outward: R and α (a r^m − b r^-m), the flux times r/m, are
+        # continuous, and the next ring's pair follows from them.
         m = self.mode
         coef = np.zeros((len(self.alphas), 2))
         coef[0] = [1.0, 0.0]
         for k, r in enumerate(self.radii):
             a, b = coef[k]
             value = a * r**m + b * r**-m
-            flux = self.alphas[k] * (a * r**m - b * r**-m)
-            up = flux / self.alphas[k + 1]
+            scaled_flux = self.alphas[k] * (a * r**m - b * r**-m)
+            up = scaled_flux / self.alphas[k + 1]
             coef[k + 1] = [(value + up) / (2 * r**m), (value - up) / (2 * r**-m)]
         last = coef[-1]
         norm = last[0] * self.scale_radius**m + last[1] * self.scale_radius**-m
