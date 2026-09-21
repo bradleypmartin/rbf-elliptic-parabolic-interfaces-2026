@@ -15,8 +15,13 @@ Dirichlet rows of the assembled operator are then replaced by the identity
 ``direct_operator`` is ``α ∇² + ∇α · ∇`` on the owning piece's smooth values,
 the 2-D twin of the 1-D direct stencil: fourth order wherever α is smooth
 and blind to a jump. With ``α ≡ 1`` it is the Laplacian of the control
-problem; E2.3's interface-aware operator replaces its rows across the
-interfaces.
+problem. ``interface_aware_operator`` (E2.3, dissertation §5.3) is the same
+operator with the rows of the stencils that cross an interface recomputed
+on the translated basis of ``interface.py``: ``build_stencils`` given an
+``interface`` spec puts every node whose stencil at the largest size would
+cross an interface into a third group of 30-node / degree-4 stencils (EABE
+§3, "across interfaces"), so no standard stencil ever sees a jump, and the
+members of that group whose own 30 nodes cross are translated.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from .domain import Domain, NodeSet
+from .interface import stencil_weights
 from .neighbors import knn, offsets
 from .rbf import BOUNDARY, GA_SHAPE, INTERIOR, StencilSpec, rbf_fd_weights
 
@@ -36,31 +42,47 @@ BOUNDARY_ZONE = 3.0
 """Half-width of the boundary zone in units of ``1/√n`` (MATLAB ``3 * hApprox``)."""
 
 
+INTERIOR_KIND, BOUNDARY_KIND, INTERFACE_KIND = "interior", "boundary", "interface"
+"""``StencilGroup.kind``: off the zones, in the boundary zone, across an interface."""
+
+
 @dataclass(frozen=True)
 class StencilGroup:
     """The stencils sharing one ``spec``: their centre nodes and neighbour lists.
 
     ``index[i]`` are the ``spec.size`` nodes of the stencil centred on
-    ``rows[i]``, nearest first, so ``index[i, 0] == rows[i]``.
+    ``rows[i]``, nearest first, so ``index[i, 0] == rows[i]``. ``kind`` says
+    which zone the group serves; only the ``interface`` group's rows are
+    recomputed on the translated basis.
     """
 
     spec: StencilSpec
     rows: np.ndarray
     index: np.ndarray
+    kind: str = INTERIOR_KIND
 
 
 @dataclass(frozen=True)
 class Stencils:
-    """Every node's stencil, grouped by spec; ``near_boundary`` marks the zone."""
+    """Every node's stencil, grouped by spec and kind.
+
+    ``near_boundary`` marks the boundary zone; ``near_interface`` the nodes
+    whose stencil at the largest size crosses an interface (all False unless
+    ``build_stencils`` was given an ``interface`` spec).
+    """
 
     n: int
     groups: tuple[StencilGroup, ...]
     near_boundary: np.ndarray
+    near_interface: np.ndarray
 
     def spec_of(self, node: int) -> StencilSpec:
+        return self.group_of(node).spec
+
+    def group_of(self, node: int) -> StencilGroup:
         for g in self.groups:
             if node in g.rows:
-                return g.spec
+                return g
         raise KeyError(node)
 
 
@@ -74,27 +96,53 @@ def boundary_zone(
     return zone
 
 
+def interface_crossings(nodes: NodeSet, material, index: np.ndarray) -> np.ndarray:
+    """True per row of ``index`` whose nodes lie in more than one region of the band.
+
+    A material without interfaces (a single ``Piece2D``) crosses nothing.
+    Regions are the band's ``region_index``, by exact level signs.
+    """
+    if not hasattr(material, "region_index"):
+        return np.zeros(len(index), dtype=bool)
+    region = material.region_index(nodes.x, nodes.y)
+    return np.ptp(region[index], axis=1) > 0
+
+
 def build_stencils(
     nodes: NodeSet,
     domain: Domain,
     interior: StencilSpec = INTERIOR,
     boundary: StencilSpec = BOUNDARY,
     zone: float = BOUNDARY_ZONE,
+    interface: StencilSpec | None = None,
 ) -> Stencils:
-    """Nearest-neighbour stencils: ``interior`` off the zone, ``boundary`` inside it."""
+    """Nearest-neighbour stencils: ``interior`` off the zones, ``boundary`` in the zone.
+
+    With an ``interface`` spec, every node whose stencil at the largest of
+    the three sizes crosses an interface of ``domain.material`` gets that
+    spec instead (the interface group takes precedence over the boundary
+    zone), so no stencil of any group but the interface group can see a
+    jump; without one the interfaces are ignored, as the naive operator
+    wants.
+    """
     near = boundary_zone(nodes, domain, zone)
-    k = max(interior.size, boundary.size)
+    specs = [interior, boundary] + ([interface] if interface is not None else [])
+    k = max(spec.size for spec in specs)
     if k > nodes.n:
         raise ValueError(f"{nodes.n} nodes cannot hold a {k}-node stencil")
     index, _ = knn(nodes.xy, k)
+    cross = np.zeros(nodes.n, dtype=bool)
+    if interface is not None:
+        cross = interface_crossings(nodes, domain.material, index)
     groups = []
-    for spec, rows in (
-        (interior, np.flatnonzero(~near)),
-        (boundary, np.flatnonzero(near)),
+    for spec, rows, kind in (
+        (interior, np.flatnonzero(~near & ~cross), INTERIOR_KIND),
+        (boundary, np.flatnonzero(near & ~cross), BOUNDARY_KIND),
+        (interface, np.flatnonzero(cross), INTERFACE_KIND),
     ):
-        if len(rows):
-            groups.append(StencilGroup(spec, rows, index[rows, : spec.size]))
-    return Stencils(nodes.n, tuple(groups), near)
+        if spec is not None and len(rows):
+            groups.append(StencilGroup(spec, rows, index[rows, : spec.size], kind))
+    return Stencils(nodes.n, tuple(groups), near, cross)
 
 
 def derivative_matrices(
@@ -173,6 +221,40 @@ def laplacian_operator(
 ) -> sp.csr_array:
     """``∇²`` by RBF-FD: the control problem's operator (``α ≡ 1``)."""
     return derivative_matrix(nodes, stencils, "lap", shape)
+
+
+def interface_aware_operator(
+    nodes: NodeSet,
+    material,
+    stencils: Stencils,
+    curvature: bool = True,
+    shape: float = GA_SHAPE,
+) -> sp.csr_array:
+    """The §5.3 operator: direct rows, translated-basis rows across interfaces.
+
+    ``stencils`` should come from ``build_stencils`` with an ``interface``
+    spec; the rows of its interface group whose nodes reach more than one
+    region are recomputed by ``interface.stencil_weights`` (across both
+    interfaces when they reach three regions), the rest are the direct
+    operator's. ``curvature=False`` is the flat-interface variant EABE
+    Fig. 10 and 14 compare against; on flat interfaces the two coincide.
+    A material without interfaces gives the direct operator back.
+    """
+    op = direct_operator(nodes, material, stencils, shape)
+    if not hasattr(material, "region_index"):
+        return op
+    op = op.tolil()
+    for g in stencils.groups:
+        if g.kind != INTERFACE_KIND:
+            continue
+        cross = interface_crossings(nodes, material, g.index)
+        for row, idx in zip(g.rows[cross], g.index[cross], strict=True):
+            w = stencil_weights(
+                nodes.xy[idx], material, g.spec.degree, shape, curvature
+            )
+            op[row, :] = 0.0
+            op[row, idx] = w
+    return op.tocsr()
 
 
 BoundaryValue = float | Callable[[np.ndarray, np.ndarray], np.ndarray]

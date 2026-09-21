@@ -176,6 +176,28 @@ def augmented_solve(
     return np.linalg.solve(lhs, rhs)[:, :k, :]
 
 
+def check_coincidence(
+    xi: np.ndarray, eta: np.ndarray, limit: float = COINCIDENCE
+) -> None:
+    """Raise if any two nodes of a stencil are closer than ``limit`` (scaled units).
+
+    ``xi, eta`` are ``(m, k)`` or ``(k,)`` node coordinates in units of the
+    stencil radius. Shared by ``rbf_fd_weights`` and the interface stencils
+    of E2.3, which build their own Gaussian block.
+    """
+    xi = np.atleast_2d(np.asarray(xi, dtype=float))
+    eta = np.atleast_2d(np.asarray(eta, dtype=float))
+    k = xi.shape[-1]
+    dxi = xi[:, :, None] - xi[:, None, :]
+    deta = eta[:, :, None] - eta[:, None, :]
+    closest = (np.hypot(dxi, deta) + np.eye(k)).min(axis=(1, 2))
+    if np.any(closest < limit):
+        raise ValueError(
+            "two nodes of a stencil coincide or nearly so: the closest pair is "
+            f"{closest.min():.1e} stencil radii apart"
+        )
+
+
 def rbf_fd_weights(
     dx: np.ndarray,
     dy: np.ndarray,
@@ -216,14 +238,9 @@ def rbf_fd_weights(
         xi = dx[sl] / radius[sl, None]
         eta = dy[sl] / radius[sl, None]
         eps = (shape * radius[sl] / nearest[sl])[:, None]
+        check_coincidence(xi, eta)
         dxi = xi[:, :, None] - xi[:, None, :]
         deta = eta[:, :, None] - eta[:, None, :]
-        closest = (np.hypot(dxi, deta) + np.eye(k)).min(axis=(1, 2))
-        if np.any(closest < COINCIDENCE):
-            raise ValueError(
-                "two nodes of a stencil coincide or nearly so: the closest pair is "
-                f"{closest.min():.1e} stencil radii apart"
-            )
         a = gaussian(dxi, deta, eps[..., None])
         p = polynomial_block(xi, eta, degree)
         b_rbf = np.stack([gaussian_derivative(xi, eta, eps, op) for op in ops], axis=-1)

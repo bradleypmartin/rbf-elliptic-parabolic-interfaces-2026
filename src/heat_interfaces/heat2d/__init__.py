@@ -8,10 +8,12 @@ polynomial augmentation, batched over stencils (EABE eq. 2, 31);
 ``operators``: stencil groups (42 / degree 5 inside, 30 / degree 4 near a
 Dirichlet curve), sparse ``Dx``, ``Dy``, the Laplacian, ``A``, the naive
 ``Dx A Dx + Dy A Dy`` (plan D3), the direct ``α ∇² + ∇α·∇`` and the
-Dirichlet rows; ``solve``: the SuperLU equilibrium solve; ``exact``: the
-separable piecewise-exponential solutions of the control and of case 1
-(EABE eq. 34). Interface-aware stencils, warped RBFs, BD4 and the case
-drivers follow in E2.3 onward.
+Dirichlet rows; ``interface``: the translated polynomial bases across
+interfaces with curvature and the multi-interface chain (dissertation §5.3,
+EABE §2.2.3) and ``operators.interface_aware_operator``; ``solve``: the
+SuperLU equilibrium solve; ``exact``: the separable piecewise-exponential
+solutions of the control and of case 1 (EABE eq. 34). Warped RBFs, BD4 and
+the case drivers follow in E2.4 onward.
 """
 
 from .domain import (
@@ -46,6 +48,29 @@ from .domain import (
     straddle_count,
 )
 from .exact import LayeredExact, case1_exact, control_exact
+from .interface import (
+    Frame,
+    LocalInterface,
+    Region,
+    coefficient_dx,
+    coefficient_dy,
+    coefficient_operator,
+    continuity_conditions,
+    continuity_matrix,
+    frame_at,
+    frame_change,
+    interface_expansion,
+    local_interface,
+    local_taylor,
+    multiplication_matrix,
+    restriction_matrix,
+    stencil_weights,
+    substitution_matrix,
+    table_to_vector,
+    translated_basis,
+    translation_matrix,
+    vector_to_table,
+)
 from .neighbors import (
     PERIOD,
     knn,
@@ -56,7 +81,10 @@ from .neighbors import (
     wrap_x,
 )
 from .operators import (
+    BOUNDARY_KIND,
     BOUNDARY_ZONE,
+    INTERFACE_KIND,
+    INTERIOR_KIND,
     StencilGroup,
     Stencils,
     alpha_matrix,
@@ -67,6 +95,8 @@ from .operators import (
     direct_operator,
     dirichlet_system,
     dirichlet_values,
+    interface_aware_operator,
+    interface_crossings,
     laplacian_operator,
     naive_operator,
 )
@@ -90,13 +120,16 @@ from .solve import normalized_l2, rms_error, solve_equilibrium
 
 __all__ = [
     "BOUNDARY",
+    "BOUNDARY_KIND",
     "BOUNDARY_ZONE",
     "CASES",
     "COOLING_RADIUS",
     "DIRICHLET",
     "FREE",
     "GA_SHAPE",
+    "INTERFACE_KIND",
     "INTERIOR",
+    "INTERIOR_KIND",
     "ITERATIVE",
     "OPERATORS",
     "PERIOD",
@@ -113,9 +146,12 @@ __all__ = [
     "Curve",
     "Domain",
     "FlatLine",
+    "Frame",
     "LayeredExact",
+    "LocalInterface",
     "NodeSet",
     "Piece2D",
+    "Region",
     "Row",
     "SineGraph",
     "SineProduct",
@@ -131,16 +167,29 @@ __all__ = [
     "case1_exact",
     "case2",
     "case3",
+    "coefficient_dx",
+    "coefficient_dy",
+    "coefficient_operator",
+    "continuity_conditions",
+    "continuity_matrix",
     "control_exact",
     "derivative_matrices",
     "derivative_matrix",
     "direct_operator",
     "dirichlet_system",
     "dirichlet_values",
+    "frame_at",
+    "frame_change",
     "gaussian",
     "gaussian_derivative",
+    "interface_aware_operator",
+    "interface_crossings",
+    "interface_expansion",
     "knn",
     "laplacian_operator",
+    "local_interface",
+    "local_taylor",
+    "multiplication_matrix",
     "naive_operator",
     "nearest_spacing",
     "normalized_l2",
@@ -152,10 +201,17 @@ __all__ = [
     "polynomial_exponents",
     "polynomial_rhs",
     "rbf_fd_weights",
+    "restriction_matrix",
     "rms_error",
     "row_count",
     "solve_equilibrium",
+    "stencil_weights",
     "step_delta",
     "straddle_count",
+    "substitution_matrix",
+    "table_to_vector",
+    "translated_basis",
+    "translation_matrix",
+    "vector_to_table",
     "wrap_x",
 ]
