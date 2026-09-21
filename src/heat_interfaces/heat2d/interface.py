@@ -32,6 +32,18 @@ curve about the foot point. The flat variant (EABE Fig. 10's "linear
 interface") sets ``f = 0`` and keeps everything else; on a flat interface
 the two are identical to rounding.
 
+The Gaussians of the RBF-FD system are "warped" across the interfaces
+(EABE §2.2.4, dissertation Fig. 5-1): in the anchor frame the normal
+coordinate of every node across an interface is stretched by
+``alpha_centre / alpha_across``, so that a Gaussian of the stretched
+coordinates has continuous value and continuous ``alpha ∂_n`` at the
+interface, and the RBF part of the stencil upholds the interface conditions
+to first order where the translated polynomials uphold them to order ``p``.
+``Warp`` is the piecewise-linear stretch of one stencil, ``build_warp``
+walks it outward from the anchor region across each interface, and
+``stencil_weights(..., warp=False)`` is the plain-Gaussian ablation of EABE
+Fig. 11.
+
 Frames are built from each curve's ``normal`` alone, since ``Circle`` and
 the graphs orient their tangents differently.
 """
@@ -423,12 +435,83 @@ def translated_basis(
     return regions
 
 
+# --- warped RBFs ----------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Warp:
+    """The coordinate stretch of EABE §2.2.4 for one stencil, in its anchor frame.
+
+    A node in region ``r`` has its normal coordinate replaced by
+    ``eta_tilde = slope[r - lowest] * eta + intercept[r - lowest]``: the
+    identity on the anchor's region, continuous across each interface at
+    that interface's ``eta`` in the frame, and with
+    ``alpha_minus * slope_minus == alpha_plus * slope_plus`` at each, so that
+    a smooth function of ``(xi, eta_tilde)`` has continuous ``alpha ∂_eta``
+    there. ``alpha`` is each side's value at the interface's foot point (the
+    MATLAB's ``rhoEval / rhoAcross`` used the pieces' constant parts).
+    """
+
+    frame: int
+    lowest: int
+    slope: np.ndarray
+    intercept: np.ndarray
+
+    def apply(self, eta: np.ndarray, region: np.ndarray) -> np.ndarray:
+        """``eta_tilde`` of nodes at ``eta`` (frame units) in ``region``."""
+        r = np.asarray(region, dtype=int) - self.lowest
+        return self.slope[r] * np.asarray(eta, dtype=float) + self.intercept[r]
+
+
+def build_warp(
+    interfaces: Mapping[int, LocalInterface], anchor: int, lowest: int, highest: int
+) -> Warp:
+    """The ``Warp`` of a stencil centred in region ``anchor`` of ``lowest … highest``.
+
+    Walked outward from the anchor region one interface at a time, as
+    ``translated_basis`` walks the translation: across interface ``r`` the
+    slope is multiplied by ``alpha_minus / alpha_plus`` going up and by the
+    inverse going down, and the intercept keeps ``eta_tilde`` continuous at
+    the interface's ``eta`` in the anchor frame. That ``eta`` is zero for the
+    anchor's own interface; the other interface's is its foot point read in
+    the anchor frame, exact for parallel lines and concentric circles and
+    the MATLAB's ``zoneWidth`` approximation for the sine pair of case 2.
+    """
+    if not lowest <= anchor <= highest or lowest >= highest:
+        raise ValueError("anchor must lie in lowest..highest, with lowest < highest")
+    frame = anchor if anchor < highest else anchor - 1
+    base = interfaces[frame].frame
+    m = highest - lowest + 1
+    slope, intercept = np.ones(m), np.zeros(m)
+
+    def eta_of(j: int) -> float:
+        if j == frame:
+            return 0.0
+        other = interfaces[j].frame
+        return float(base.local(other.x0, other.y0)[1])
+
+    def step(r: int, j: int, ratio: float, to: int) -> None:
+        b = eta_of(j)
+        s = slope[r - lowest] * ratio
+        intercept[to - lowest] = slope[r - lowest] * b + intercept[r - lowest] - s * b
+        slope[to - lowest] = s
+
+    for r in range(anchor, highest):
+        it = interfaces[r]
+        step(r, r, it.minus[0, 0] / it.plus[0, 0], r + 1)
+    for r in range(anchor, lowest, -1):
+        it = interfaces[r - 1]
+        step(r, r - 1, it.plus[0, 0] / it.minus[0, 0], r - 1)
+    return Warp(frame, lowest, slope, intercept)
+
+
 def stencil_weights(
     xy: np.ndarray,
     band: Band,
     degree: int,
     shape: float = GA_SHAPE,
     curvature: bool = True,
+    warp: bool = True,
 ) -> np.ndarray:
     """Weights of ``div(alpha grad u)`` at ``xy[0]`` from ``u`` at the nodes ``xy``.
 
@@ -437,8 +520,15 @@ def stencil_weights(
     centre scaled by the stencil radius, and for each node the basis of its
     region evaluated in that region's frame. The right-hand side is the
     operator on the centre's own side, ``alpha ∇² + ∇alpha · ∇``, applied to
-    each function at the centre. The stencil must reach more than one
-    region of ``band``; the weights come back in physical units.
+    each function at the centre. With ``warp`` the Gaussians are those of
+    EABE §2.2.4: their offsets are taken in the anchor frame with the normal
+    coordinate stretched by ``build_warp``, on both sides of the Gaussian
+    block and in its right-hand side; the centre's own region is unstretched,
+    so its derivatives at the centre are the plain Gaussian's at the warped
+    offset, and ``∇alpha`` is rotated into the frame as the polynomial
+    right-hand side already is. ``warp=False`` keeps the plain Gaussians of
+    the global frame. The stencil must reach more than one region of
+    ``band``; the weights come back in physical units.
     """
     xy = np.asarray(xy, dtype=float)
     if xy.ndim != 2 or xy.shape[1] != 2 or len(xy) < polynomial_count(degree):
@@ -481,6 +571,11 @@ def stencil_weights(
     b_poly = a0 * (v @ (ddx @ ddx + ddy @ ddy) @ c) + g_xi * (v @ ddx @ c)
     b_poly = b_poly + g_eta * (v @ ddy @ c)
 
+    if warp:
+        xi_w, eta_w = frame.local(x, y)
+        eta_w = build_warp(locals_, anchor, lowest, highest).apply(eta_w, region)
+        xi_g, eta_g = xi_w - xi_w[0], eta_w - eta_w[0]
+        gx, gy = g_xi, g_eta
     eps = shape * scale / nearest
     a = gaussian(xi_g[:, None] - xi_g[None, :], eta_g[:, None] - eta_g[None, :], eps)
     b_rbf = (

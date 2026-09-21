@@ -1,5 +1,8 @@
 """Stencil groups, derivative matrices, the naive and direct operators, Dirichlet rows,
-the equilibrium solve on the control and on case 1, and the control's spectrum."""
+the equilibrium solve on the control and on case 1, the control's spectrum, and
+the warp-and-straddle ablation of case 2."""
+
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -13,6 +16,7 @@ from heat_interfaces.heat2d.domain import (
     SineProduct,
     build_node_set,
     case1,
+    case2,
     case3,
 )
 from heat_interfaces.heat2d.exact import case1_exact, control_exact
@@ -354,16 +358,20 @@ def test_case1_naive_operator_is_first_order():
 # --- the interface-aware operator (E2.3) --------------------------------------
 
 
-def test_interface_aware_operator_is_fourth_order_on_case1():
+@pytest.mark.parametrize("warp", [True, False])
+def test_interface_aware_operator_is_fourth_order_on_case1(warp):
     # EABE Fig. 7: 1.0e-5, 2.6e-6, 5.5e-7 at 1250, 2500, 5000 nodes (read off
-    # the rendered page); ours run a few times higher without E2.4's warped
-    # RBFs (port notes §2.3) but at the same order.
+    # the rendered page); with the warped RBFs of E2.4 ours run 1.1–1.6× above
+    # them, with plain Gaussians 3.7–4.2× (port notes §2.3–2.4), at the same
+    # order either way.
     counts = (1250, 2500, 5000)
     errs, naive = [], []
     for n in counts:
         nodes, st = aware_set(n)
         u = solve_equilibrium(
-            interface_aware_operator(nodes, DOMAIN.material, st), nodes, [0.0, top]
+            interface_aware_operator(nodes, DOMAIN.material, st, warp=warp),
+            nodes,
+            [0.0, top],
         )
         errs.append(rms_error(u, CASE1(nodes.x, nodes.y)))
         _, st0 = node_set(n)
@@ -373,8 +381,43 @@ def test_interface_aware_operator_is_fourth_order_on_case1():
         naive.append(rms_error(un, CASE1(nodes.x, nodes.y)))
     r = rate(errs)
     assert np.all(r > 3.3), (errs, r)
-    assert errs[0] < 1e-4 and errs[-1] < 5e-6
+    assert errs[0] < (2.5e-5 if warp else 1e-4) and errs[-1] < (1e-6 if warp else 5e-6)
     assert all(e < n / 50 for e, n in zip(errs, naive, strict=True))
+
+
+def test_case2_warp_and_straddle_ablation_runs_at_three_resolutions():
+    # EABE Fig. 11's four combinations on case 2, which has no analytic
+    # solution: each builds and solves, the Dirichlet data bound |u| by 1, the
+    # node sets without rows put nodes within a hundredth of a spacing of the
+    # curves and the crossing stencils take them, and the warp moves the
+    # straddled solution by an amount that falls like h^4, as the difference
+    # of two fourth-order operators should. The errors against the
+    # 160,000-node reference are E2.6's (#20).
+    domain = case2()
+    bare = replace(domain, straddle=())
+    moved = []
+    for n in (1250, 2500, 5000):
+        for dom in (domain, bare):
+            nodes = build_node_set(dom, n)
+            st = build_stencils(nodes, dom, interface=BOUNDARY)
+            assert st.groups[-1].kind == INTERFACE_KIND
+            u = {}
+            for warp in (True, False):
+                op = interface_aware_operator(nodes, dom.material, st, warp=warp)
+                u[warp] = solve_equilibrium(op, nodes, [0.0, top])
+                assert np.isfinite(u[warp]).all()
+                assert np.abs(u[warp]).max() < 1.0 + 1e-3
+            if dom is domain:
+                moved.append(rms_error(u[True], u[False]))
+            else:
+                assert len(nodes.straddle_rows) == 0
+                gap = min(
+                    np.abs(c.signed_distance(nodes.x, nodes.y)).min()
+                    for c in dom.material.interfaces
+                )
+                assert gap < 0.02 * nodes.h
+    moved = np.array(moved)
+    assert moved[0] > 1e-5 and np.all(moved[:-1] / moved[1:] > 2.5), moved
 
 
 def test_flat_and_curved_variants_coincide_on_case1_and_replace_only_crossing_rows():

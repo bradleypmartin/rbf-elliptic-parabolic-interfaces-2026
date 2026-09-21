@@ -560,10 +560,11 @@ markers from 1250 to 40,000 nodes):
   1.7 s of the 2.1 s build at 10,000 nodes.
 - *Against 2016*: our errors sit 3.7×, 4.0×, 4.2×, 6.5× and 7.4× above the
   Fig. 7 markers at 1250–20,000 nodes, at the same slope. The 2016 runs used
-  the warped Gaussians of EABE §2.2.4 in every experiment but one (E2.4
-  brings them in and Fig. 11's ablation will say how much they buy), a
-  different interface zone (above) and different node sets; E2.4 and E2.5
-  (#18, #19) are where to close or explain the gap, not here.
+  the warped Gaussians of EABE §2.2.4 in every experiment but one; §2.4
+  brings them in and they close the gap to 1.1–1.8× (its table), so the
+  numbers here are the "plain RBFs, straddling rows" line of the ablation
+  and not the port's best. The interface zone (above) and the node sets
+  were not the cause.
 - The flat and curvature-included variants agree to the last bit on
   case 1's flat interfaces, as the paper says they must.
 
@@ -643,6 +644,136 @@ contrast. EABE Fig. 20's `O(s²)` growth with the contrast is E2.9's (#23).
 
 Regenerate with `uv run python scripts/heat2d_interface.py` (24 s at the
 defaults; `--counts 2500 5000 10000 20000` adds the 20,000-node point).
+
+### 2.4 Warped RBFs across interfaces, and the warp-and-straddle ablation (E2.4)
+
+**The construction** (`heat2d.interface.Warp`, `build_warp`; EABE §2.2.4,
+dissertation Fig. 5-1). A crossing stencil's Gaussians are written in the
+anchor frame (the frame of the interface next to the centre's region), with
+the normal coordinate `η` of every node replaced by a piecewise-linear
+`η̃ = s_r η + b_r` by region: the identity on the centre's region, and
+across each interface the slope multiplied by `α⁻/α⁺` going up (its
+inverse going down), so that `α⁻ s⁻ = α⁺ s⁺` at every interface, with the
+intercept keeping `η̃` continuous at the interface's `η` in the frame. A
+Gaussian of `(ξ, η̃)` then has a continuous value and a continuous
+`α ∂_n` at the interface, since both sides see the same `∂/∂η̃` and
+`α ∂_η = α s ∂_η̃` balances; the RBF part of the stencil upholds the
+interface conditions to first order where the translated polynomials
+uphold them to order `p`. The stencil's Gaussian block
+`A_ij = φ(|x̃_i − x̃_j|)` and its right-hand side use the warped offsets
+(the centre's region is unstretched, so the derivatives at the centre are
+the plain Gaussian's at the warped offset, with `∇α` rotated into the
+frame); the polynomial block and its right-hand side are untouched, so the
+polynomial exactness of §2.3 carries over (its tests run with the warp on
+and off). This is the MATLAB's `ypositionsIntWarp = rhoEval/rhoAcross · y′`
+under `RBFwarpFlag`, with its three-region cases (`evalZone` ×
+`stencilZoneVec`) and its second interface at `zoneWidth = cos θ (yUI −
+yLI)`; ours reads the second interface's foot point in the anchor frame
+(exact for parallel lines and concentric circles, the same approximation
+for the sine pair) and takes `α` at each interface's foot point on each
+side rather than the pieces' constant parts (identical on cases 1 and 3;
+on case 2 the ratio uses `0.2 + 0.1 sin 2πx sin 2πy` at the foot point
+instead of `0.2`). Tested (`tests/heat2d/test_interface.py`): for a
+Gaussian centred below a flat interface with `α` 1 : 1/2 (Fig. 6's
+picture) the value and `α ∂_n` agree on the two sides at every point of the
+interface to 1e-13 relative by the chain rule, the chain rule agrees with
+one-sided differences to 1e-4, and the plain Gaussian misses the flux
+balance by the factor 2; the slopes balance `α` at both interfaces of a
+three-region flat band from any anchor and at each interface's own
+foot-point values along case 2's sine pair; a warp across equal `α` leaves
+the weights unchanged to 1e-10.
+
+![warped Gaussian](figures/heat2d_warped_rbf.png)
+
+**Case 1: the four combinations of EABE Fig. 11** (`scripts/heat2d_warp.py`,
+seed 0, 2026-09-21; RMS error against the analytic solution and order per
+halving of `h`; "rows" are the straddling rows of §2.1, "none" the node
+sets built with `straddle=()`, where the free nodes spread into the
+cleared bands; "group" is the interface group with rows / without; the
+last column is EABE Fig. 7; the 20,000-node row is from `--counts 2500
+5000 10000 20000`, 50 s):
+
+```
+     n       h   group(rows/none) |   warp+rows  order |  plain+rows  order |   warp,none  order |  plain,none  order |  EABE Fig. 7
+  1250  0.0294     414 /   468 |    1.60e-05      - |    3.71e-05      - |    5.01e-05      - |    1.23e-04      - |     1.0e-05
+  2500  0.0208     588 /   668 |    3.79e-06   4.17 |    1.05e-05   3.66 |    7.02e-06   5.70 |    1.93e-05   5.35 |     2.6e-06
+  5000  0.0149     809 /   955 |    6.11e-07   5.48 |    2.30e-06   4.56 |    1.67e-06   4.31 |    3.36e-06   5.25 |     5.5e-07
+ 10000  0.0105    1155 /  1343 |    1.45e-07   4.11 |    5.18e-07   4.27 |    1.97e-07   6.12 |    1.25e-06   2.83 |     8.0e-08
+ 20000  0.0075    1614 /  1914 |    1.92e-08   5.88 |    1.33e-07   3.95 |    5.02e-08   3.98 |    1.36e-07   6.44 |     1.8e-08
+```
+
+![case-1 ablation](figures/heat2d_warp_case1.png)
+
+- *The warp closes §2.3's gap to 2016.* With the rows, the warped
+  Gaussians cut the error by 2.3×, 2.8×, 3.8×, 3.6× and 6.9× at
+  1250–20,000 nodes, from 3.7–7.4× above the Fig. 7 markers to 1.6, 1.5,
+  1.1, 1.8 and 1.1×; at 20,000 nodes 1.92e-8 against the marker's 1.8e-8.
+  The fit over 1250–20,000 nodes is 4.89 (plain 4.18), so the warp buys
+  more at the finer counts. The remaining 10–80 % is within what a
+  different node set gives (the `plain,none` orders wobble by that much
+  between counts).
+- *The rows matter less than the warp on case 1, and the two add up.*
+  Without the rows the warped operator sits 2.5–3.0× above Fig. 7 (1.4–3.1×
+  above `warp+rows`) at a fit of 5.09; the plain one without rows, Fig. 11's
+  "no warp, no straddling" setting, is the worst at 6–16× above Fig. 7 and
+  its order wobbles most (2.83 then 6.44), the mark of free nodes landing
+  anywhere from 0.001 to 0.01 `h` from the interface. On this flat case all
+  four are fourth order; Fig. 11's message that the gap widens on the curved
+  case is E2.6's to measure.
+- The interface group is 13–19 % larger without the rows (the crossing
+  test on the interior stencil finds more crossing stencils among the
+  scattered nodes) and the build times are the same.
+
+**Case 2: the four combinations run** (the driver's second table, 1250–5000
+nodes; case 2 has no analytic solution, and the errors against the
+160,000-node reference, Fig. 11 proper, are E2.6's (#20) with the
+resampling that needs; "build" is the warped operator's, the plain one's is
+the same to 0.1 s):
+
+```
+     n       h  rows  group  cross |  build warp  plain   solve |  max|u| warp    plain |  warp - plain  rms       max
+  1250  0.0294   yes    422    408 |       0.6s   0.6s   0.0s |     0.995734  0.995734 |            5.37e-05  2.20e-04
+  1250  0.0294    no    469    388 |       0.6s   0.6s   0.0s |     0.995734  0.995734 |            2.71e-04  1.50e-03
+  2500  0.0208   yes    594    576 |       0.9s   0.9s   0.0s |     1.000000  1.000000 |            1.25e-05  5.68e-05
+  2500  0.0208    no    666    556 |       0.9s   0.8s   0.0s |     1.000000  1.000000 |            8.92e-05  5.25e-04
+  5000  0.0149   yes    812    796 |       1.3s   1.3s   0.1s |     0.999725  0.999725 |            3.62e-06  1.41e-05
+  5000  0.0149    no    967    791 |       1.4s   1.3s   0.1s |     0.999725  0.999725 |            3.71e-05  1.88e-04
+```
+
+- Every combination builds and solves at the three counts, and `max |u|`
+  is the Dirichlet data's (the largest `sin 2πx` on the top row), the
+  discrete maximum principle to 1e-6.
+- On the straddled sets the warp moves the solution by 5.4e-5, 1.25e-5
+  and 3.6e-6 RMS: ratios 4.3 and 3.5 per doubling of `N`, i.e. `h⁴`, the
+  difference of two fourth-order operators. On the row-free sets it moves it
+  5–10× more (2.7e-4, 8.9e-5, 3.7e-5; ratios 3.0 and 2.4), the first sign of
+  what Fig. 11 shows on the curved case. The row-free sets put nodes within
+  0.001–0.01 `h` of the curves; the exact level signs place them and the
+  crossing stencils take them without any guard.
+- The row-free interface groups are 11–19 % larger with fewer crossing
+  30-node stencils (388 vs 408 at 1250): the 42-node crossing test sweeps in
+  more nodes whose own 30 do not reach across.
+
+**Decisions (E2.4).**
+
+- The warp is on by default in `stencil_weights` and
+  `interface_aware_operator`, as in every 2016 experiment but Fig. 11's one
+  line; `scripts/heat2d_interface.py` passes `warp=False` so §2.3's table
+  stays the plain-Gaussian reference and is reproducible.
+- With `warp=False` the Gaussian block is the global-frame one of §2.3, bit
+  for bit; the offsets are rotated into the anchor frame only when warping.
+- `α` for the slope ratios is each side's value at the interface's foot
+  point (the tables' constant terms), not the pieces' constant parts as in
+  the MATLAB: the flux balance is a condition at the interface.
+- Every node is stretched in the anchor frame, with the other interface at
+  its foot point's `η` in that frame; the warp is a flat-interface stretch
+  even on curved interfaces, as the MATLAB's was, and the curvature stays
+  in the polynomials. The RBF part's continuity is first order either way.
+- "No straddling" is `dataclasses.replace(domain, straddle=())`; nothing was
+  added to `domain.py`.
+
+Regenerate with `uv run python scripts/heat2d_warp.py` (39 s at the
+defaults; `--counts 2500 5000 10000 20000` adds the 20,000-node row, 50 s).
 
 Later tickets add their subsections here; E2.11 (#25) closes the section
 with the decisions and the regeneration commands.
