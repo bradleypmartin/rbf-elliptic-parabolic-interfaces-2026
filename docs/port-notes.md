@@ -1164,5 +1164,268 @@ defaults; the reference is cached under `outputs/` on the first run) and
 reference cached, 1.1 min more without; the resampling check is 54 s of
 it).
 
+### 2.7 Case 3: the 0.001-wide insulating ring around a cooling unit, FD4 / flat / curved (E2.7)
+
+**The problem** (EABE eq. 37–39, dissertation eq. 89–91; `heat2d.domain.case3`,
+§2.1). `α = 1/1500 + (1/3000) sin 2πx sin 2πy` on the closed ring
+`0.349 ≤ r ≤ 0.35` about `(0.5, 0.5)`, 1 elsewhere; `u = sin 6πx` on both
+`y = 0` and `y = 1` and `u = 0` on the circle `r = 0.05`, whose inside is cut
+out. The boundary data were re-read from both rendered pages (E0.2's reading
+stands: the same sign on both rows). They bound `u` by 1 and change sign
+three times along each row, and `sin 6πx` decays as `e^{−6π d}` away from a
+row, so the solution is a pair of boundary layers with `|u| ≈ 0.06 sin 6πx`
+at the ring's outer edge and `|u| < 5e-3` inside the ring, whose cooled
+interior the insulator all but decouples; `RMS |u| = 0.17`. The mesh plot of
+Fig. 13 / Fig. 5-13 shows a plateau at 1 with wiggles of 0.2 at the rows and
+a well to 0 inside the ring, which no solution of eq. 39 can be; it was
+drawn from other boundary data, and the twin below is of eq. 39's
+(`docs/paper-index.md`).
+
+**Ownership** (the E1 note on #21). The ring is thinner than the node spacing
+at every count (`h ≥ 0.0026` at 160,000 nodes), so which nodes are "inside
+it" is decided by the rows, not by chance: the straddling rows sit at
+`±0.5 h_row` off the midline `r = 0.3495` (§2.1's `thinFlag` layout), the
+free nodes keep `(0.5 + √3) h_row` clear of it, and no node of any set lies
+inside the ring; the driver checks both on every node set and on the
+reference (`ownership`) before an error is read. The operator's `α` and the
+reference's therefore agree on every node's piece by construction, both
+being `Band.piece_index` on the same coordinates; the stencils that cross
+the midline reach regions 0 and 2 and are translated across both circles
+(§2.3's chain, `interface_stencil` with `lowest = 0, highest = 2`), the
+ring's own region holding basis functions but no nodes.
+
+**The 1500 : 1 chain, checked** (the E2.4 note on #21, item 3). The matched
+radial quadratic of `tests/heat2d/test_interface.py` at the ring's own
+contrast (`u = r²` inside, `r²/α + b₁` on the ring, `r² + b₂` outside,
+`∇·(α∇u) = 4` everywhere, `u` climbing by 1.05 across the 0.001) is
+reproduced by `stencil_weights` on the real crossing stencils of a
+2500-node case-3 set to a relative residual of 2e-12 with curvature on,
+warp on or off, and is off by 4e-6 relative (5e-2 absolute) with the flat
+frames: the chain is exact at 1500 : 1, and curvature is what makes it so
+(`test_stencil_weights_are_exact_through_the_ring_at_its_1500_contrast`).
+
+**FD4 with the cooling disc** (`heat2d.fd4.cartesian_grid`; the E2.6 note
+on #20, item 2). The grid is §2.6's, and every grid point on or inside a
+Dirichlet hole becomes a Dirichlet node of that curve, the staircase a
+Cartesian code makes of the disc: the boundary is placed to within one
+spacing, the five-point stencils outside read `u = 0` from the points
+inside, and `fd4_operator` is unchanged. With the disc's points held at the
+exact values of a harmonic solution instead there is no geometric error and
+FD4 is fifth order on the control material (`tests/heat2d/test_fd4.py`), so
+the plumbing is right and the staircase's first-order error is the only new
+one. Errors are read over the grid points outside the disc. The ring FD4
+sees through `α` sampled at the grid points alone: none fall in it at
+1260 or 4970 grid points, 24 to 32 at 2550 to 20,022, and it is not until
+`h < 0.001`, `m > 1000`, that a grid samples it at every angle.
+
+**The resampling check** (the E2.6 note on #20, item 1). §2.6 read case
+1's analytic solution, a smooth periodic function across flat interfaces
+at 1 : 5, back at 1–3e-12; the question was whether the ring's 1500 : 1
+chain leaves the read there. Two profiles were tried. The 1-D radial
+equilibrium `a_k + (c/α_k) ln r` through the ring (`u = 0` on the cooling
+circle, 1 at `r = 0.5`) is the physics, but its fifth derivative at
+`r = 0.05` is 1e7 and the read measured that (3e-4 largest, at the cooling
+circle), not the ring. The check uses instead the harmonic mode
+`u = R(r) cos 2θ` (`heat2d.exact.RingMode`, `ring_exact`): `R = r²` scaled
+inside (the polynomial `Re (x + iy)²`, regular at the centre),
+`a r² + b r⁻²` on the ring and outside, `R` and `α R'` continuous at both
+circles, so it solves `∇·(α∇u) = 0` with the ring at its constant part
+`α = 1/1500` and satisfies every condition the translated basis enforces;
+`R` climbs from 0.078 to 0.74 across the ring. It is not periodic in x, so
+the check reads only the points within 0.1 of the midline (the annulus
+`0.25 < r < 0.45`, inside which no fine stencil wraps the seam), the fine
+set being case 3's own layout with the constant ring.
+
+**The reference** (`reference_solution`, plan D4): 160,000 nodes, seed 0,
+`h = 0.00263`, an interface group of 5038 three-region stencils; node set
+8.2 s, stencils and operator 38.6 s (case 2's 30.3 s: each crossing stencil
+now carries two interfaces), SuperLU solve 28.8 s, 76 s in all (M4 Pro,
+2026-09-21); `max |u| = 1 + 1e-9`. Cached as
+`outputs/heat2d_case3_reference_n160000_seed0.npz` (3.6 MB) with its JSON
+sidecar, reused when count, seed and iterations match. Its own error, by
+§2.6's `N⁻²` argument from the 80,000-node curved point (3.02e-7 measured):
+about **1e-7**, to one figure, so the last marker below sits at the
+reference's floor (its true error is nearer 4e-7 than 3e-7) and the
+40,000-node one moves by 6 %.
+
+**Fig. 14 / Fig. 5-14: FD4, flat and curved** (`scripts/heat2d_case3.py
+--reference-n 160000 --counts 1250 … 80000 --fd4-counts 1250 … 1280000`,
+seed 0, 2026-09-21, 29 min in all; RMS error at the coarse nodes against
+the resampled reference, order per halving of `h`; `group` is the
+interface group and `in ring` the nodes inside `0.349 ≤ r ≤ 0.35`; the times
+are the curved operator's node set with stencils, operator, solve and the
+reading of the reference; `plain` is the curvature-included operator with
+plain Gaussians; the last columns are Fig. 5-14 read off the rendered page,
+seven markers per RBF-FD line, about ±15 %):
+
+```
+     n       h  group  in ring |       flat  order |     curved  order  nodes  build  solve  read |      plain  order |  Fig. 14 flat   curved
+  1250  0.0294    512        0 |   1.65e-03      - |   1.58e-03      -   0.1s   1.2s   0.0s   0.1s |   1.96e-03      - |   1.4e-03  1.4e-03
+  2500  0.0208    694        0 |   4.47e-04   3.79 |   4.69e-04   3.52   0.1s   1.7s   0.0s   0.1s |   9.51e-04   2.09 |   8.0e-04  5.9e-04
+  5000  0.0149    949        0 |   1.51e-04   3.25 |   1.13e-04   4.27   0.4s   2.5s   0.1s   0.2s |   9.90e-05   6.78 |   3.9e-04  2.5e-04
+ 10000  0.0105   1314        0 |   6.31e-05   2.51 |   3.02e-05   3.78   0.8s   3.9s   0.4s   1.5s |   2.06e-05   4.50 |   2.2e-04  7.7e-05
+ 20000  0.0075   1813        0 |   3.22e-05   1.95 |   6.03e-06   4.68   1.3s   6.2s   1.2s   2.3s |   4.58e-06   4.37 |   1.9e-04  2.0e-05
+ 40000  0.0053   2534        0 |   2.90e-05   0.30 |   1.39e-06   4.20   2.2s  10.6s   3.4s   5.4s |   9.04e-07   4.65 |   2.0e-04  3.7e-06
+ 80000  0.0037   3567        0 |   7.72e-05  -2.81 |   3.02e-07   4.39   4.3s  19.4s   9.5s   9.0s |   2.91e-07   3.26 |   2.5e-04  8.1e-07
+```
+
+```
+      n       h   disc  ring |        fd4  order  build  solve   read |    no ring      blind |  Fig. 14 FD4
+   1260  0.0286     12     0 |   6.14e-03      -    0.0s    0.0s    0.2s |   6.14e-03   6.15e-03 |   2.3e-01 (at 1250)
+   2550  0.0200     21    24 |   5.62e-03   0.25    0.0s    0.0s    0.3s |   6.05e-03   5.55e-03 |   2.3e-01 (at 2500)
+   4970  0.0143     37     0 |   6.28e-03  -0.33    0.0s    0.1s    0.6s |   6.28e-03   6.26e-03 |   2.3e-01 (at 5000)
+  10100  0.0100     75    32 |   6.08e-03   0.09    0.0s    0.2s    1.2s |   6.24e-03   6.11e-03 |   2.3e-01 (at 10000)
+  20022  0.0071    156    32 |   6.17e-03  -0.05    0.0s    0.4s    2.3s |   6.28e-03   6.18e-03 |   2.2e-01 (at 20000)
+  40200  0.0050    311    80 |   6.15e-03   0.01    0.0s    1.2s    4.7s |   6.27e-03   6.16e-03 |   2.2e-01 (at 40000)
+  79806  0.0035    621   144 |   6.15e-03  -0.00    0.0s    3.8s    9.2s |   6.28e-03   6.15e-03 |   2.2e-01 (at 80000)
+ 160400  0.0025   1251   296 |   6.14e-03   0.00    0.0s   10.7s   17.5s |   6.28e-03   6.14e-03 |   2.1e-01 (at 160000)
+ 319790  0.0018   2496   724 |   6.09e-03   0.03    0.1s   35.5s   24.6s |   6.29e-03   6.08e-03 |   2.1e-01 (at 320000)
+ 640800  0.0013   5019  1368 |   5.99e-03   0.04    0.2s   95.4s   36.7s |   6.29e-03   5.99e-03 |   2.1e-01 (at 640000)
+1280292  0.0009  10024  2804 |   5.73e-03   0.13    0.3s  328.5s   60.2s |   6.29e-03   5.73e-03 |   2.0e-01 (at 1280000)
+```
+
+![case-3 convergence](figures/heat2d_case3_convergence.png)
+
+- *The curved line is fourth order.* Fit 4.13 over 1250–80,000 nodes
+  (the markers fit at 3.58), orders 3.5 to 4.7 per halving of `h`, at 1.2,
+  0.8, 0.5, 0.4, 0.3, 0.4 and 0.4× the Fig. 14 markers: on the marker at
+  1250 nodes, then 2–3× below it. The last point is the one the reference's
+  own error reaches. `max |u|` stays within 1 (0.9957 to 1.0000): the
+  discrete maximum principle holds with the 1500 : 1 rows in.
+- *The flat line stalls and then rises, as 2016's did, at a lower level.*
+  1.65e-3 down to 2.90e-5 at 40,000 nodes and back up to 7.72e-5 at 80,000,
+  against the markers' 1.4e-3 down to 1.9e-4 at 20,000 and up to 2.5e-4:
+  1.2, 0.6, 0.4, 0.3, 0.2, 0.1 and 0.3×. The flat/curved gap is 1.0, 1.0,
+  1.3, 2.1, 5.3, 21 and 256× at 1250–80,000 (2016's: 1.0, 1.4, 1.6, 2.9,
+  9.5, 54, 309×), so the message of Fig. 14, that curvature decides
+  convergence on the ring, holds with the same shape. Why our flat variant
+  is 3–10× better than 2016's from 2500 nodes on cannot be checked, the
+  2016 code being lost; on case 2 the two flat lines agreed to 1.1–1.3×
+  (§2.6), so the difference is the ring's (two frames 0.001 apart, each at
+  its own foot point, §2.3's decision, against whatever the 2016 code did
+  with the `thinFlag` pair).
+- *Plain Gaussians do as well as warped ones on the ring.* The `plain`
+  line is 1.24, 2.03, 0.88, 0.68, 0.76, 0.65 and 0.96× the warped one
+  (fit 4.26): below it from 5000 nodes on. The E2.4 note on #21 predicted
+  this regime: the warp's slope on the ring is 1500 with no node in the
+  band, so it only shifts the far side by 1.5 stencil radii, the cross-ring
+  Gaussians are zero either way and the translated polynomials carry the
+  coupling. 2016 plotted the warped setting (its text: warp on everywhere
+  but one Fig. 11 line); the twin does too, the plain line dashed beside it.
+  Case 2's 3–10× gain from warp and rows together (§2.6) does not carry to
+  the ring.
+- *FD4 sits on its no-ring floor.* 6.14e-3 at 1260 grid points and 5.73e-3
+  at 1,280,292, against the same grid with `α ≡ 1` at 6.14e-3 to 6.29e-3:
+  the Cartesian operator solves the problem without the ring until the
+  spacing samples it, 24 to 1368 grid points inside the ring at 2550 to
+  640,800 (none at 1260 and 4970, the counts whose spacing steps over it),
+  and only the last grid, `m = 1131` and `h = 0.00088 < 0.001`, the first
+  to sample it at every angle, moves off the floor (order 0.13). That is
+  the dissertation's "no convergence until about 1600 nodes in each
+  direction". The 1.28M-point solve took 5.5 min and its two reads 2 min;
+  **the FD4 cap on this machine is 1,280,292 grid points** (plan D7), one
+  doubling short of 2016's last marker at 2,560,000, and the dip that
+  marker shows (2.0e-1 to 1.85e-1) is not reproduced.
+- *2016's FD4 line at 0.23 is not reproduced and not explained.* It is 37×
+  our floor at every count, and above the solution's own RMS (0.17), so it
+  is the error of something far from the solution; the staircase disc is
+  not it (the floor is set by the missing ring, not the disc: the `no ring`
+  column, with the same staircase, agrees with `fd4` to 3 %), nor is a
+  blind reading of the reference at the grid points (`blind`, the same
+  numbers to 1 %). What the 2016 FD4 did with the disc, and how its
+  reference was read inside the disc, the lost code cannot tell. The
+  ratio to the marker is 0.03 throughout.
+
+**Fig. 13 / Fig. 5-13: the mesh plot.** `heat2d_case3_solution.png` is
+the 40,000-node curved solution (16.3 s: node set, operator, solve) as a
+surface over its own node set, triangles inside the disc masked: `max |u|
+= 0.99986`, `RMS |u| = 0.169`, `|u| < 4.5e-3` inside the ring. It shows the
+two rows of three boundary bumps of `sin 6πx` decaying into a flat interior
+with the hole; the ring is invisible at this scale, as an insulator around
+a region at nearly the interior's level should be. It does not resemble
+Fig. 5-13 (a plateau at 1 with a well inside the ring), for the reason
+given at the top of this section.
+
+![case-3 solution](figures/heat2d_case3_solution.png)
+
+**The resampling check, measured** (`--check-n 160000`; the harmonic
+mode on the 160,000-node case-3 layout with the constant ring, 8.6 s to
+build with both stencil sets, read at the coarse case-3 nodes and the FD4
+grid points within 0.1 of the midline; RMS / max error, aware then blind):
+
+```
+     n       h |  nodes aware        max   time |  nodes blind        max |   grid aware        max |   grid blind        max
+  1250  0.0294 |     1.76e-12   1.04e-11   0.1s |     1.76e-12   1.04e-11 |     1.18e-11   1.23e-10 |     7.86e-04   5.92e-03
+  2500  0.0208 |     1.67e-12   1.02e-11   0.1s |     1.67e-12   1.02e-11 |     1.36e-07   1.27e-06 |     6.10e-03   5.02e-02
+  5000  0.0149 |     8.73e-12   3.45e-10   0.1s |     1.69e-04   4.60e-03 |     2.93e-11   3.94e-10 |     7.51e-03   1.03e-01
+ 10000  0.0105 |     1.37e-11   2.36e-10   1.2s |     7.39e-04   1.29e-02 |     6.80e-08   1.27e-06 |     9.92e-03   1.65e-01
+ 20000  0.0075 |     9.10e-12   9.24e-11   1.8s |     6.54e-04   8.16e-03 |     3.90e-08   1.37e-06 |     6.96e-03   1.06e-01
+ 40000  0.0053 |     3.76e-11   5.15e-10   4.5s |     9.03e-03   7.00e-02 |     6.54e-08   1.60e-06 |     8.28e-03   1.65e-01
+ 80000  0.0037 |     2.72e-11   3.07e-10   7.3s |     6.78e-03   5.68e-02 |     5.37e-08   1.88e-06 |     8.04e-03   1.57e-01
+```
+
+- At the coarse nodes the aware read is 2e-12 to 4e-11 RMS (largest
+  5e-10): the 1500 : 1 chain leaves it within an order of case 2's 1–3e-12,
+  four orders below the finest curved point (3.02e-7), so the resampling is
+  invisible in the table above. The blind read coincides with it at 1250
+  and 2500 nodes for §2.6's reason (the coarse rows keep every coarse node
+  beyond the fine stencils' reach of the ring) and is 2e-4 to 9e-3 from
+  5000 on.
+- At the grid points the aware read is 1e-11 on the grids with no point
+  inside the ring (1260, 4970) and 4e-8 to 1.4e-7 RMS (largest 1.9e-6) on
+  the others: the points inside the ring are read through the ring's own
+  translated basis, whose coefficients carry the 1500, and the truncation
+  there is that much larger. It is three orders below FD4's 6e-3 and only
+  FD4 ever reads there. The blind read is 1e-3 to 1e-2 on every grid.
+  (With a 40,000-node fine set the aware read at the nodes is 2e-10 to
+  1e-9, the driver's default.)
+- The `RingMode` profile satisfies `∇·(α∇u) = 0` with `R` and `α R'`
+  continuous across both circles to 1e-9 and is harmonic on each ring to
+  the five-point Laplacian's own truncation (`tests/heat2d/test_exact.py`);
+  its aware read through a 10,000-node fine set is under 1e-6 near the ring
+  and the blind one more than 100× worse (`tests/heat2d/test_resample.py`),
+  and the matched quadratic at 1500 : 1 reads back to 1e-9 through a
+  5000-node set, including points inside the ring itself.
+
+**Decisions (E2.7).**
+
+- The boundary data are eq. 39 / eq. 91 as both rendered pages show them,
+  `sin 6πx` on both rows with the same sign; Fig. 13 / 5-13's mesh plot
+  was drawn from other data and is reproduced for eq. 39's instead.
+- The FD4 grid keeps its `m (m + 1)` points and marks those on or inside a
+  Dirichlet hole as that curve's Dirichlet nodes (`cartesian_grid`; a hole
+  that is not a Dirichlet curve, or a Dirichlet curve that is not a hole, is
+  refused); errors are read over the points outside the disc. The cap is
+  1,280,292 grid points, 5.5 min per solve; 2016's 2,560,000 marker is not
+  run.
+- The Fig. 14 twin adds the curvature-included operator with plain
+  Gaussians as a dashed line (the E2.4 note on #21); the driver also
+  tabulates the FD4 grid solved without the ring and the FD4 error with a
+  blind read, both cheap, so the two floors are on record.
+- Ownership is checked, not assumed: the driver raises if any node of any
+  set lies inside the ring or if the innermost pair fails to straddle both
+  circles.
+- The resampling check's profile is `heat2d.exact.RingMode` (`ring_exact`,
+  `m = 2`), read within 0.1 of the midline; the ln-profile and the seam
+  are the reasons above. `RadialEquilibrium` was written and removed in the
+  same ticket.
+- The 2016 markers of Fig. 14 are read off the rendered page (±15 %, the
+  FD4 line ±5 %) and kept in the driver as `FIG14`; FD4's twelve markers
+  run by doublings from 1250 to 2,560,000.
+- The driver's default is a 40,000-node reference, counts to 10,000 and the
+  mesh plot from the reference itself (80 s in all); the tables and
+  figures above are the 160,000-node run.
+- `no_ring()` in the driver, case 3's geometry and rows with `α ≡ 1`, is the
+  control problem of dissertation §5.4.4 (E2.8, #22).
+
+Regenerate with `uv run python scripts/heat2d_case3.py` (80 s at the
+defaults; the reference is cached under `outputs/` on the first run) and
+`uv run python scripts/heat2d_case3.py --reference-n 160000 --counts 1250
+2500 5000 10000 20000 40000 80000 --fd4-counts 1250 2500 5000 10000 20000
+40000 80000 160000 320000 640000 1280000` for the tables above (29 min:
+reference 76 s, RBF-FD sweep 2.5 min, FD4 sweep 22 min of which the
+1.28M-point grid is 7.5 min, the resampling check 54 s, the mesh plot
+16 s).
+
 Later tickets add their subsections here; E2.11 (#25) closes the section
 with the decisions and the regeneration commands.

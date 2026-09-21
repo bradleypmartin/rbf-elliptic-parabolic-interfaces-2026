@@ -44,7 +44,12 @@ drops signs and piecewise braces:
 - **Case 3** (eq. 37–39, PDF p. 33): `r = [(x − 0.5)² + (y − 0.5)²]^½`;
   `α = 1/1500 + (1/3000) sin 2πx sin 2πy` for `0.349 ≤ r ≤ 0.35`, 1
   otherwise; **`u = sin 6πx` at both y = 1 and y = 0 (same sign)**, `u = 0`
-  on the inner circle r = 0.05.
+  on the inner circle r = 0.05. Re-read on 2026-09-21 (E2.7) from both
+  rendered pages (EABE p. 33, dissertation eq. 89–91 at PDF p. 110): the
+  same. The mesh plot of Fig. 13 / Fig. 5-13 runs from 0 to 1.4 with small
+  wiggles at the rows, which this data (bounded by 1, sign-changing) cannot
+  produce; it was made with other boundary data and is not reproduced
+  (port notes §2.7).
 - **Case 1** (eq. 32–34): `α = 0.2` for y ∈ [0.6, 0.8], 1 otherwise;
   `u = sin 2πx` at y = 1, 0 at y = 0.
 

@@ -7,10 +7,12 @@ and ``y = 1`` (``heat1d.operators.derivative_matrix``), assembled as
 ``Dx A Dx + Dy A Dy`` with ``A = diag(α)`` at the grid points: dissertation
 eq. 76 in 2-D (plan D3), the MATLAB ``FDheat1.m``'s
 ``Dy (k .* Dy u) + (k .* u Dx') Dx'``. The grid is a ``NodeSet`` whose top and
-bottom levels are its Dirichlet rows, so the equilibrium solve and the
-resampling of E2.6 apply to it unchanged. The stencils see nothing of an
-interface: first order where the grid crosses one (Fig. 10's top line),
-fourth where α is smooth.
+bottom levels are its Dirichlet rows, and whose points on or inside a
+Dirichlet hole (case 3's cooling disc) are a staircase Dirichlet set, so the
+equilibrium solve and the resampling of E2.6 apply to it unchanged. The
+stencils see nothing of an interface: first order where the grid crosses one
+(Fig. 10's top line), fourth where α is smooth, and blind to case 3's ring
+until the spacing resolves it (Fig. 14's top line).
 """
 
 from __future__ import annotations
@@ -37,12 +39,25 @@ def cartesian_grid(domain: Domain, n: int) -> NodeSet:
     """The equispaced grid of about ``n`` nodes: ``m (m + 1)`` at spacing ``1/m``.
 
     Node ``j m + i`` is ``(i/m, j/m)``; levels ``j = 0`` and ``j = m`` are the
-    Dirichlet rows of ``domain.dirichlet``, which must be the strip's (case 3's
-    cooling circle has no grid twin). Every other node is ``FREE`` and no row
-    straddles anything: the grid ignores the interfaces, as FD4 does.
+    Dirichlet rows of the strip, which ``domain.dirichlet`` must start with.
+    Any further Dirichlet curve must be one of ``domain.holes``, and every
+    grid point on or inside it becomes a Dirichlet node of that curve: the
+    staircase a Cartesian code makes of case 3's cooling disc, the boundary
+    placed to within one spacing (a first-order error the ring's dwarfs at
+    every count of Fig. 14). A hole too small to catch a grid point is
+    invisible to that grid, as it would be to the code; the driver prints
+    the count. Every other node is ``FREE`` and no row straddles anything:
+    the grid ignores the interfaces, as FD4 does.
     """
-    if tuple(domain.dirichlet) != STRIP or domain.holes:
-        raise NotImplementedError("the FD4 grid covers the plain strip only")
+    extra = tuple(domain.dirichlet[2:])
+    if (
+        tuple(domain.dirichlet[:2]) != STRIP
+        or any(curve not in domain.holes for curve in extra)
+        or any(hole not in extra for hole in domain.holes)
+    ):
+        raise NotImplementedError(
+            "the FD4 grid covers the strip, with holes that are Dirichlet curves"
+        )
     m = grid_size(n)
     h = 1.0 / m
     i, j = np.meshgrid(np.arange(m), np.arange(m + 1))
@@ -53,8 +68,13 @@ def cartesian_grid(domain: Domain, n: int) -> NodeSet:
     bottom, top = np.arange(m), np.arange(m * m, m * (m + 1))
     kind[bottom] = kind[top] = DIRICHLET
     boundary[bottom], boundary[top] = 0, 1
-    rows = (Row(0, 0.0, h, bottom), Row(1, 0.0, h, top))
-    return NodeSet(x, y, kind, h, (), rows, boundary)
+    rows = [Row(0, 0.0, h, bottom), Row(1, 0.0, h, top)]
+    for ci, hole in enumerate(extra, start=2):
+        inside = np.flatnonzero(hole.level(x, y) <= 0.0)
+        kind[inside] = DIRICHLET
+        boundary[inside] = ci
+        rows.append(Row(ci, 0.0, h, inside))
+    return NodeSet(x, y, kind, h, (), tuple(rows), boundary)
 
 
 def fd4_dx(m: int, h: float) -> sp.csr_array:

@@ -3,6 +3,8 @@ the continuity matrices, the translated basis on curved interfaces, and the
 stencil weights (dissertation §5.3, EABE §2.2.3), and the interpolation weights
 of E2.6's resampling on the same system."""
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -17,6 +19,7 @@ from heat_interfaces.heat2d.domain import (
     SineProduct,
     build_node_set,
     case1,
+    case3,
 )
 from heat_interfaces.heat2d.interface import (
     Frame,
@@ -565,6 +568,46 @@ def test_stencil_weights_chain_across_two_curved_interfaces_end_to_end(warp):
     }
     assert np.abs(residual[True]).max() < 1e-6, np.abs(residual[True]).max()
     assert np.abs(residual[False]).max() > 0.1
+
+
+def matched_radial_quadratic_1500(r):
+    """The same through case 3's ring at ``α = 1/1500``: ``div(α grad u) = 4``."""
+    a = 1.0 / 1500.0
+    b1 = 0.349**2 - 0.349**2 / a
+    b2 = 0.35**2 / a + b1 - 0.35**2
+    return np.where(r < 0.349, r**2, np.where(r <= 0.35, r**2 / a + b1, r**2 + b2))
+
+
+@pytest.mark.parametrize("warp", [True, False])
+def test_stencil_weights_are_exact_through_the_ring_at_its_1500_contrast(warp):
+    # Case 3's own node layout (rows on the midline r = 0.3495, no node in the
+    # 0.001-wide ring): the stencils crossing it reach regions 0 and 2 only, and
+    # the translated basis carries the 1500 : 1 flux ratio; u climbs by 1.05
+    # across the ring. Exact with curvature (the E2.4 note on #21), and the flat
+    # variant is not.
+    band = Band(Circle(0.349), Circle(0.35), Constant2D(1 / 1500), Constant2D(1.0))
+    domain = replace(case3(), material=band)
+    nodes = build_node_set(domain, 2500, iterations=10)
+    r = np.hypot(nodes.x - 0.5, nodes.y - 0.5)
+    u = matched_radial_quadratic_1500(r)
+    assert (band.region_index(nodes.x, nodes.y) == 1).sum() == 0
+    idx, _ = knn(nodes.xy, 30)
+    region = band.region_index(nodes.x, nodes.y)
+    lo, hi = region[idx].min(axis=1), region[idx].max(axis=1)
+    triple = np.flatnonzero((lo == 0) & (hi == 2))
+    assert len(triple) > 400, len(triple)
+    relative = {}
+    for curvature in (True, False):
+        worst = 0.0
+        for i in triple[::5]:
+            w = stencil_weights(
+                nodes.xy[idx[i]], band, P, curvature=curvature, warp=warp
+            )
+            residual = abs(w @ u[idx[i]] - 4.0)
+            worst = max(worst, residual / (np.abs(w) @ np.abs(u[idx[i]])))
+        relative[curvature] = worst
+    assert relative[True] < 1e-9, relative
+    assert relative[False] > 1e-7, relative
 
 
 def test_chain_through_two_curved_sine_interfaces_is_continuous_at_both():

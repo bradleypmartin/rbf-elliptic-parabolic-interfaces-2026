@@ -1,4 +1,4 @@
-"""Separable solutions on the strip: ``u = e^{c t} sin(κx) v(y)``, α constant per layer.
+"""Separable solutions on the strip, and the radial equilibrium through case 3's ring.
 
 Dissertation eq. 86 and EABE eq. 34: with ``α`` piecewise constant in ``y``
 and ``u = e^{c t} sin(κ x) v(y)``, ``u_t = ∇·(α ∇u)`` reduces to
@@ -7,6 +7,17 @@ layer; continuity of ``v`` and of ``α v'`` at each interface, ``v(0) = 0``
 and ``v(1) = 1`` fix the ``2m`` constants (the ``c₁ … c₆`` of the papers and of
 MATLAB ``laplaceSetup.m``). The control problem (``α ≡ 1``, ``c = 0``) is the
 one-layer case ``v = sinh(κ y) / sinh κ``.
+
+``RingMode`` is the other separable solution this repo needs: the harmonic
+mode ``u = R(r) cos(mθ)`` through concentric rings of constant α,
+``R = a_k r^m + b_k r^-m`` on each ring and ``r^m`` at the centre, with ``R``
+and the flux ``α R'`` continuous at every radius. It is not a solution of any
+case (case 3's ring α varies, and the strip is no annulus) but it is smooth
+away from the ring, regular at the centre, and satisfies every interface
+condition the translated basis enforces at the ring's 1500 : 1 contrast, so
+it is what E2.7 reads through the fine stencils to measure the resampling.
+(The radial equilibrium ``a + b ln r`` was tried first; its fifth derivative
+at the cooling circle is 1e7 and the reading measured that, not the ring.)
 """
 
 from __future__ import annotations
@@ -15,7 +26,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .domain import TWO_PI
+from .domain import RING, TWO_PI
 
 
 @dataclass(frozen=True)
@@ -123,3 +134,89 @@ def control_exact(growth: float = 0.0) -> LayeredExact:
 def case1_exact(growth: float = 0.0) -> LayeredExact:
     """Eq. 34 / dissertation eq. 86: ``α = 0.2`` on ``[0.6, 0.8]``, 1 elsewhere."""
     return LayeredExact((1.0, 0.2, 1.0), (0.6, 0.8), growth)
+
+
+@dataclass(frozen=True)
+class RingMode:
+    """``u = R(r) cos(mθ)``, harmonic through concentric rings of constant α.
+
+    Ring ``k`` is ``radii[k-1] <= r < radii[k]`` (the innermost reaches the
+    centre, the outermost infinity; on a radius, the ring above it, as with
+    ``LayeredExact``). ``R_k = a_k r^m + b_k r^-m`` with ``b_0 = 0``, so ``u``
+    is the harmonic polynomial ``Re (x + iy)^m`` scaled at the centre;
+    ``R`` and ``α R'`` are continuous at every radius, and the whole is
+    scaled so that ``u = 1`` at ``(r, θ) = (scale_radius, 0)``. Across an
+    insulating ring ``R`` climbs by about ``m α_out / α_ring`` times the
+    ring's width times ``r^(m-1)``: 1.05 at case 3's ring for ``m = 2``,
+    against 0.12 inside.
+    """
+
+    radii: tuple[float, ...]
+    alphas: tuple[float, ...]
+    mode: int = 2
+    scale_radius: float = 0.5
+    cx: float = 0.5
+    cy: float = 0.5
+    _coefficients: np.ndarray = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if len(self.radii) != len(self.alphas) - 1:
+            raise ValueError("one radius fewer than rings is needed")
+        if any(a <= 0.0 for a in self.alphas):
+            raise ValueError("every ring needs a positive α")
+        if self.mode < 1:
+            raise ValueError("the mode must be 1 or more")
+        if not self.radii or self.radii[0] <= 0.0:
+            raise ValueError("at least one positive radius is needed")
+        if list(self.radii) != sorted(set(self.radii)):
+            raise ValueError("radii must increase")
+        object.__setattr__(self, "_coefficients", self._solve())
+
+    def _solve(self) -> np.ndarray:
+        # Walk outward: V = R and F = α (a r^m − b r^-m) (the flux times r/m)
+        # are continuous, and the next ring's pair follows from them.
+        m = self.mode
+        coef = np.zeros((len(self.alphas), 2))
+        coef[0] = [1.0, 0.0]
+        for k, r in enumerate(self.radii):
+            a, b = coef[k]
+            value = a * r**m + b * r**-m
+            flux = self.alphas[k] * (a * r**m - b * r**-m)
+            up = flux / self.alphas[k + 1]
+            coef[k + 1] = [(value + up) / (2 * r**m), (value - up) / (2 * r**-m)]
+        last = coef[-1]
+        norm = last[0] * self.scale_radius**m + last[1] * self.scale_radius**-m
+        return coef / norm
+
+    def ring(self, r: np.ndarray) -> np.ndarray:
+        """Index of the ring holding ``r``; on a radius, the ring above it."""
+        r = np.asarray(r, dtype=float)
+        return np.searchsorted(np.asarray(self.radii, dtype=float), r, side="right")
+
+    def radial(self, r: np.ndarray) -> np.ndarray:
+        r = np.asarray(r, dtype=float)
+        a, b = self._coefficients[self.ring(r)].T
+        return a * r**self.mode + b * r**-self.mode
+
+    def flux(self, r: np.ndarray) -> np.ndarray:
+        """``α R'(r)``, continuous across the radii."""
+        r = np.asarray(r, dtype=float)
+        k = self.ring(r)
+        a, b = self._coefficients[k].T
+        alpha = np.asarray(self.alphas, dtype=float)[k]
+        m = self.mode
+        return alpha * m * (a * r ** (m - 1) - b * r ** (-m - 1))
+
+    def __call__(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        dx, dy = x - self.cx, y - self.cy
+        return self.radial(np.hypot(dx, dy)) * np.cos(self.mode * np.arctan2(dy, dx))
+
+
+def ring_exact(mode: int = 2) -> RingMode:
+    """Case 3's ring at its constant part: ``α = 1/1500`` on ``0.349 <= r <= 0.35``.
+
+    ``u = r^m cos mθ`` scaled inside, 1 at ``(0.5, θ = 0)``; nearly all of the
+    change is across the ring, as in case 3 itself.
+    """
+    return RingMode(RING, (1.0, 1.0 / 1500.0, 1.0), mode)
