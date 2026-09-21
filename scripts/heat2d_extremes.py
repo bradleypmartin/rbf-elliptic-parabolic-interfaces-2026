@@ -899,7 +899,18 @@ def figure_conditioning(rows: list[dict[str, float]]):
         markersize=5,
         label="plain Gaussians",
     )
-    ax.loglog(s, 1e-17 * s, "k:", linewidth=0.7, label=r"$10^{-17}\,s$")
+    # The guide is the fitted line ∝ s through the data from s = 10⁵ on, where
+    # the worst residual has left the rounding floor of the s = 10³ chain.
+    fit = np.array([r["residual-curved"] for r in rows if r["s"] >= 1e5])
+    coefficient = float(np.exp(np.mean(np.log(fit / s[s >= 1e5]))))
+    mantissa, exponent = f"{coefficient:.1e}".split("e")
+    ax.loglog(
+        s,
+        coefficient * s,
+        "k:",
+        linewidth=0.7,
+        label=rf"${mantissa}\times10^{{{int(exponent)}}}\,s$ (fit from $10^5$)",
+    )
     ax.set_xlabel("extremizing parameter s")
     ax.set_ylabel("worst relative residual on the matched quadratic")
     ax.set_title("the weights' exactness through the ring")

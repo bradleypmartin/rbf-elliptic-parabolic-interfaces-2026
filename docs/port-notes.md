@@ -1804,7 +1804,12 @@ median residual over the stencils (warp on / off): 1e3: 1.3e-16 / 1.5e-16; 1e4: 
   exponent 0.96) and the RBF-FD system's like s (1.9e6 to 4.1e13); with the
   flat frames the far side stays at 170 and `P` at 1.2e3–2.9e3 for every s.
   The O(s) is the curvature's doing, and it is exact arithmetic, not
-  rounding: along the inner circle the `D u` row reads
+  rounding. The measured part is the `far` column and
+  `test_far_side_basis_grows_like_s_with_curvature_only` (the far
+  coefficient a thousandfold between s = 10⁶ and 10⁹ with curvature on,
+  flat without it); the constants that follow are a derivation by hand,
+  orders of magnitude rather than measurements: along the inner circle the
+  `D u` row reads
   `12 c₄₀ + 2 c₂₂ + (2 c₂₁ + 6 c₀₃) f₂ = O(s)` with `c₀₃ ~ (1.5 s)²` from
   the flux of `D u` and `f₂ = κ scale / 2 ≈ −0.09`, so the ring's
   polynomial has `c₂₂ ~ 0.6 s²` in `ξ² η²`; the change of frame to the
@@ -1817,7 +1822,8 @@ median residual over the stencils (warp on / off): 1e3: 1.3e-16 / 1.5e-16; 1e4: 
   is read a ring's width away where the tangent frame has turned. The
   weights stay exact on the span but lose digits like s: the worst
   relative residual on the matched quadratic is 2.1e-14 at s = 10³ and
-  1.4e-7 at 10¹¹, about `1.4e-18 s` from s = 10⁵ on, warp on or off, and
+  1.4e-7 at 10¹¹, about `1.5e-18 s` from s = 10⁵ on (the figure's fitted
+  line), warp on or off, and
   the median over the stencils 1.3e-16 to 4.4e-10 (`4e-21 s`). So the
   translated basis is good to about seven figures at s = 10¹¹, three
   orders below the 2016 floor of 7e-4 and one above the stored geometry's.
@@ -2034,7 +2040,8 @@ of the ring; RMS / largest error, aware then blind):
 **Decisions (E2.9).**
 
 - `case3(s)` is eq. 40 at any s with `case3()` its s = 1000 (`ring_radii`,
-  `CASE3_S`); the straddling rows sit on the midline `0.35 − 0.5/s`, so the
+  `CASE3_S`; an s whose ring would reach the cooling circle, `s ≤ 1/0.3`,
+  is refused); the straddling rows sit on the midline `0.35 − 0.5/s`, so the
   ownership check of §2.7 (no node in the ring, the innermost pair
   straddling both circles) holds and is run on every node set and
   reference.
@@ -2071,9 +2078,13 @@ of the ring; RMS / largest error, aware then blind):
   is Fig. 14's curved line and reads 0.7–1.0× §2.7's reading of Fig. 14)
   and Fig. 20 (`FIG20`, about 4.5 s², ±40 %).
 - The driver's default is a 20,000-node reference per s, counts to 5000
-  and conditioning at 2500 nodes (4.5 min in all; the 2500-node
-  conditioning numbers are within 10 % of the 10,000-node ones above); the
-  tables above are the 160,000-node run.
+  and conditioning at 2500 nodes (4.5 min in all); the tables above are the
+  160,000-node run. At 2500 nodes the s-dominated columns, the matrices as
+  built and row-equilibrated and the ring-anchored `P`, are within 8 % of
+  the 10,000-node ones, while the far coefficient, the centre-anchored `P`
+  and system and the residual scale with the stencil radius and are about
+  twice as large there (the far coefficient 7.5e3 against 3.8e3 at
+  s = 10³), as the mechanism above says they should.
 - The ticket's "done when": both figures regenerate; the breakdown near
   s = 10¹¹ is not reproduced, every line being fourth order to the
   reference's floor, and its absence is explained above: the O(s²) of

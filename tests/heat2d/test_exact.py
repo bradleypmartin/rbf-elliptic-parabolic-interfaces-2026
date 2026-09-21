@@ -100,17 +100,34 @@ def test_layered_exact_refuses_malformed_layers():
 
 
 def test_ring_mode_is_continuous_with_its_flux_and_harmonic_on_every_ring():
-    for u in (ring_exact(), ring_exact(3), RingMode((0.2, 0.3), (2.0, 0.5, 1.0), 1)):
-        for r in u.radii:
-            below, above = r - 1e-13, r + 1e-13
-            assert u.radial(below) == pytest.approx(u.radial(above), abs=1e-9)
-            assert u.flux(below) == pytest.approx(u.flux(above), rel=1e-9)
+    # The last is a four-ring chain with a thin insulating ring in the middle
+    # (1e-6 wide at α = 1e-6 / 1.5, resistance 1.5): the increment walk's
+    # multi-hop path, which no case needs.
+    chain = RingMode((0.15, 0.3, 0.3 + 1e-6, 0.45), (1.0, 3.0, 1e-6 / 1.5, 1.0, 0.5))
+    for u in (
+        ring_exact(),
+        ring_exact(3),
+        RingMode((0.2, 0.3), (2.0, 0.5, 1.0), 1),
+        chain,
+    ):
+        # At each radius the ring above owns the point; the ring below is
+        # evaluated from its own pair (a probe at r − 1e-13 would already see
+        # the thin ring's climb, 4.5e5 per unit radius).
+        m = u.mode
+        for k, r in enumerate(u.radii):
+            a, b = u._coefficients[k]
+            assert a * r**m + b * r**-m == pytest.approx(u.radial(r), abs=1e-9)
+            flux_below = u.alphas[k] * m * (a * r ** (m - 1) - b * r ** (-m - 1))
+            assert flux_below == pytest.approx(u.flux(r), rel=1e-9)
         assert u.radial(u.scale_radius) == pytest.approx(1.0)
         # Harmonic: the five-point Laplacian vanishes to its own truncation.
         for x, y in ((0.55, 0.62), (0.3, 0.3), (0.72, 0.31), (0.1, 0.9)):
             s = 2e-4
             lap = u(x + s, y) + u(x - s, y) + u(x, y + s) + u(x, y - s) - 4 * u(x, y)
             assert abs(lap / s**2) < 3e-5, (x, y, lap / s**2)
+    # Across the chain's thin ring the climb is the resistance times the flux.
+    climb = chain.radial(0.3 + 1e-6 + 1e-13) - chain.radial(0.3 - 1e-13)
+    assert climb == pytest.approx(1.5 * chain.flux(0.3 - 1e-13), rel=1e-4)
     u = ring_exact()
     # Inside it is the harmonic polynomial Re (x + iy)²; across the ring R
     # climbs by about m (α_out / α_ring) (width) r: 1.05 against 0.12 inside.

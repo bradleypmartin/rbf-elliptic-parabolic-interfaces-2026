@@ -642,6 +642,36 @@ def test_stencil_weights_lose_digits_like_s_through_a_thin_ring(s, bound):
     assert worst < bound, worst
 
 
+def test_far_side_basis_grows_like_s_with_curvature_only():
+    # E2.9's mechanism, the measurable part: across the ring from the centre
+    # the translated basis carries coefficients of order s with curvature on
+    # (the ring polynomial's O(s²) normal terms couple through the curvature
+    # and the frame shift between the circles) and none of it with the flat
+    # frames; port notes §2.9. Medians over a few crossing stencils.
+    far = {}
+    for s in (1e6, 1e9):
+        inner, outer = ring_radii(s)
+        band = Band(
+            Circle(inner), Circle(outer), Constant2D(1 / (1.5 * s)), Constant2D(1.0)
+        )
+        nodes = build_node_set(replace(case3(s), material=band), 1250, iterations=10)
+        region = band.region_index(nodes.x, nodes.y)
+        idx, _ = knn(nodes.xy, 30)
+        lo, hi = region[idx].min(axis=1), region[idx].max(axis=1)
+        triple = np.flatnonzero((lo == 0) & (hi == 2))[::25]
+        for curvature in (True, False):
+            values = []
+            for i in triple:
+                st = interface_stencil(nodes.xy[idx[i]], band, P, curvature=curvature)
+                other = [k for k in st.regions if k not in (1, st.anchor)][0]
+                values.append(np.abs(st.regions[other].coefficients).max())
+            far[s, curvature] = float(np.median(values))
+    assert 300 < far[1e9, True] / far[1e6, True] < 3000, far
+    assert far[1e6, True] > 1e3 and far[1e9, True] > 1e6, far
+    assert far[1e6, False] < 1e3 and far[1e9, False] < 1e3, far
+    assert far[1e9, False] == pytest.approx(far[1e6, False], rel=0.05)
+
+
 def test_interface_stencil_basis_takes_the_band_anchoring():
     # The band-anchored basis (the MATLAB's) spans the centre-anchored one's
     # space; the polynomial block is much worse conditioned that way (E2.9).

@@ -440,7 +440,12 @@ def ring_radii(s: float = CASE3_S) -> tuple[float, float]:
     """
     if not s > 0.0:
         raise ValueError("the extremizing parameter s must be positive")
-    return (0.35 - 1.0 / s, 0.35)
+    inner = 0.35 - 1.0 / s
+    if not inner > COOLING_RADIUS:
+        raise ValueError(
+            "the ring 0.35 - 1/s must lie outside the cooling circle: s > 1/0.3"
+        )
+    return (inner, 0.35)
 
 
 def case3(s: float = CASE3_S) -> Domain:

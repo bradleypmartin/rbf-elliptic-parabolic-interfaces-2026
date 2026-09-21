@@ -225,6 +225,9 @@ def test_case3_at_s_is_eq_40_and_recovers_case_3_at_1000():
     np.testing.assert_array_equal(m.alpha(x, y)[1:], 1.0)
     with pytest.raises(ValueError, match="positive"):
         ring_radii(0.0)
+    with pytest.raises(ValueError, match="cooling circle"):
+        ring_radii(3.0)  # 0.35 - 1/3 < 0.05
+    assert ring_radii(4.0) == (0.35 - 0.25, 0.35)
 
 
 def test_case3_rows_straddle_a_ring_a_billionth_wide():
