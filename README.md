@@ -50,8 +50,24 @@ uv run python scripts/publish_issues.py    # dry run of the tickets in docs/plan
 ```
 
 Drivers in `scripts/` write figures and cached references to `outputs/`
-(gitignored) as the epics land; see `CLAUDE.md` for the layout and
-conventions.
+(gitignored); their defaults run in seconds to a minute or two, and the
+documented sweeps sit behind flags. Run times, the flagged commands and the
+reproduction tables are in `docs/port-notes.md` (§1.7 and §2.10). See
+`CLAUDE.md` for the layout and conventions.
+
+| Driver | Regenerates |
+| --- | --- |
+| `heat1d_convergence.py` | dissertation Fig. 4-5, 4-6, 4-7 (1-D equilibrium) |
+| `heat1d_parabolic.py` | 1-D parabolic convergence and operator spectra |
+| `heat2d_nodesets.py` | the case-1/2/3 node sets (Fig. 5-3, EABE Fig. 8 and 12) |
+| `heat2d_control.py` | the α ≡ 1 control and the interface-blind case-1 operators |
+| `heat2d_interface.py` | interface-aware case 1 with plain Gaussians, continuity and conditioning tables |
+| `heat2d_warp.py` | the warped Gaussian and the warp-and-straddle ablation on case 1 (EABE Fig. 7, 11) |
+| `heat2d_case1.py` | case 1 elliptic and parabolic convergence, the 4900-node spectrum (Fig. 5-5, 5-6, EABE Fig. 7) |
+| `heat2d_case2.py` | case 2: FD4 / flat / curved, the ablation, error vs wall-clock (Fig. 5-9–5-11, EABE Fig. 10, 11) |
+| `heat2d_case3.py` | case 3: the insulating ring, FD4 / flat / curved, the mesh plot (Fig. 5-13, 5-14, EABE Fig. 13, 14) |
+| `heat2d_iterative.py` | gmres / bicgstab, Appendix B and `spilu`, the DDR histograms (Fig. 5-15–5-18, B-1, EABE Fig. 15–18) |
+| `heat2d_extremes.py` | the s-sweep of eq. 40 and the continuity matrices' conditioning (EABE Fig. 19, 20) |
 
 ## Layout
 

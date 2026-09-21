@@ -57,7 +57,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-import matplotlib.tri as mtri  # noqa: E402
 import numpy as np  # noqa: E402
 
 from heat_interfaces.heat2d import (  # noqa: E402
@@ -83,7 +82,12 @@ from heat_interfaces.heat2d import (  # noqa: E402
     rms_error,
     solve_equilibrium,
 )
-from heat_interfaces.plotting import AWARE, NAIVE, REFERENCE  # noqa: E402
+from heat_interfaces.plotting import (  # noqa: E402
+    AWARE,
+    NAIVE,
+    REFERENCE,
+    surface_over_nodes,
+)
 
 FIG14 = {
     "fd4": {
@@ -600,22 +604,12 @@ def figure_convergence(rows: list[dict[str, float]], fd4_rows: list[dict[str, fl
 
 def figure_solution(nodes: NodeSet, u: np.ndarray, domain: Domain):
     """The solution as a surface over the node set, the cooling disc cut out."""
-    tri = mtri.Triangulation(nodes.x, nodes.y)
-    cx = nodes.x[tri.triangles].mean(axis=1)
-    cy = nodes.y[tri.triangles].mean(axis=1)
-    tri.set_mask(np.hypot(cx - 0.5, cy - 0.5) < COOLING_RADIUS)
-    fig = plt.figure(figsize=(7.0, 5.2))
-    ax = fig.add_subplot(projection="3d")
-    ax.plot_trisurf(
-        tri, u, cmap="viridis", linewidth=0.0, antialiased=False, shade=False
+    return surface_over_nodes(
+        nodes,
+        u,
+        hole=(0.5, 0.5, COOLING_RADIUS),
+        title=f"case 3: the {nodes.n}-node solution (Fig. 13 twin)",
     )
-    ax.view_init(elev=32, azim=-128)
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("u")
-    ax.set_title(f"case 3: the {nodes.n}-node solution (Fig. 13 twin)")
-    fig.tight_layout()
-    return fig
 
 
 def mesh_solution(

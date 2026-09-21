@@ -6,7 +6,7 @@ ours, every deviation with its reason, and the decisions taken on the way
 (E2, dissertation ch. 5 and Martin & Fornberg 2017), filled in as the epics
 land. The figures referenced here are committed under `docs/figures/`; the
 drivers regenerate them under `outputs/` (gitignored) in the times given in
-§1.7. `docs/paper-index.md` says where each figure sits in the PDFs.
+§1.7 and §2.10. `docs/paper-index.md` says where each figure sits in the PDFs.
 
 ## 1. The 1-D heat port (E1, dissertation ch. 4)
 
@@ -2102,5 +2102,213 @@ and `uv run python scripts/heat2d_extremes.py --reference-n 160000 --counts
 tables above (25 min: the four new references 5.2 min, the sweeps 13 min,
 the conditioning 3.2 min, the spectra 21 s, the resampling check 3 min).
 
-Later tickets add their subsections here; E2.11 (#25) closes the section
-with the decisions and the regeneration commands.
+### 2.10 Closing the 2-D port: the reproduction table, the discrepancies, the decisions and regenerating (E2.11)
+
+**What §2 is.** Nine subsections, one per ticket E2.1–E2.9, each with its
+construction, its tables with the 2016 read-off beside ours, its findings,
+its decisions and its regeneration line. E2.10 (#24), the cornered
+interface, was closed as won't do on 2026-09-21 (corners will be a separate
+repository's; the manuscript's limitations section covers them), so this
+subsection closes the section. Conventions that hold throughout, stated once:
+every 2-D error is the RMS over all nodes of the coarse set, the Dirichlet
+rows included; node sets are seed 0 with 100 repulsion iterations unless a
+table says otherwise, and `h = 1/round(0.95 √N)` is their row spacing; an
+"order" is per halving of `h` between consecutive counts and a "fit" the
+slope of `log error` against `log h` over the counts shown; the 2016 markers
+are read off the pages rendered with `pdftoppm -r 200` (the E1 breadcrumb on
+#25), their count checked against the figure before a sweep was fixed, and
+kept in the drivers as `FIG…` tables with their reading accuracy (±15 %
+unless stated); times are wall-clock on an Apple M4 Pro with Python 3.13,
+NumPy, SciPy and SuperLU.
+
+**The reproduction table.** One row per 2-D figure in the plan's list
+(dissertation Fig. 5-5–5-6, 5-9–5-11, 5-14–5-18 and 5-22; EABE Fig. 7, 10,
+11, 14 and 16–20) and one for each figure §2 reproduced beside them (the
+node sets, the two mesh plots, Fig. B-1). "2016" and "ours" give the ends of
+each line over the counts the two share, "ratio" ours over 2016 across
+those counts, and "rate" the fitted order, 2016's from the `FIG…` markers
+(the section's own value where it states one, the same fit against `h`
+otherwise) and ours from the section's table.
+
+| 2016 figure | What it shows | Twin under `docs/figures/`, section | 2016 | Ours | Ratio ours / 2016 | Rate 2016 / ours |
+| --- | --- | --- | --- | --- | --- | --- |
+| Diss. 5-3; EABE 8, 12 | the case-1, 2, 3 node sets at 2500 nodes; Fig. 12b's zoom on the ring | `heat2d_nodes_case1/2/3.png`, §2.1 | six straddling rows per interface; Fig. 12b's pair at ±0.5 h across the ring | the same layout; free-node spacing 0.83–1.13 h | layout only | — |
+| Diss. 5-5, parabolic line | case 1, `u_t = ∇·(α∇u)` to `t = 0.1` against eq. 86 | `heat2d_case1_convergence.png`, §2.5 | 1.8e-5 → 6.6e-9 (1250–40,000) | 1.76e-5 → 5.51e-9 | 0.8–1.0 | 4.63 / 4.77 |
+| Diss. 5-5, elliptic line = EABE 7 | case 1 equilibrium against eq. 34, warp and rows | `heat2d_case1_convergence.png`, §2.5 (the four variants in `heat2d_warp_case1.png`, §2.4; plain Gaussians in `heat2d_interface_convergence.png`, §2.3) | 1.0e-5 → 6.0e-9 (1250–40,000) | 1.60e-5 → 5.28e-9 | 0.9–1.8 | 4.48 / 4.77 |
+| Diss. 5-6 | the 4900-node case-1 spectrum against BD4's region at `dt = 0.02` | `heat2d_case1_spectrum.png`, §2.5 | real axis to −5.4e4, `\|Im\|` to 1.5e3, every eigenvalue within ±700 of the origin real | −5.9e4, 1.7e3, the same; largest root modulus 0.865 at `dt = 0.02` | placement | — |
+| Diss. 5-9 = EABE 10 | case 2: FD4, flat and curved against the 160,000-node reference | `heat2d_case2_convergence.png`, §2.6 | curved 2.6e-5 → 9.3e-9, flat 5.2e-4 → 5.0e-5 (1250–80,000), FD4 6.0e-3 → 3.3e-4 | 3.06e-5 → 7.52e-9, 6.97e-4 → 5.74e-5, 7.80e-3 → 4.03e-4 | 0.8–1.9 (4.5 at 5000, seed 0); 1.1–1.3; 1.0–1.3 | 3.91 / 4.11; 1.13 / 1.18; 1.37 / 1.34 |
+| Diss. 5-10 = EABE 11 | case 2 ablation: warp and rows against neither | `heat2d_case2_ablation.png`, §2.6 | none 1.7e-4 → 3.1e-8, 3.3–65× above curved | 2.90e-4 → 2.77e-8, 3.3–9.5× above | 0.1–2.0 (0.1 at 20,000, 2016's bump) | 3.95 / 4.55 |
+| Diss. 5-11 | case 2 error against wall-clock | `heat2d_case2_performance.png`, §2.6 | FD4 0.012–51 s at 7.4e-3 → 4.3e-4; RBF 1.8–200 s at 4e-5 → 1.5e-9 | FD4 on 2016's curve over 0.01–50 s; RBF-FD 0.7–31 s at 3.1e-5 → 7.5e-9 | RBF-FD 2.5–3× faster at equal error | — |
+| Diss. 5-13 = EABE 13 | the case-3 solution over 40,000 nodes | `heat2d_case3_solution.png`, §2.7 | a plateau at 1 with a well inside the ring, 0 to 1.4 | `max \|u\|` 0.99986, RMS 0.169: two rows of `sin 6πx` bumps decaying into a flat interior | not reproduced (discrepancy 1) | — |
+| Diss. 5-14 = EABE 14 | case 3: FD4, flat and curved against the 160,000-node reference | `heat2d_case3_convergence.png`, §2.7 | curved 1.35e-3 → 8.1e-7; flat 1.4e-3 → 2.5e-4 (stall at 1.9e-4, 20,000); FD4 0.23 → 0.185 (to 2,560,000) | 1.58e-3 → 3.02e-7; 1.65e-3 → 7.72e-5 (stall at 2.9e-5, 40,000); 6.14e-3 → 5.73e-3 (to 1,280,292) | 0.3–1.2; 0.1–1.2 (discrepancy 3); 0.03 (discrepancy 2) | 3.58 / 4.13; 0.89 / stall; — |
+| Diss. 5-15 = EABE 15 | the control problem's 40,000-node solution, "no interfaces present" | `heat2d_iterative_control.png`, §2.8 | the same plateau at 1 with a well to 0 as Fig. 5-13, 0 to 1.4, without the ring's step | the 40,000-node control reference of eq. 39's data (19 / 3 stencils, α ≡ 1): the two rows of bumps and the hole | not reproduced (discrepancy 1) | — |
+| Diss. 5-16 = EABE 16 | control: error against time, backslash / gmres / bicgstab | `heat2d_iterative_performance.png` (first panel), `heat2d_iterative_iterations.png`, §2.8 | direct 0.04–0.7 s at 1.3e-3 → 1.4e-5, gmres 0.012–3.5 s at 1.3e-3 → 1.6e-5, bicgstab 0.02–1.2 s at 1.4e-3 → 1.6e-5 | direct 0.01–0.26 s, gmres 0.03–0.73 s, bicgstab 0.00–0.11 s at 2.21e-3 → 2.43e-5 | errors 1.0–1.7 (counts taken as 1250–20,000) | 3.3 / 3.25 |
+| Diss. 5-17 = EABE 17 | case 3: the same, unpreconditioned | second panel, §2.8 | gmres 0.9–250 s, 43–75× the control's; bicgstab "completely failed" | gmres 0.04–0.95 s, 1.2–1.65× the control's; bicgstab 98–319 iterations, every solve converged | errors 2.9–4.1; breakdown not reproduced (discrepancy 4) | 3.1 / 2.83 |
+| Diss. 5-18 = EABE 18 | case 3 with Appendix B's `P` | third panel, §2.8 | gmres 0.9–5× and bicgstab 0.6–1.8× backslash's time | solver alone 1.0–1.5× and 0.75–1.0× SuperLU's, 6–8× with the `P` build; iterations cut 2.0–3.1× | — | — |
+| Diss. B-1 | DDR histograms of the crossing rows before and after the sweeps | `heat2d_iterative_ddr.png`, §2.8 | "large peaks at very low value", lifted by the sweeps | least 0.17–0.29 → 0.41–0.48, median 0.53–0.63 → 0.49–0.57; all rows 0.78 → 0.93 | no low peaks; the median does not move | — |
+| EABE 19 | eq. 40 at s = 10³ … 10¹¹ against per-s references | `heat2d_extremes_convergence.png`, §2.9 | s = 10³ 1.3e-3 → 8.0e-7; s = 10¹¹ 2.0e-3 → 7.4e-4, flat from 5000 (±30 %) | every s 1.5e-3 → 3.0e-7, 0.73–1.15× the s = 10³ line | 10³ 0.4–1.2; 10⁸ 0.24–1.04; 10⁹–10¹¹ 0.00–1.3 (discrepancy 5) | 3.66, 3.45, 2.73, 2.37, 0.42 / 4.14, 4.14, 4.15, 4.10, 4.13 |
+| EABE 20 | the continuity matrices' mean condition number against s | `heat2d_extremes_conditioning.png`, §2.9 | ≈ 4.5 s², 4.0e6 → 4.5e22 (±40 %, units unrecorded) | 0.61 s² as built, 6.07e5 → 6.07e21; 16.5 row-equilibrated | 0.14 (discrepancy 6) | exponent 2.00 / 2.00 |
+| Diss. 5-22 | the cornered interface, second order | none | — | — | not run: E2.10 (#24) closed as won't do | — |
+
+Every figure in the plan's list therefore has a regenerating twin except
+Fig. 5-22, which was taken out of scope; the lines that 2016 drew are all
+here at their 2016 rates or better, and the six places where the numbers
+part company are listed next.
+
+**The 2016 discrepancies**, stated without a theory. The 2016 2-D code is
+not preserved (`docs/paper-index.md`), and Brad's own reading (2026-09-21)
+is that he does not know where these come from either and that they may be
+mistakes in that lost code; the notes keep stating them plainly.
+
+1. *Fig. 13 / 5-13's mesh plot is not of eq. 39's data* (§2.7): it runs
+   from 0 to 1.4 with a well inside the ring, where eq. 39's solution is
+   bounded by 1 and changes sign; the twin is of eq. 39's. Fig. 5-15 / EABE
+   Fig. 15, the control problem's 40,000-node solution, is the same picture
+   without the ring's step (rendered 2026-09-21 for this section), so both
+   2016 mesh plots were drawn from the same other boundary data, and both
+   twins are of eq. 39's.
+2. *2016's FD4 on case 3 sits at 0.23* (§2.7), 37× our no-ring floor of
+   6e-3 and above the solution's own RMS of 0.17; the staircase disc and a
+   blind read of the reference are ruled out, and the dip at 2,560,000 grid
+   points is beyond our cap.
+3. *The flat line on the ring* (§2.7) is 0.1–0.6× 2016's from 2500 nodes on
+   with the same shape (a stall, then a rise), where on case 2 the two flat
+   lines agreed to 1.1–1.3×.
+4. *Fig. 5-17's iterative breakdown is not reproduced* (§2.8): bicgstab
+   converges on case 3 at every count and gmres costs 1.2–1.65× the
+   control's time, not 43–75×; E2.8's "done when" was answered rather than
+   met, and Appendix B is a preconditioner of the whole matrix here rather
+   than a restorer of the crossing rows' dominance.
+5. *Fig. 19's floor at 7.4e-4 for s = 10¹¹ is not reproduced* (§2.9): every
+   s line is the s = 10³ line to 0.73–1.15× and fourth order to the
+   reference's own floor. §2.9 says why it could not appear in this
+   arithmetic with this anchoring (Fig. 20's O(s²) is row scaling a
+   pivoting solve never sees; the basis loses about `s ε`, seven figures at
+   10¹¹), and that the ring-anchored basis of the MATLAB conditions like s⁴
+   and is hopeless from s = 10⁵, which points at the anchoring without the
+   code to confirm it.
+6. *Fig. 20's prefactor* (§2.9): 0.61 s² here against about 4.5 s², the
+   exponent 2.00 in both; the units of the 2016 matrices are unrecorded and
+   a change of units moves a constant factor only.
+
+Quoted as read and not explained, being smaller: Fig. 5-5's parabolic line
+sits 1.1–2.1× above its elliptic one where ours coincide (§2.5); Fig. 11's
+10,000- and 20,000-node "no warp" markers sit an order above their own
+line's trend (§2.6); Fig. 5-11's eighth RBF point at 1.5e-9 and 200 s is
+below what a 160,000-node reference can measure (§2.6); Fig. 5-16 to 5-18
+state no node counts, and 1250–20,000 is the reading their error levels
+support (§2.8).
+
+**Decisions (E2.1–E2.11), the index.** Each section's own list is the
+record; this is where to look.
+
+- E2.1 (§2.1): rows of `round(0.95 √N)` with the MATLAB's half-up rounding;
+  case 3 straddles the ring's midline, the `thinFlag` layout; three
+  departures from the MATLAB's repulsion (redraw in both coordinates,
+  `cKDTree` periodic neighbours, shared angular positions on circles).
+- E2.2 (§2.2): stencil algebra in coordinates scaled by the stencil radius
+  with `ε` from the centre's nearest neighbour; the boundary zone from the
+  Dirichlet curves only; `Dx`, `Dy` rows at every node; `heat1d.march`
+  behind a Dirichlet mask; `LayeredExact` for any layer stack; the product
+  operator's coarse-set growing mode recorded, not fixed.
+- E2.3 (§2.3): one unit per stencil for frames, α tables and the interface
+  expansion; frames from `Curve.normal` alone; the expansion numerical;
+  `cos θ′` dropped from the flux rows; the interface group by the crossing
+  test on the interior stencil; anchored on the centre's side with the
+  MATLAB's continuity row counts; the naive operator keeps §2.2's stencils.
+- E2.4 (§2.4): the warp on by default (`heat2d_interface.py` pins it off so
+  §2.3's table stands); the plain block bit for bit; slope ratios from α at
+  each foot point; a flat stretch in the anchor frame even on curved
+  interfaces; "no straddling" is `replace(domain, straddle=())`.
+- E2.5 (§2.5): BD4 in 2-D is the 1-D marcher behind the Dirichlet mask;
+  verification marches start from the analytic history; `dt = h` is the row
+  spacing; the elliptic line re-solved as a regression check; the Chebyshev
+  cross-check of the separable reference left to E4.2 (#33).
+- E2.6 (§2.6): FD4 in 2-D is a Cartesian `m (m + 1)` grid (`heat2d/fd4.py`);
+  references are read fine → coarse through the fine set's own stencils;
+  `stencil_weights` a wrapper over `interface_stencil`; `npz` + JSON caches
+  reused when count, seed and iterations match; the 2016 markers as `FIG…`
+  tables; a 40,000-node reference at the defaults.
+- E2.7 (§2.7): eq. 39's data as both rendered pages show them; the FD4 grid's
+  Dirichlet hole as a staircase, the cap at 1,280,292 grid points; the
+  plain-Gaussian line dashed on the Fig. 14 twin; ownership checked on every
+  node set; `RingMode` for the resampling check; `no_ring()` is E2.8's
+  control.
+- E2.8 (§2.8): the iterative solvers see the reduced interior system; full
+  GMRES primary with GMRES(20) alongside at `rtol = 1e-8`; Appendix B on
+  every interior row with 37 neighbours and out-in-out sweeps, `P A u = P b`
+  explicit; `spilu` with `MMD_AT_PLUS_A`; solver time and preconditioner
+  build reported apart; the markers as `(seconds, error)` pairs.
+- E2.9 (§2.9): `case3(s)` is eq. 40 with `case3()` its s = 1000; one
+  reference per s, read against one another; `RingMode` walks by `expm1` /
+  `log1p` increments; the matched quadratic from the stored radii; condition
+  numbers in stencil-radius units with the band-anchored comparison through
+  `polynomial_block(regions=)`; a 20,000-node reference per s at the
+  defaults.
+- E2.10 (#24): closed as won't do on 2026-09-21; nothing depends on it.
+- E2.11 (this subsection): the plan's `heat2d_nodes.py` and
+  `heat2d_solvers.py` are `heat2d_nodesets.py` and `heat2d_iterative.py`,
+  and `heat2d_control.py`, `heat2d_interface.py` and `heat2d_warp.py`
+  (E2.2–E2.4) are drivers the plan's list did not name; the Fig. 5-15 twin
+  is the iterative driver's 40,000-node control reference drawn through
+  `plotting.surface_over_nodes`, which the case-3 mesh plot now shares;
+  every driver has a test that runs `main(argv)` into a temporary directory
+  at the smallest admissible sizes (5–26 s each) and one that it refuses
+  inadmissible inputs with `parser.error` before writing anything.
+
+**What E3–E5 inherit from §2** (the breadcrumbs on #26–#52, collected):
+the interface-aware resampling is what any reference on another node set
+needs, blind reads floor every curve at 1e-4 (§2.6); a fine reference's own
+error follows from the `N⁻²` argument and bends the last marker (§2.6,
+§2.7); `spilu` needs `MMD_AT_PLUS_A` and the identity-row form breaks
+bicgstab at step 1 (§2.8); on the ring the warp decides the sign of the
+spectrum, not the accuracy (§2.7, §2.9), so E4.5's plain-Gaussian seeds
+should be watched for positive eigenvalues; the naive product operator can
+carry a growing mode on coarse sets (§2.2, §2.5); the 1-D lesson that
+complex eigenvalues come from the end rows does not hold in 2-D (§2.2); and
+the elliptic and parabolic case-1 errors coincide at `dt = h` (§2.5), so a
+parabolic knee in E4 is the operator's and not BD4's.
+
+**Reference caches under `outputs/`** (gitignored; `npz` with a JSON sidecar
+each, 3.6 MB per 160,000-node file, reused when count, seed and iterations
+match; E5.3's results cache should list them):
+
+```
+heat2d_case2_reference_n160000_seed0            §2.6   67 s to make
+heat2d_case3_reference_n160000_seed0            §2.7   76 s;  n40000 (the default run), n20000 (the extremes default)
+heat2d_case3_control_reference_n160000_seed0    §2.8   82 s;  n40000 (the default run, 16 s)
+heat2d_extremes_reference_s1e8…s1e11_n160000    §2.9   77 s each;  n20000 (the default run)
+```
+
+**Regenerating** (the copies under `docs/figures/` were taken from
+`outputs/` on 2026-09-20 and 2026-09-21; every driver prints the tables of
+its section):
+
+```sh
+uv run python scripts/heat2d_nodesets.py     # 1 s: the three node-set figures (§2.1)
+uv run python scripts/heat2d_control.py      # 16 s: the control and the blind case-1 operators, spectra (§2.2)
+uv run python scripts/heat2d_interface.py    # 24 s: case 1 with plain Gaussians, continuity and conditioning (§2.3)
+uv run python scripts/heat2d_warp.py         # 39 s: the four combinations on case 1, the warped Gaussian (§2.4)
+uv run python scripts/heat2d_case1.py        # 30 s: Fig. 5-5 and 5-6 twins (§2.5)
+uv run python scripts/heat2d_case2.py        # 53 s: Fig. 10, 11 and 5-11 twins; the 40,000-node reference cached (§2.6)
+uv run python scripts/heat2d_case3.py        # 80 s: Fig. 14 and 13 twins; the 40,000-node reference cached (§2.7)
+uv run python scripts/heat2d_iterative.py    # 31 s cached, 47 s the first time: Fig. 5-15 to 5-18 and B-1 twins (§2.8)
+uv run python scripts/heat2d_extremes.py     # 4.5 min: Fig. 19 and 20 twins; the 20,000-node references cached (§2.9)
+```
+
+The documented runs behind the tables (times with the references cached;
+the first run adds the times above):
+
+```sh
+uv run python scripts/heat2d_control.py --counts 2500 5000 10000 20000 --spectrum-n 1250        # 40 s (§2.2)
+uv run python scripts/heat2d_interface.py --counts 2500 5000 10000 20000                        # 41 s (§2.3)
+uv run python scripts/heat2d_warp.py --counts 2500 5000 10000 20000                             # 50 s (§2.4)
+uv run python scripts/heat2d_case1.py --counts 1250 2500 5000 10000 20000 40000                 # 40 s (§2.5)
+uv run python scripts/heat2d_case2.py --reference-n 160000 --counts 1250 2500 5000 10000 20000 40000 80000 \
+    --fd4-counts 1250 2500 5000 10000 20000 40000 80000 160000 320000 640000                    # 8.5 min (§2.6)
+uv run python scripts/heat2d_case3.py --reference-n 160000 --counts 1250 2500 5000 10000 20000 40000 80000 \
+    --fd4-counts 1250 2500 5000 10000 20000 40000 80000 160000 320000 640000 1280000            # 29 min (§2.7)
+uv run python scripts/heat2d_iterative.py --reference-n 160000 --counts 1250 2500 5000 10000 20000   # 46 s (§2.8)
+uv run python scripts/heat2d_extremes.py --reference-n 160000 --counts 1250 2500 5000 10000 20000 40000 80000 \
+    --conditioning-n 10000                                                                      # 25 min (§2.9)
+```

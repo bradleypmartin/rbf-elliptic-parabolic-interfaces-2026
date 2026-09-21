@@ -33,11 +33,13 @@ node counts for them; five per line, taken to be 1250 to 20,000).
 for every method and preconditioner (SciPy's restarted GMRES(20) added).
 ``heat2d_iterative_ddr.png``: Fig. B-1's histograms, the DDR of the rows whose
 stencils cross the ring and of every interior row, before and after the three
-sweeps, at ``--ddr-n`` nodes.
+sweeps, at ``--ddr-n`` nodes. ``heat2d_iterative_control.png``: the control
+reference as a surface, Fig. 5-15's "40,000-node RBF-FD solution" at the
+default ``--reference-n``.
 
-    uv run python scripts/heat2d_iterative.py                        # ~1.5 min
+    uv run python scripts/heat2d_iterative.py            # 31 s cached, 47 s first
     uv run python scripts/heat2d_iterative.py --reference-n 160000 \\
-        --counts 1250 2500 5000 10000 20000                          # ~5 min
+        --counts 1250 2500 5000 10000 20000              # 46 s cached, +82 s first
 """
 
 from __future__ import annotations
@@ -55,6 +57,7 @@ import numpy as np  # noqa: E402
 
 from heat_interfaces.heat2d import (  # noqa: E402
     BOUNDARY,
+    COOLING_RADIUS,
     ILU_ORDERING,
     INTERIOR,
     ITERATIVE,
@@ -84,7 +87,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     rms_error,
     solve_iterative,
 )
-from heat_interfaces.plotting import AWARE, NAIVE  # noqa: E402
+from heat_interfaces.plotting import AWARE, NAIVE, surface_over_nodes  # noqa: E402
 
 FIG2016 = {
     "control": {
@@ -756,6 +759,16 @@ def main(argv: list[str] | None = None) -> None:
             f" ({'cached' if reused else 'solved now'};"
             f" {time.perf_counter() - t0:.1f} s)"
         )
+        if problem == "control":
+            fig = surface_over_nodes(
+                ref.nodes,
+                ref.u,
+                hole=(0.5, 0.5, COOLING_RADIUS),
+                title=f"the control problem: the {ref.nodes.n}-node solution"
+                " (Fig. 5-15 twin)",
+            )
+            fig.savefig(args.outputs / "heat2d_iterative_control.png", dpi=150)
+            plt.close(fig)
         t0 = time.perf_counter()
         results[problem] = sweep(problem, tuple(args.counts), ref, ref_stencils, args)
         print_setup(problem, results[problem], args.ilu_ordering)
