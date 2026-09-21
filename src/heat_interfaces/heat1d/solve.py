@@ -43,5 +43,20 @@ def solve_equilibrium(
 
 
 def normalized_l2(u: np.ndarray, reference: np.ndarray) -> float:
-    """``||u - ref||_2 / ||ref||_2``, the ordinate of dissertation Fig. 4-7."""
+    """``||u - ref||_2 / ||ref||_2``, the relative error.
+
+    Not the ordinate of dissertation Fig. 4-7, which is ``rms_error``: on the
+    eq. 75 problem ``RMS(u) = 0.64``, so this sits 1.56× above the figure's
+    lines (``docs/port-notes.md`` §1.3).
+    """
     return float(np.linalg.norm(u - reference) / np.linalg.norm(reference))
+
+
+def rms_error(u: np.ndarray, reference: np.ndarray) -> float:
+    """``||u - ref||_2 / sqrt(n)``, the "normalized ℓ2 error" of dissertation Fig. 4-7.
+
+    The figure's lines land on this and not on ``normalized_l2`` (the 2016
+    MATLAB normalized by the node count; ``max |u| = 1`` on eq. 75's problem,
+    so the two readings of "normalized" coincide there).
+    """
+    return float(np.linalg.norm(u - reference) / np.sqrt(u.size))
