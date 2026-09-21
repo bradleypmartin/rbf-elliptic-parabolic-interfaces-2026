@@ -84,14 +84,3 @@ def nearest_spacing(xy: np.ndarray, period: float = PERIOD) -> np.ndarray:
     """Distance from each node to its nearest other node (the ``d`` of EABE eq. 31)."""
     _, dist = knn(xy, 2, period)
     return dist[:, 1]
-
-
-__all__ = [
-    "PERIOD",
-    "knn",
-    "nearest_spacing",
-    "offsets",
-    "periodic_dx",
-    "periodic_tree",
-    "wrap_x",
-]

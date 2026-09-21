@@ -637,36 +637,3 @@ def _draw(rng: np.random.Generator, m: int, admissible) -> np.ndarray:
         cand = rng.uniform(0.0, 1.0, size=(2 * (m - len(out)) + 8, 2))
         out = np.vstack([out, cand[admissible(cand)]])
     return out[:m]
-
-
-__all__ = [
-    "CASES",
-    "COOLING_RADIUS",
-    "DIRICHLET",
-    "FREE",
-    "RING",
-    "ROW",
-    "ROW_OFFSETS",
-    "ROW_STAGGER",
-    "STEP_SCALE",
-    "STRADDLE_FRACTION",
-    "STRIP",
-    "Band",
-    "Circle",
-    "Constant2D",
-    "Curve",
-    "Domain",
-    "FlatLine",
-    "NodeSet",
-    "Piece2D",
-    "Row",
-    "SineGraph",
-    "SineProduct",
-    "build_node_set",
-    "case1",
-    "case2",
-    "case3",
-    "row_count",
-    "step_delta",
-    "straddle_count",
-]
