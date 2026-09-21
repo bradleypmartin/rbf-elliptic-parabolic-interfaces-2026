@@ -1,7 +1,13 @@
 import numpy as np
 import pytest
 
-from heat_interfaces.heat2d.exact import LayeredExact, case1_exact, control_exact
+from heat_interfaces.heat2d.exact import (
+    LayeredExact,
+    RingMode,
+    case1_exact,
+    control_exact,
+    ring_exact,
+)
 
 Y = np.linspace(0.0, 1.0, 41)
 X = np.linspace(0.0, 1.0, 17, endpoint=False)
@@ -91,3 +97,37 @@ def test_layered_exact_refuses_malformed_layers():
         LayeredExact((1.0, -0.2, 1.0), (0.3, 0.6))
     with pytest.raises(ValueError, match="increase"):
         LayeredExact((1.0, 0.2, 1.0), (0.6, 0.3))
+
+
+def test_ring_mode_is_continuous_with_its_flux_and_harmonic_on_every_ring():
+    for u in (ring_exact(), ring_exact(3), RingMode((0.2, 0.3), (2.0, 0.5, 1.0), 1)):
+        for r in u.radii:
+            below, above = r - 1e-13, r + 1e-13
+            assert u.radial(below) == pytest.approx(u.radial(above), abs=1e-9)
+            assert u.flux(below) == pytest.approx(u.flux(above), rel=1e-9)
+        assert u.radial(u.scale_radius) == pytest.approx(1.0)
+        # Harmonic: the five-point Laplacian vanishes to its own truncation.
+        for x, y in ((0.55, 0.62), (0.3, 0.3), (0.72, 0.31), (0.1, 0.9)):
+            s = 2e-4
+            lap = u(x + s, y) + u(x - s, y) + u(x, y + s) + u(x, y - s) - 4 * u(x, y)
+            assert abs(lap / s**2) < 3e-5, (x, y, lap / s**2)
+    u = ring_exact()
+    # Inside it is the harmonic polynomial Re (x + iy)²; across the ring R
+    # climbs by about m (α_out / α_ring) (width) r: 1.05 against 0.12 inside.
+    x, y = np.array([0.6, 0.3]), np.array([0.7, 0.55])
+    a = u._coefficients[0, 0]
+    np.testing.assert_allclose(u(x, y), a * ((x - 0.5) ** 2 - (y - 0.5) ** 2))
+    assert 0.6 < u.radial(0.35) - u.radial(0.349) < 0.7
+    assert u.radial(0.349) == pytest.approx(0.0775, abs=1e-3)
+    assert u.ring(np.array([0.1, 0.349, 0.3495, 0.35, 0.4])).tolist() == [0, 1, 1, 2, 2]
+
+
+def test_ring_mode_refuses_malformed_rings():
+    with pytest.raises(ValueError, match="one radius fewer"):
+        RingMode((0.3,), (1.0, 2.0, 1.0))
+    with pytest.raises(ValueError, match="positive"):
+        RingMode((0.3,), (1.0, -2.0))
+    with pytest.raises(ValueError, match="mode"):
+        RingMode((0.3,), (1.0, 2.0), 0)
+    with pytest.raises(ValueError, match="increase"):
+        RingMode((0.3, 0.2), (1.0, 2.0, 1.0))

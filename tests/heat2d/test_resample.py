@@ -1,10 +1,19 @@
 """Interface-aware resampling of a fine solution (E2.6) and the cached ``Reference``."""
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
-from heat_interfaces.heat2d.domain import build_node_set, case1
-from heat_interfaces.heat2d.exact import case1_exact
+from heat_interfaces.heat2d.domain import (
+    Band,
+    Circle,
+    Constant2D,
+    build_node_set,
+    case1,
+    case3,
+)
+from heat_interfaces.heat2d.exact import case1_exact, ring_exact
 from heat_interfaces.heat2d.fd4 import cartesian_grid
 from heat_interfaces.heat2d.interface import interpolation_weights
 from heat_interfaces.heat2d.neighbors import knn
@@ -144,3 +153,60 @@ def test_reference_solution_matches_a_direct_solve_and_round_trips(tmp_path):
         resample(back.u, back.nodes, st, DOMAIN.material, x, y),
         resample(ref.u, ref.nodes, ref.stencils(DOMAIN), DOMAIN.material, x, y),
     )
+
+
+def test_aware_resampling_is_exact_through_the_ring_at_its_1500_contrast():
+    # E2.6's check was flat case 1; the E2.6 note on #21 asked for the same on a
+    # profile exact across the 0.001-wide ring. A matched radial quadratic
+    # (div(α grad u) = 4, α = 1/1500 on the ring) lies in the translated basis,
+    # so the aware read is exact to rounding; the blind read is off by the jump.
+    band = Band(Circle(0.349), Circle(0.35), Constant2D(1 / 1500), Constant2D(1.0))
+    domain = replace(case3(), material=band)
+    fine = build_node_set(domain, 5000, iterations=20)
+
+    def quadratic(x, y):
+        r = np.hypot(x - 0.5, y - 0.5)
+        a = 1.0 / 1500.0
+        b1 = 0.349**2 - 0.349**2 / a
+        b2 = 0.35**2 / a + b1 - 0.35**2
+        return np.where(r < 0.349, r**2, np.where(r <= 0.35, r**2 / a + b1, r**2 + b2))
+
+    u = quadratic(fine.x, fine.y)
+    coarse = build_node_set(case3(), 1250, iterations=20)
+    near = np.abs(np.hypot(coarse.x - 0.5, coarse.y - 0.5) - 0.3495) < 0.1
+    x, y = coarse.x[near], coarse.y[near]
+    ref = quadratic(x, y)
+    aware = resample(
+        u, fine, build_stencils(fine, domain, interface=BOUNDARY), band, x, y
+    )
+    blind = resample(u, fine, build_stencils(fine, domain), band, x, y)
+    assert np.abs(aware - ref).max() < 1e-9, np.abs(aware - ref).max()
+    assert np.abs(blind - ref).max() > 1e-2
+    # A point inside the ring itself (an FD4 grid point would land there) is
+    # read through the ring's own translated basis.
+    s = np.linspace(0.0, 1.0, 7, endpoint=False)
+    px, py = 0.5 + 0.3495 * np.cos(2 * np.pi * s), 0.5 + 0.3495 * np.sin(2 * np.pi * s)
+    inside = resample(
+        u, fine, build_stencils(fine, domain, interface=BOUNDARY), band, px, py
+    )
+    assert np.abs(inside - quadratic(px, py)).max() < 1e-9
+
+
+def test_ring_mode_reads_to_the_stencils_truncation_near_the_ring():
+    # The harmonic mode R(r) cos 2θ is not in the basis, so this is the read's
+    # truncation at a 1500 : 1 contrast, the number the case-3 driver tabulates.
+    band = Band(Circle(0.349), Circle(0.35), Constant2D(1 / 1500), Constant2D(1.0))
+    domain = replace(case3(), material=band)
+    exact = ring_exact()
+    fine = build_node_set(domain, 10000, iterations=20)
+    u = exact(fine.x, fine.y)
+    coarse = build_node_set(case3(), 2500, iterations=20)
+    near = np.abs(np.hypot(coarse.x - 0.5, coarse.y - 0.5) - 0.3495) < 0.1
+    x, y = coarse.x[near], coarse.y[near]
+    aware = resample(
+        u, fine, build_stencils(fine, domain, interface=BOUNDARY), band, x, y
+    )
+    blind = resample(u, fine, build_stencils(fine, domain), band, x, y)
+    e_aware, e_blind = rms_error(aware, exact(x, y)), rms_error(blind, exact(x, y))
+    assert e_aware < 1e-6, e_aware
+    assert e_blind > 100 * e_aware, (e_aware, e_blind)

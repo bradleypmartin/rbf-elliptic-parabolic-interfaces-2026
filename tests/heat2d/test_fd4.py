@@ -5,10 +5,12 @@ import numpy as np
 import pytest
 
 from heat_interfaces.heat2d.domain import (
+    COOLING_RADIUS,
     DIRICHLET,
     FREE,
     STRIP,
     Band,
+    Circle,
     Constant2D,
     Domain,
     FlatLine,
@@ -99,9 +101,58 @@ def test_fd4_operator_is_fourth_order_on_the_control_and_first_on_case_1():
             assert np.all(rate(errs) < 1.8), errs
 
 
-def test_fd4_refuses_case_3_and_foreign_node_sets():
-    with pytest.raises(NotImplementedError, match="plain strip"):
-        cartesian_grid(case3(), 1250)
+def test_case3_grid_makes_a_staircase_dirichlet_set_of_the_cooling_disc():
+    domain = case3()
+    g = cartesian_grid(domain, 5000)
+    m = 70
+    assert g.n == m * (m + 1)
+    r = np.hypot(g.x - 0.5, g.y - 0.5)
+    disc = r <= COOLING_RADIUS
+    # Every grid point on or inside the circle, and no other, is the third row.
+    np.testing.assert_array_equal(g.boundary_index == 2, disc)
+    assert set(g.kind[disc]) == {DIRICHLET}
+    assert [(row.curve, len(row.index)) for row in g.dirichlet_rows] == [
+        (0, m),
+        (1, m),
+        (2, int(disc.sum())),
+    ]
+    assert 30 <= disc.sum() <= 45  # about π (0.05 m)² = 38.5 grid points
+    np.testing.assert_array_equal(
+        np.sort(g.dirichlet_rows[2].index), np.flatnonzero(disc)
+    )
+    assert set(g.kind[~disc & (g.y > 0) & (g.y < 1)]) == {FREE}
+    # The ring is thinner than the spacing, so α samples it at few points or none.
+    assert (domain.material.piece_index(g.x, g.y) == 1).sum() <= 4
+    # The operator solves with the disc held at zero.
+    op = fd4_operator(g, domain.material)
+    u = solve_equilibrium(op, g, [top, top, 0.0])
+    assert np.abs(u[disc]).max() < 1e-10 and np.abs(u).max() <= 1.0 + 1e-9
+
+
+def test_disc_held_at_exact_values_keeps_fd4_fourth_order():
+    # The staircase is a first-order boundary; with the disc's grid points fixed
+    # at the exact harmonic solution there is no geometric error, so the plumbing
+    # (three Dirichlet rows, the operator on the full grid) shows fourth order.
+    hole = Circle(COOLING_RADIUS)
+    domain = Domain(CONTROL.material, (), (*STRIP, hole), (hole,))
+    exact = control_exact()
+    errs = []
+    for n in (1250, 5000, 20000):
+        g = cartesian_grid(domain, n)
+        u = solve_equilibrium(fd4_operator(g, domain.material), g, [0.0, top, exact])
+        keep = g.boundary_index != 2
+        errs.append(rms_error(u[keep], exact(g.x, g.y)[keep]))
+    assert np.all(rate(errs) > 3.5), errs
+
+
+def test_fd4_refuses_foreign_domains_and_node_sets():
+    hole = Circle(COOLING_RADIUS)
+    with pytest.raises(NotImplementedError, match="Dirichlet curves"):
+        cartesian_grid(Domain(CONTROL.material, (), (*STRIP, hole)), 1250)
+    with pytest.raises(NotImplementedError, match="Dirichlet curves"):
+        cartesian_grid(Domain(CONTROL.material, (), STRIP, (hole,)), 1250)
+    with pytest.raises(NotImplementedError, match="Dirichlet curves"):
+        cartesian_grid(Domain(CONTROL.material, (), (hole, *STRIP), (hole,)), 1250)
     nodes = build_node_set(case1(), 900, iterations=5)
     with pytest.raises(ValueError, match="cartesian_grid"):
         fd4_operator(nodes, case1().material)

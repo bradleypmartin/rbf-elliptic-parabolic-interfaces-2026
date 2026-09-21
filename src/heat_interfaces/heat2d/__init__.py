@@ -12,7 +12,8 @@ Dirichlet rows; ``interface``: the translated polynomial bases across
 interfaces with curvature and the multi-interface chain (dissertation §5.3,
 EABE §2.2.3) and ``operators.interface_aware_operator``; ``solve``: the
 SuperLU equilibrium solve; ``exact``: the separable piecewise-exponential
-solutions of the control and of case 1 (EABE eq. 34), with the warped
+solutions of the control and of case 1 (EABE eq. 34) and the harmonic
+mode through case 3's ring (E2.7's resampling check), with the warped
 Gaussians of EABE §2.2.4 (``interface.Warp``) on by default; ``march``:
 ``march_parabolic``, BD4 on the node set (the 1-D marcher behind the
 Dirichlet mask, dissertation §5.4), the analytic-history start of a
@@ -55,7 +56,13 @@ from .domain import (
     step_delta,
     straddle_count,
 )
-from .exact import LayeredExact, case1_exact, control_exact
+from .exact import (
+    LayeredExact,
+    RingMode,
+    case1_exact,
+    control_exact,
+    ring_exact,
+)
 from .fd4 import cartesian_grid, fd4_dx, fd4_dy, fd4_operator, grid_size
 from .interface import (
     Frame,
@@ -176,6 +183,7 @@ __all__ = [
     "NodeSet",
     "Piece2D",
     "Region",
+    "RingMode",
     "Warp",
     "Row",
     "SineGraph",
@@ -233,6 +241,7 @@ __all__ = [
     "polynomial_rhs",
     "rbf_fd_weights",
     "restriction_matrix",
+    "ring_exact",
     "rms_error",
     "row_count",
     "solve_equilibrium",
