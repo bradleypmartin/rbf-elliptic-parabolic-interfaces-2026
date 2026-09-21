@@ -790,7 +790,7 @@ into the index-ordered `boundary(t)` it expects. `dt = h` is the row
 spacing `1/round(0.95 √N)` (0.0294 at 1250 nodes, 0.0053 at 40,000), so the
 march to `t = 0.1` is 3 to 19 steps. BD4's three starting values are the
 analytic solution at `t = −3dt, −2dt, −dt` (`bd4_march(history=)`, new;
-`heat2d.march.march(..., solution=exact)`), so every step is BD4. Without
+`heat2d.march.march_parabolic(..., solution=exact)`), so every step is BD4. Without
 them the 1-D module's RK4 start-up runs on its ∞-norm bound: the row sums
 of the 42-node stencils are about `20/h²`, so the start-up takes about
 `30/h` sub-steps per step (1053 at 1250 nodes, 1909 at 4900); it lands

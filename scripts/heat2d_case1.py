@@ -52,7 +52,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     case1_exact,
     interface_aware_operator,
     interior_eigenvalues,
-    march,
+    march_parabolic,
     naive_operator,
     rms_error,
     solve_equilibrium,
@@ -139,7 +139,9 @@ def sweep(
         reference = parabolic(nodes.x, nodes.y, t_end)
         for name, dt in (("parabolic", nodes.h), ("parabolic-half", nodes.h / 2)):
             t0 = time.perf_counter()
-            u = march(op, nodes, u0, t_end, dt, [0.0, top], solution=parabolic)
+            u = march_parabolic(
+                op, nodes, u0, t_end, dt, [0.0, top], solution=parabolic
+            )
             row[name] = rms_error(u, reference)
             row[name + "-seconds"] = time.perf_counter() - t0
             row[name + "-steps"] = march_steps(t_end, dt)[0]

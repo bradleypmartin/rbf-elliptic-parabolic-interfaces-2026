@@ -220,14 +220,14 @@ def bd4_march(
     if history is not None:
         if len(history) != 3:
             raise ValueError("BD4 needs the three values before u0, oldest first")
-        history = [
+        state = [
             impose(-(3 - k) * dt, np.array(u, dtype=float))
             for k, u in enumerate(history)
         ]
-        history.append(impose(0.0, np.array(u0, dtype=float)))
+        state.append(impose(0.0, np.array(u0, dtype=float)))
         started = 0
     else:
-        history = [impose(0.0, np.array(u0, dtype=float))]
+        state = [impose(0.0, np.array(u0, dtype=float))]
         # Half the stability limit: at the limit the stage error of a
         # time-dependent end value is about a hundred times the interior's
         # at the node next to it, and it falls sixteen-fold per halving of
@@ -235,12 +235,12 @@ def bd4_march(
         limit = rk4_dt_limit(operator, dirichlet)
         substeps = max(1, int(np.ceil(dt / (STARTUP_FRACTION * limit))))
         for k in range(min(3, steps)):
-            u = history[-1]
+            u = state[-1]
             for j in range(substeps):
                 u = rk4_step(k * dt + j * dt / substeps, u, dt / substeps)
-            history.append(u)
+            state.append(u)
         if steps <= 3:
-            return history[-1]
+            return state[-1]
         started = 3
 
     matrix = sp.diags_array(mask) @ (
@@ -250,17 +250,17 @@ def bd4_march(
     for k in range(started, steps):
         t_next = (k + 1) * dt
         rhs = mask * (
-            BD4_HISTORY[0] * history[-1]
-            + BD4_HISTORY[1] * history[-2]
-            + BD4_HISTORY[2] * history[-3]
-            + BD4_HISTORY[3] * history[-4]
+            BD4_HISTORY[0] * state[-1]
+            + BD4_HISTORY[1] * state[-2]
+            + BD4_HISTORY[2] * state[-3]
+            + BD4_HISTORY[3] * state[-4]
         )
         if forcing is not None:
             rhs += mask * (BD4_STEP * dt * forcing(t_next))
         rhs[fixed] = boundary(t_next)
-        history.append(lu.solve(rhs))
-        del history[0]
-    return history[-1]
+        state.append(lu.solve(rhs))
+        del state[0]
+    return state[-1]
 
 
 def bd4_stability_boundary(theta: np.ndarray) -> np.ndarray:

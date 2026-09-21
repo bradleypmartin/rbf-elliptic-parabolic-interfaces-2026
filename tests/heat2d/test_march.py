@@ -12,7 +12,7 @@ from heat_interfaces.heat2d.march import (
     analytic_history,
     dirichlet_boundary,
     interior_eigenvalues,
-    march,
+    march_parabolic,
 )
 from heat_interfaces.heat2d.operators import (
     build_stencils,
@@ -70,22 +70,24 @@ def test_analytic_history_is_the_solution_at_the_rounded_steps_before_zero():
 
 
 def test_case1_parabolic_is_fourth_order_and_tracks_the_elliptic_error():
-    # Dissertation Fig. 5-5: parabolic 1.8e-5, 3.8e-6, 6.3e-7 and elliptic
-    # 1.0e-5, 2.6e-6, 5.5e-7 at 1250, 2500, 5000 nodes (read off). BD4 from
-    # the analytic history with dt = h runs 3, 5 and 7 steps to t = 0.1.
+    # Dissertation Fig. 5-5: parabolic 1.8e-5, 3.8e-6, 6.3e-7, 1.7e-7 and
+    # elliptic 1.0e-5, 2.6e-6, 5.5e-7, 8e-8 at 1250–10,000 nodes (read off).
+    # BD4 from the analytic history with dt = h runs 3, 5, 7 and 10 steps to
+    # t = 0.1. The ticket's 20,000-node point (port notes §2.5) is left to
+    # the driver: its node set and operator take ten seconds to build.
     exact = case1_exact(1.0)
     errs, ell = [], []
-    for n in (1250, 2500, 5000):
+    for n in (1250, 2500, 5000, 10000):
         nodes, st = aware_set(n)
         op = interface_aware_operator(nodes, DOMAIN.material, st)
         u0 = exact(nodes.x, nodes.y, 0.0)
-        u = march(op, nodes, u0, T_END, nodes.h, [0.0, top], solution=exact)
+        u = march_parabolic(op, nodes, u0, T_END, nodes.h, [0.0, top], solution=exact)
         errs.append(rms_error(u, exact(nodes.x, nodes.y, T_END)))
         ue = solve_equilibrium(op, nodes, [0.0, top])
         ell.append(rms_error(ue, case1_exact()(nodes.x, nodes.y)))
     r = rate(errs)
     assert np.all(r > 3.3), (errs, r)
-    assert errs[0] < 3e-5 and errs[-1] < 1.2e-6
+    assert errs[0] < 3e-5 and errs[-1] < 3e-7
     ratio = np.array(errs) / np.array(ell)
     assert np.all((ratio > 0.3) & (ratio < 3.0)), ratio
 
@@ -106,7 +108,7 @@ def test_time_error_is_subdominant_and_the_rk4_start_agrees():
         ("h/2", nodes.h / 2, exact),
         ("rk4", nodes.h, None),
     ):
-        u = march(op, nodes, u0, T_END, dt, [0.0, top], solution=solution)
+        u = march_parabolic(op, nodes, u0, T_END, dt, [0.0, top], solution=solution)
         errs[name] = rms_error(u, reference)
     assert errs["h/2"] == pytest.approx(errs["h"], rel=0.01), errs
     assert errs["rk4"] == pytest.approx(errs["h"], rel=0.05), errs

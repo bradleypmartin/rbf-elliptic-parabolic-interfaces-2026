@@ -69,7 +69,7 @@ def analytic_history(
     return [solution(nodes.x, nodes.y, -k * dt) for k in (3, 2, 1)]
 
 
-def march(
+def march_parabolic(
     operator: sp.sparray,
     nodes: NodeSet,
     u0: np.ndarray,
