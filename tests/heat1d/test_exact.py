@@ -6,17 +6,20 @@ from heat_interfaces.heat1d.domain import (
     Constant,
     PiecewiseAlpha,
     Smooth,
+    SmoothEdges,
     dissertation_alpha,
     jump_alpha,
     matlab_alpha,
 )
 from heat_interfaces.heat1d.exact import (
+    ParabolicReference,
     chebyshev_equilibrium,
     chebyshev_lobatto,
     chebyshev_parabolic,
     equilibrium_exact,
     equilibrium_flux,
     inverse_alpha_integral,
+    parabolic_reference,
 )
 from heat_interfaces.heat1d.march import constant_boundary, ramp_boundary
 
@@ -163,3 +166,120 @@ def test_chebyshev_parabolic_reaches_the_equilibrium_of_the_matlab_problem():
     x = np.linspace(-1, 1, 101)
     u = chebyshev_parabolic(m, np.zeros_like, ramp_boundary(1.0), 30.0, x, 32)
     assert np.max(np.abs(u - equilibrium_exact(m, 1.0, 0.0, x))) < 1e-9
+
+
+# --- E3.2 (#27): references at any δ ----------------------------------------
+
+
+def tanh_edge_integral(x, a, b, x0, delta):
+    """``∫_{-1}^{x} dξ / (a + (b - a) s(ξ))`` for ``s = ½ (1 + tanh((ξ - x0)/δ))``.
+
+    With ``z = (ξ - x0)/δ`` the integrand is ``(1 + e^{2z}) / (a + b e^{2z})``,
+    whose antiderivative in ``ξ`` is ``δ [z/a + (a - b)/(2ab) ln(a + b e^{2z})]``.
+    """
+
+    def anti(xx):
+        z = (np.asarray(xx, dtype=float) - x0) / delta
+        log_term = np.logaddexp(np.log(a), np.log(b) + 2 * z)
+        return delta * (z / a + (a - b) / (2 * a * b) * log_term)
+
+    return anti(x) - anti(-1.0)
+
+
+@pytest.mark.parametrize("delta", [0.1, 0.01, 0.0025, 1e-4, 1e-6])
+def test_quadrature_on_a_tanh_edge_matches_the_closed_form(delta):
+    m = SmoothEdges(matlab_alpha(), delta)
+    x = np.linspace(-1, 1, 801)
+    f = inverse_alpha_integral(m, x)
+    np.testing.assert_allclose(
+        f, tanh_edge_integral(x, 1 / 9, 1.0, 0.0, delta), atol=1e-14
+    )
+    # A contrast of a hundred, the edge off centre, the same cuts.
+    m = SmoothEdges(jump_alpha(0.01, 1.0, x0=0.3), delta)
+    f = inverse_alpha_integral(m, x)
+    np.testing.assert_allclose(
+        f, tanh_edge_integral(x, 0.01, 1.0, 0.3, delta), atol=1e-13
+    )
+
+
+def test_the_smooth_medium_at_delta_zero_passes_the_jump_closed_form():
+    m = SmoothEdges(jump_alpha(1.0, 0.1, x0=0.3), 0.0)
+    x = np.linspace(-1, 1, 257)
+    u, b = piecewise_linear_reference(x, 1.0, 0.1, 0.3, 1.0, 0.0)
+    np.testing.assert_allclose(equilibrium_exact(m, 1.0, 0.0, x), u, atol=1e-14)
+    assert equilibrium_flux(m, 1.0, 0.0) == pytest.approx(b, rel=1e-14)
+    jump = jump_alpha(1.0, 0.1, x0=0.3)
+    assert np.array_equal(inverse_alpha_integral(m, x), inverse_alpha_integral(jump, x))
+
+
+def test_a_smooth_edge_below_the_grid_keeps_the_jump_limit_to_first_order():
+    # F_δ(1) - F_0(1) → -c δ past the edge (stiff note §1.7); the sign and the
+    # order are what this pins, the constant is E3.3's.
+    jump = matlab_alpha()
+    f0 = float(inverse_alpha_integral(jump, np.array(1.0)))
+    gaps = [
+        f0 - float(inverse_alpha_integral(SmoothEdges(jump, d), np.array(1.0)))
+        for d in (0.01, 0.001, 0.0001)
+    ]
+    assert gaps[0] > 0
+    np.testing.assert_allclose(
+        np.array(gaps[:-1]) / np.array(gaps[1:]), 10.0, rtol=1e-6
+    )
+
+
+def test_parabolic_reference_round_trips_through_the_cache(tmp_path):
+    m = PiecewiseAlpha((), (Constant(1.0),))
+    cache = tmp_path / "reference_d0.0025"  # a dot in the stem is not a suffix
+    x = np.linspace(-1, 1, 33)
+    initial = lambda xx: np.cos(np.pi * xx / 2)  # noqa: E731
+    boundary = constant_boundary(0.0, 0.0)
+    built = parabolic_reference(
+        m, initial, boundary, 0.1, 16, problem="mode", cache=cache
+    )
+    for suffix in (".npz", ".json"):
+        assert (tmp_path / f"reference_d0.0025{suffix}").exists()
+    exact = np.exp(-(np.pi**2) * 0.1 / 4) * initial(x)
+    assert np.max(np.abs(built.evaluate(x) - exact)) < 1e-11
+    assert built.meta["steps"] > 0 and built.meta["elements"] == 1
+    loaded = ParabolicReference.load(cache)
+    assert np.array_equal(loaded.u, built.u) and loaded.meta == built.meta
+    # The same request is served from the files, the recorded run time included.
+    again = parabolic_reference(
+        m, initial, boundary, 0.1, 16, problem="mode", cache=cache
+    )
+    assert again.meta == built.meta and np.array_equal(again.u, built.u)
+    # A different time, resolution or problem label is solved afresh.
+    other = parabolic_reference(
+        m, initial, boundary, 0.2, 16, problem="mode", cache=cache
+    )
+    assert other.meta["t_end"] == 0.2 and not other.matches(built.meta)
+    assert ParabolicReference.load(cache).meta["t_end"] == 0.2
+    assert np.array_equal(
+        chebyshev_parabolic(m, initial, boundary, 0.2, x, 16), other.evaluate(x)
+    )
+
+
+@pytest.mark.parametrize("delta", [0.04, 0.0025])
+def test_chebyshev_equilibrium_on_a_smooth_edge_matches_the_quadrature(delta):
+    # The elements resolve the transition; the floor is the round-off of a
+    # solve whose operator norm reaches 1e11 (E3.2: 7e-12 at δ = 0.0025).
+    m = SmoothEdges(matlab_alpha(), delta)
+    x = np.linspace(-1, 1, 401)
+    ref = equilibrium_exact(m, 1.0, 0.0, x)
+    for n in (24, 32):
+        v = chebyshev_equilibrium(m, 1.0, 0.0, x, n_cheb=n)
+        assert np.max(np.abs(v - ref)) < 3e-11
+
+
+@pytest.mark.parametrize("delta", [0.0, 0.01, 0.0025])
+def test_parabolic_reference_agrees_between_two_resolutions_at_every_delta(delta):
+    # The ticket's acceptance line: 1e-10 between resolutions (E3.2 measured
+    # 9e-15, 6e-13 and 3e-12 for these three at 24 against 32 nodes).
+    m = SmoothEdges(matlab_alpha(), delta)
+    x = np.linspace(-1, 1, 401)
+    u = [
+        parabolic_reference(m, np.zeros_like, ramp_boundary(1.0), 2.0, n).evaluate(x)
+        for n in (24, 32)
+    ]
+    assert np.max(np.abs(u[0] - u[1])) < 1e-10
+    assert np.max(np.abs(u[1])) == pytest.approx(1.0)  # the ramped end
