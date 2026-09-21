@@ -354,6 +354,27 @@ class Band:
         piece = self.inside if side == "inside" else self.outside
         return piece.taylor(x0, y0, degree)
 
+    def region_index(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """0 below the lower curve, 1 on the closed band, 2 above the upper curve.
+
+        The 1-D picture of ``heat1d.interface``: interface ``j`` of
+        ``interfaces`` separates regions ``j`` and ``j + 1``, region ``j``
+        being its ``level < 0`` side (the ``-normal`` side) and ``j + 1`` its
+        ``level > 0`` side. A stencil that reaches from region 0 to region 2
+        is translated across both interfaces (E2.3).
+        """
+        x, y = _as_float(x, y)
+        r = np.zeros(np.broadcast(x, y).shape, dtype=int)
+        r += self.lower.level(x, y) >= 0.0
+        r += self.upper.level(x, y) > 0.0
+        return r
+
+    def region_piece(self, region: int) -> Piece2D:
+        """The smooth piece of a region: ``outside`` for 0 and 2, ``inside`` for 1."""
+        if region not in (0, 1, 2):
+            raise ValueError(f"region {region} is not one of 0, 1, 2")
+        return self.inside if region == 1 else self.outside
+
 
 # --- domains ----------------------------------------------------------------
 

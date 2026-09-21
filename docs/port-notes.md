@@ -470,5 +470,178 @@ Regenerate with `uv run python scripts/heat2d_control.py` (16 s at the
 defaults; `--spectrum-n 1250` shows the growing mode, `--counts 2500 5000
 10000 20000` the 20,000-node points, about 40 s).
 
+### 2.3 Interface-aware stencils: the translated basis with curvature (E2.3)
+
+**The construction** (`heat2d.interface`, dissertation §5.3, EABE §2.2.3;
+the 2-D twin of §1.2's translated basis). For a stencil whose 30 nodes lie
+in more than one region of the band, each interface it reaches gets a
+local frame at the point of the curve nearest the stencil centre: `x′`
+along the curve, `y′` along the normal into the `level > 0` side, both in
+units of the stencil radius (the MATLAB's `normfactor`, epic #4 item 5).
+The algebra runs on coefficient vectors of bivariate polynomials through
+degree `p = 4` in the graded order of the RBF-FD polynomial block:
+`Dx`, `Dy`, multiplication by α's Taylor table rotated and scaled into the
+frame, `D = Dx M Dx + Dy M Dy` (exact below degree `p`, as in 1-D), and an
+exact change of frame (rotation and shift) between the frames of one
+stencil. The continuity matrices equate, along the interface
+`y′ = f(x′)`, the first `p + 1 − 2k` coefficients in `x′` of `D^k u` and
+the first `p − 2k` of the normal flux `α (∂_y′ − f′ ∂_x′) D^k u`; for
+`p = 4` that is 5 + 4 + 3 + 2 + 1 = 15 rows, one per monomial, so `C` is
+square. These are the counts of the MATLAB `continuityCreator` (the
+papers' "`p − 2k`" and "`p − 2k − 1`" count from one). The translation
+`C_to⁻¹ C_from` (eq. 81) carries the standard monomials from the centre's
+region across each interface in turn; a stencil that reaches three regions
+(case 3's ring; case 1 and 2 at low counts) changes frame at the second
+interface and translates again, the 2-D form of §1.2's two-jump chain.
+Rows of `[C_from | C_to]` are scaled by their largest entry before the
+solve, as the MATLAB does; the product is unchanged. The stencil weights
+then solve EABE eq. 2 with the translated basis in place of the monomials
+(`rbf.augmented_solve`): Gaussians `ε = 0.4/d` in offsets scaled by the
+stencil radius, each node's basis evaluated in its region's frame, and the
+right-hand side `α ∇² + ∇α·∇` of the centre's own piece applied to every
+function at the centre, the same form the direct operator uses.
+
+**Curvature.** The expansion `f` enters twice, as the papers describe: it
+is inserted for `y′` before the coefficients along the interface are read
+off (eq. 29 / 82), and it turns the normal derivative into
+`∂_y′ − f′(x′) ∂_x′` (eq. 30 / 83). The papers multiply by the expansions
+of `cos θ′` and `sin θ′`; the common factor `cos θ′ = (1 + f′²)^{−1/2}`
+multiplies both sides of every flux row and is an invertible series, so
+the rows span the same space and it is dropped. `f` is found numerically,
+as the papers' "standard FD method" does: Fornberg weights at `x′ = 0` on
+`2p + 1` samples of the curve at arc spacing `scale/p`; on the circle
+`r = 0.35` with `scale = 0.05` this gives `f₂ = −scale/2R` to 6e-12 and
+`f₄ = −scale³/8R³` to 1e-10, on the sine graph `f₂ = κ scale/2` to 1e-9
+relative, and on a flat line exactly zero. The flat variant (EABE Fig. 10
+and 14's "linear interface") sets `f = 0` and keeps everything else, so on
+case 1 the two variants build the same matrix to the last bit.
+
+**Stencil groups** (`operators.build_stencils(…, interface=BOUNDARY)`).
+A node whose 42-node interior stencil reaches more than one region joins
+the interface group and gets the 30-node / degree-4 stencil the paper uses
+"across interfaces"; no standard stencil ever sees a jump. The MATLAB
+instead flagged nodes within `queryFactor/√N = 5/√N` of an interface
+(`seqFlag`); the crossing test needs no width and gives a zone of about
+the interior stencil radius, `3.8/√N`. Of the group's members, 98 % have
+30-node stencils that cross and are translated; the rest, at the group's
+outer edge, keep the direct 30 / degree-4 row. Two more differences from
+the MATLAB: it always anchored the standard monomials in the band's region
+(`pFuncs`'s middle block is the identity) where we anchor on the centre's
+side, which changes the basis of the span and not the span; and it handled
+a stencil's second interface as the line `y′ = ±cos θ · 0.2` in the first
+interface's frame (`intLoc`, `zoneWidth`), where we frame each interface
+at its own nearest point.
+
+**Case 1** (`scripts/heat2d_interface.py`, seed 0, 2026-09-21; RMS error,
+order per halving of `h`; the naive line is §2.2's; "group" and "cross"
+are the interface group and how many of its stencils are translated;
+"build" covers the stencil groups, the direct operator and the translated
+rows; the last column is EABE Fig. 7 read off the rendered page, six
+markers from 1250 to 40,000 nodes):
+
+```
+     n       h  group  cross |      naive  order   time |      aware  order  build  solve  flat-diff |  EABE Fig. 7
+  1250  0.0294    414    408 |   4.14e-03      -   0.1s |   3.71e-05      -   0.6s   0.0s    0.0e+00 |   1.0e-05
+  2500  0.0208    588    576 |   2.78e-03   1.15   0.4s |   1.05e-05   3.66   0.8s   0.0s    0.0e+00 |   2.6e-06
+  5000  0.0149    809    792 |   1.36e-03   2.14   1.5s |   2.30e-06   4.56   1.3s   0.1s    0.0e+00 |   5.5e-07
+ 10000  0.0105   1155   1134 |   1.28e-03   0.19   2.9s |   5.18e-07   4.27   2.1s   0.5s    0.0e+00 |   8.0e-08
+```
+
+![case-1 convergence](figures/heat2d_interface_convergence.png)
+
+- *Fourth order*, as EABE Fig. 7 and §5.4.1 report: 3.7, 4.6, 4.3 per
+  halving of `h`, and 3.95 to the 20,000-node point (1.33e-7 with
+  1601 translated stencils, build 3.9 s, solve 1.6 s; `--counts 2500 5000
+  10000 20000`, 41 s), a fit of 4.18 over 1250–20,000 nodes, against
+  the naive operator's first order. The interface rows cost about 1.5 ms
+  each in Python (one closest-point search, two or three 15 × 15
+  continuity solves and one 45 × 45 saddle-point solve per stencil),
+  1.7 s of the 2.1 s build at 10,000 nodes.
+- *Against 2016*: our errors sit 3.7×, 4.0×, 4.2×, 6.5× and 7.4× above the
+  Fig. 7 markers at 1250–20,000 nodes, at the same slope. The 2016 runs used
+  the warped Gaussians of EABE §2.2.4 in every experiment but one (E2.4
+  brings them in and Fig. 11's ablation will say how much they buy), a
+  different interface zone (above) and different node sets; E2.4 and E2.5
+  (#18, #19) are where to close or explain the gap, not here.
+- The flat and curvature-included variants agree to the last bit on
+  case 1's flat interfaces, as the paper says they must.
+
+**Continuity of the translated basis along curved interfaces** (the
+driver's second table, degree 4, `scale = 0.05`): the largest jump over
+the 15 basis functions in `u` and in `α n·∇u` at points of the curve at
+arc offset `ξ` stencil radii from the foot point, for the sine interface
+of case 2 (`0.2 + 0.1 sin 2πx sin 2πy` inside, 1 outside, foot near
+`x = 0.13`) and the outer circle of case 3's ring (`α` 1/1500 : 1):
+
+```
+interface / variant                         | ξ = 0.5000 u      flux   | ξ = 0.2500 u      flux   | ξ = 0.1250 u      flux   | ξ = 0.0625 u      flux
+case-2 sine y = 0.6 + 0.02 sin 2πx curved   |  4.03e-04  1.62e-02      |  1.23e-05  9.88e-04      |  3.81e-07  6.09e-05      |  1.18e-08  3.78e-06
+                                             ratios per halving: u  32.7  32.4  32.2   flux  16.4  16.2  16.1
+case-2 sine y = 0.6 + 0.02 sin 2πx flat     |  3.22e-03  1.96e-02      |  7.84e-04  6.34e-03      |  1.93e-04  3.10e-03      |  4.80e-05  1.54e-03
+                                             ratios per halving: u   4.1   4.1   4.0   flux   3.1   2.0   2.0
+case-3 ring r = 0.35 (α 1/1500 : 1) curved  |  1.16e+01  9.74e-01      |  1.81e-01  6.07e-02      |  2.82e-03  3.78e-03      |  6.98e-05  2.36e-04
+                                             ratios per halving: u  64.1  64.1  40.3   flux  16.0  16.1  16.0
+case-3 ring r = 0.35 (α 1/1500 : 1) flat    |  1.82e+01  9.64e-01      |  4.51e+00  6.03e-02      |  1.12e+00  1.78e-02      |  2.81e-01  8.92e-03
+                                             ratios per halving: u   4.0   4.0   4.0   flux  16.0   3.4   2.0
+```
+
+- With curvature the jump in `u` falls as `ξ^{p+1}` (ratio 32 per halving)
+  and the flux jump as `ξ^p` (16): continuity to `O(h^p)` along the curve,
+  the ticket's first check. On the circle the expansion is even, so the
+  `u` jump starts one order higher (64) until rounding.
+- The flat assumption on a curved interface leaves jumps of `O(ξ²)` in `u`
+  and `O(ξ)` in flux, the local linear approximation's own error, which is
+  what turns EABE Fig. 10 and 14's "flat" lines first order. The ring's
+  large absolute jumps are the 1500 : 1 contrast: the translated
+  coefficients are that much larger than the anchored monomials.
+- On a matched piecewise quadratic across a circle (`u = r²` inside,
+  `(r² − R²)/5 + R²` outside for `α` 1 : 5) the curved stencils reproduce
+  `∇·(α∇u) = 4` to 1e-6 at 2500 nodes and the flat ones miss by `O(1)`
+  (`tests/heat2d/test_interface.py`); the two-interface chain across the
+  ring, with the frame change between the circles, carries a radial
+  profile through the 0.001-wide band exactly.
+
+**Conditioning** (the driver's third table; every crossing stencil of a
+case-2 node set, continuity matrices in units of the stencil radius;
+"outside" is the `α ≡ 1` side, "inside" the band's, the translation from
+outside to inside):
+
+```
+     n       h  stencils |  C outside (α=1) median    max |  C inside (band) median    max |  translation median     max
+  1250  0.0294       408 |                   222.8  222.9 |                    25.1   30.5 |               178.0   645.2
+  5000  0.0149       796 |                   222.8  222.8 |                    23.7   29.6 |               172.3   632.2
+ 20000  0.0075      1607 |                   222.8  222.8 |                    23.4   29.6 |               172.3   629.0
+```
+
+No trend with `N`, as the local units intend: the `α ≡ 1` side's matrix is
+the same 15 × 15 matrix at every stencil (its 2, 6, 12 differentiation
+factors set the 223), the band side's varies only through α's scaled
+Taylor terms, and the translation's condition number reflects the 5 : 1
+contrast. EABE Fig. 20's `O(s²)` growth with the contrast is E2.9's (#23).
+
+**Decisions (E2.3).**
+
+- One unit per stencil, the stencil radius, for the frames, α's tables and
+  the interface expansion, as `rbf_fd_weights` and the MATLAB's
+  `normfactor` do; the comment on #17 suggested the nearest-neighbour
+  spacing `d`, and either gives the `N`-independence above.
+- Frames come from each curve's `normal` alone, because `Circle`'s
+  `tangent_angle` runs counter-clockwise while its normal points outward
+  (the graphs' tangents and normals form a right-handed pair): `x′` is the
+  normal rotated by −90°.
+- The interface expansion is numerical (Fornberg on samples) even though
+  every curve here is analytic, to follow the papers and to keep the
+  `Curve` protocol at first and second derivatives.
+- `cos θ′` is dropped from the flux rows (the argument above); the
+  papers' cos/sin matrices would give the same translation.
+- The interface group is decided by the crossing test on the interior
+  stencil, not by a distance; both variants are one `curvature` flag on
+  `interface_aware_operator`.
+- The naive operator keeps §2.2's stencils (`build_stencils` without
+  `interface=`), so its numbers do not move.
+
+Regenerate with `uv run python scripts/heat2d_interface.py` (24 s at the
+defaults; `--counts 2500 5000 10000 20000` adds the 20,000-node point).
+
 Later tickets add their subsections here; E2.11 (#25) closes the section
 with the decisions and the regeneration commands.

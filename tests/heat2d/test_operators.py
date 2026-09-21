@@ -6,6 +6,7 @@ import pytest
 
 from heat_interfaces.heat1d.march import bd4_amplification, interior_operator
 from heat_interfaces.heat2d.domain import (
+    ROW,
     Band,
     Constant2D,
     FlatLine,
@@ -15,8 +16,12 @@ from heat_interfaces.heat2d.domain import (
     case3,
 )
 from heat_interfaces.heat2d.exact import case1_exact, control_exact
+from heat_interfaces.heat2d.neighbors import knn
 from heat_interfaces.heat2d.operators import (
+    BOUNDARY_KIND,
     BOUNDARY_ZONE,
+    INTERFACE_KIND,
+    INTERIOR_KIND,
     alpha_matrix,
     boundary_zone,
     build_stencils,
@@ -24,6 +29,8 @@ from heat_interfaces.heat2d.operators import (
     direct_operator,
     dirichlet_system,
     dirichlet_values,
+    interface_aware_operator,
+    interface_crossings,
     laplacian_operator,
     naive_operator,
 )
@@ -48,6 +55,17 @@ def node_set(n):
         nodes = build_node_set(DOMAIN, n)
         _sets[n] = (nodes, build_stencils(nodes, DOMAIN))
     return _sets[n]
+
+
+_aware = {}
+
+
+def aware_set(n):
+    """The same node sets with the interface group of E2.3."""
+    if n not in _aware:
+        nodes, _ = node_set(n)
+        _aware[n] = (nodes, build_stencils(nodes, DOMAIN, interface=BOUNDARY))
+    return _aware[n]
 
 
 def rate(errs):
@@ -95,6 +113,32 @@ def test_stencil_groups_partition_the_nodes_and_start_at_the_centre():
     )
     small = build_stencils(nodes, DOMAIN, ITERATIVE, ITERATIVE)
     assert len(small.groups) == 2 and all(g.spec == ITERATIVE for g in small.groups)
+    assert [g.kind for g in st.groups] == [INTERIOR_KIND, BOUNDARY_KIND]
+    assert not st.near_interface.any()
+
+
+def test_interface_group_holds_exactly_the_nodes_whose_interior_stencil_crosses():
+    nodes, st = aware_set(1250)
+    assert [g.kind for g in st.groups] == [INTERIOR_KIND, BOUNDARY_KIND, INTERFACE_KIND]
+    interior, boundary, interface = st.groups
+    assert interface.spec == BOUNDARY and interior.spec == INTERIOR
+    rows = np.concatenate([g.rows for g in st.groups])
+    assert np.array_equal(np.sort(rows), np.arange(nodes.n))
+    region = DOMAIN.material.region_index(nodes.x, nodes.y)
+    idx42, _ = knn(nodes.xy, INTERIOR.size)
+    crosses42 = np.ptp(region[idx42], axis=1) > 0
+    np.testing.assert_array_equal(st.near_interface, crosses42)
+    np.testing.assert_array_equal(np.sort(interface.rows), np.flatnonzero(crosses42))
+    # No standard stencil sees a jump; the straddling rows all sit in the group.
+    assert not interface_crossings(nodes, DOMAIN.material, interior.index).any()
+    assert not interface_crossings(nodes, DOMAIN.material, boundary.index).any()
+    assert np.isin(np.flatnonzero(nodes.kind == ROW), interface.rows).all()
+    # Most of the group's own 30 nodes cross; a few at its edge do not.
+    own = interface_crossings(nodes, DOMAIN.material, interface.index)
+    assert 0.9 < own.mean() < 1.0
+    assert st.group_of(int(interface.rows[0])).kind == INTERFACE_KIND
+    # Without interfaces nothing crosses.
+    assert not interface_crossings(nodes, ONE, interior.index).any()
 
 
 # --- derivative matrices ----------------------------------------------------
@@ -289,6 +333,58 @@ def test_case1_naive_operator_is_first_order():
     # accidentally too good.
     assert 0.7 < slope < 1.7, (errs, slope)
     assert errs[0] > 2e-3 and errs[-1] > 5e-4
+
+
+# --- the interface-aware operator (E2.3) --------------------------------------
+
+
+def test_interface_aware_operator_is_fourth_order_on_case1():
+    # EABE Fig. 7: 1.0e-5, 2.6e-6, 5.5e-7 at 1250, 2500, 5000 nodes (read off
+    # the rendered page); ours run a few times higher without E2.4's warped
+    # RBFs (port notes §2.3) but at the same order.
+    counts = (1250, 2500, 5000)
+    errs, naive = [], []
+    for n in counts:
+        nodes, st = aware_set(n)
+        u = solve_equilibrium(
+            interface_aware_operator(nodes, DOMAIN.material, st), nodes, [0.0, top]
+        )
+        errs.append(rms_error(u, CASE1(nodes.x, nodes.y)))
+        _, st0 = node_set(n)
+        un = solve_equilibrium(
+            naive_operator(nodes, DOMAIN.material, st0), nodes, [0.0, top]
+        )
+        naive.append(rms_error(un, CASE1(nodes.x, nodes.y)))
+    r = rate(errs)
+    assert np.all(r > 3.3), (errs, r)
+    assert errs[0] < 1e-4 and errs[-1] < 5e-6
+    assert all(e < n / 50 for e, n in zip(errs, naive, strict=True))
+
+
+def test_flat_and_curved_variants_coincide_on_case1_and_replace_only_crossing_rows():
+    nodes, st = aware_set(1250)
+    curved = interface_aware_operator(nodes, DOMAIN.material, st)
+    flat = interface_aware_operator(nodes, DOMAIN.material, st, curvature=False)
+    assert abs(curved - flat).max() == 0.0
+    direct = direct_operator(nodes, DOMAIN.material, st)
+    diff = np.asarray(abs(curved - direct).sum(axis=1)).ravel()
+    interface = st.groups[-1]
+    own = interface_crossings(nodes, DOMAIN.material, interface.index)
+    changed = np.zeros(nodes.n, dtype=bool)
+    changed[interface.rows[own]] = True
+    assert (diff[changed] > 0).all() and (diff[~changed] == 0).all()
+    nnz = np.diff(curved.indptr)
+    assert np.all(nnz[interface.rows] == BOUNDARY.size)
+    assert np.all(nnz[st.groups[0].rows] == INTERIOR.size)
+
+
+def test_interface_aware_operator_without_interfaces_is_the_direct_operator():
+    nodes, st = aware_set(1250)
+    a = interface_aware_operator(nodes, ONE, st)
+    b = direct_operator(nodes, ONE, st)
+    assert abs(a - b).max() == 0.0
+    u = solve_equilibrium(a, nodes, [0.0, top])
+    assert rms_error(u, CONTROL(nodes.x, nodes.y)) < 5e-5
 
 
 # --- the control's spectrum -------------------------------------------------
