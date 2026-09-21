@@ -335,3 +335,51 @@ def test_validation():
         translated_basis([jump], 2)
     with pytest.raises(ValueError):
         stencil_weights([jump], np.arange(4.0), 0.0)
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "offset", "across_a_jump"),
+    [
+        (1 / 9, 1.0, 0.5, True),
+        (1 / 9, 1.0, 1.5, True),
+        (1 / 9, 1.0, 0.0, True),
+        (1.0, 0.1, 0.5, True),
+        (1.0, 1.0, 0.5, False),
+        (1.0, 1.0, 0.0, False),
+    ],
+)
+def test_jump_rows_have_an_h3_moment_and_equal_pieces_do_not(
+    left, right, offset, across_a_jump
+):
+    """The degree-4 stencil's local truncation error is O(h³) across a jump.
+
+    `docs/stiff-diffusion.md` §1.6: the weights reproduce D on the five
+    functions of ker ∂ₓL², and the coefficient of the h³ term of the local
+    error is the moment ``Σ w_i g(x_i) − (D g)(x_e)`` on a sixth function
+    of ker L³ (the degree-5 member of the translated basis). It cancels for
+    equal pieces (a centred FD4 second-derivative stencil has no odd
+    moment) and not across a jump, where the rows are locally third order
+    and the solution still fourth (port notes §1.3–1.4). The seventh
+    function measures the h⁴ term, FD4's ``−h⁴ u⁽⁶⁾ / 90`` for equal pieces.
+    """
+    xi = np.arange(-2.0, 3.0)
+    constant = np.zeros(6)
+    jump4 = Jump(offset, np.r_[left, constant[:4]], np.r_[right, constant[:4]])
+    jump6 = Jump(offset, np.r_[left, constant], np.r_[right, constant])
+    w = stencil_weights([jump4], xi, 0.0)
+    anchor = int(region_index([jump6], 0.0)[0])
+    regions = translated_basis([jump6], anchor)
+    which = region_index([jump6], xi)
+    g = np.empty((xi.size, 7))
+    for r, region in enumerate(regions):
+        mask = which == r
+        if mask.any():
+            g[mask] = region.evaluate([jump6], xi[mask])
+    d_g = regions[anchor].operator_values([jump6], np.array([0.0]))[0]
+    moments = w @ g - d_g
+    assert np.allclose(moments[:5], 0.0, atol=1e-9)
+    if across_a_jump:
+        assert abs(moments[5]) > 1e-2
+    else:
+        assert abs(moments[5]) < 1e-10
+        assert np.isclose(moments[6], -8.0)
