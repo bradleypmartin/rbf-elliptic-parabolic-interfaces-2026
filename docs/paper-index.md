@@ -49,7 +49,9 @@ drops signs and piecewise braces:
   same. The mesh plot of Fig. 13 / Fig. 5-13 runs from 0 to 1.4 with small
   wiggles at the rows, which this data (bounded by 1, sign-changing) cannot
   produce; it was made with other boundary data and is not reproduced
-  (port notes §2.7).
+  (port notes §2.7). Fig. 5-15 / Fig. 15, the control problem's solution,
+  is the same picture without the ring's step (rendered 2026-09-21, port
+  notes §2.10), so it is of the same other data; its twin is of eq. 39's.
 - **Case 1** (eq. 32–34): `α = 0.2` for y ∈ [0.6, 0.8], 1 otherwise;
   `u = sin 2πx` at y = 1, 0 at y = 0.
 
