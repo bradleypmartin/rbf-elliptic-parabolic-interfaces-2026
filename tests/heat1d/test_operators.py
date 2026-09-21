@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from heat_interfaces.heat1d.domain import (
+    DISSERTATION_BC,
     Constant,
     Grid1D,
     PiecewiseAlpha,
@@ -10,12 +11,15 @@ from heat_interfaces.heat1d.domain import (
     equispaced_grid,
     jump_alpha,
 )
+from heat_interfaces.heat1d.exact import equilibrium_exact
 from heat_interfaces.heat1d.operators import (
     alpha_matrix,
     direct_operator,
     dx_matrix,
     dxx_matrix,
+    jump_aware_operator,
     naive_operator,
+    straddling_windows,
 )
 
 
@@ -117,3 +121,76 @@ def test_alpha_matrix_gives_a_nudged_interface_node_the_owner_value():
     assert a.diagonal()[75] == float(m.alpha(0.5))  # the layer owns x = 0.5
     assert a.diagonal()[75] != float(m.alpha(x[75]))  # unsnapped it would be 1
     np.testing.assert_allclose(a.diagonal(), alpha_matrix(g, m).diagonal())
+
+
+def test_jump_aware_operator_equals_the_direct_one_off_the_straddling_rows():
+    m = dissertation_alpha()
+    for n, per_interface in ((101, 3), (100, 4)):
+        g = equispaced_grid(n)
+        windows = straddling_windows(g, m)
+        assert len(windows) == 2 * per_interface
+        assert all(seen in ([0], [1]) for _, _, seen in windows)
+        assert all(lo == i - 2 for i, lo, _ in windows)
+        diff = np.abs((jump_aware_operator(g, m) - direct_operator(g, m)).toarray())
+        assert set(np.flatnonzero(diff.sum(axis=1))) == {i for i, _, _ in windows}
+    # On the 101-node grid the interfaces are nodes 50 and 75.
+    assert [i for i, _, _ in straddling_windows(equispaced_grid(101), m)] == [
+        49,
+        50,
+        51,
+        74,
+        75,
+        76,
+    ]
+
+
+@pytest.mark.parametrize("n", [41, 40])
+def test_jump_aware_operator_is_fd4_when_the_material_does_not_change(n):
+    g = equispaced_grid(n)
+    m = jump_alpha(0.7, 0.7)
+    assert straddling_windows(g, m)  # the rows are rebuilt, and come back the same
+    np.testing.assert_allclose(
+        jump_aware_operator(g, m).toarray(),
+        0.7 * dxx_matrix(g).toarray(),
+        rtol=1e-10,
+        atol=1e-8,
+    )
+
+
+@pytest.mark.parametrize("n", [41, 40])
+def test_jump_aware_operator_annihilates_a_piecewise_linear_equilibrium(n):
+    g = equispaced_grid(n)
+    m = jump_alpha(1.0, 0.25)
+    u = equilibrium_exact(m, 1.0, 0.0, g.x)
+    assert np.max(np.abs(jump_aware_operator(g, m) @ u)) < 1e-9
+    assert np.max(np.abs(naive_operator(g, m) @ u)) > 1.0
+
+
+def test_a_window_that_sees_both_interfaces_of_a_thin_layer_translates_twice():
+    g = equispaced_grid(41)
+    m = PiecewiseAlpha((0.0, 2 * g.h), (Constant(1.0), Constant(0.1), Constant(1.0)))
+    assert [seen for _, _, seen in straddling_windows(g, m)] == [
+        [0],
+        [0],
+        [0, 1],
+        [1],
+        [1],
+    ]
+    u = equilibrium_exact(m, 1.0, 0.0, g.x)
+    assert np.max(np.abs(jump_aware_operator(g, m) @ u)) < 1e-9
+
+
+def test_jump_aware_operator_is_consistent_on_the_dissertation_solution():
+    # Local truncation error. The straddling rows are third order (the stencil
+    # is not symmetric about the interface, so the x^5 term does not cancel)
+    # and the max norm shows it; the naive residual grows like 1/h instead.
+    m = dissertation_alpha()
+    residuals, naive = [], []
+    for n in (101, 201, 401, 801):
+        g = equispaced_grid(n)
+        u = equilibrium_exact(m, *DISSERTATION_BC, g.x)
+        residuals.append(np.max(np.abs(jump_aware_operator(g, m) @ u)))
+        naive.append(np.max(np.abs(naive_operator(g, m) @ u)))
+    rates = np.log2(np.array(residuals[:-1]) / np.array(residuals[1:]))
+    assert np.all(rates > 2.7), rates
+    assert np.all(np.diff(naive) > 0)

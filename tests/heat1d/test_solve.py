@@ -7,11 +7,16 @@ from heat_interfaces.heat1d.domain import (
     PiecewiseAlpha,
     Smooth,
     dissertation_alpha,
+    eabe_alpha,
     equispaced_grid,
     jump_alpha,
 )
 from heat_interfaces.heat1d.exact import equilibrium_exact
-from heat_interfaces.heat1d.operators import direct_operator, naive_operator
+from heat_interfaces.heat1d.operators import (
+    direct_operator,
+    jump_aware_operator,
+    naive_operator,
+)
 from heat_interfaces.heat1d.solve import (
     dirichlet_system,
     normalized_l2,
@@ -90,3 +95,78 @@ def test_direct_stencil_does_not_converge_on_the_dissertation_problem():
     errs = dissertation_errors(direct_operator, (101, 401, 1601))
     assert np.all(errs > 0.05)
     assert errs[-1] > 0.5 * errs[0]
+
+
+def test_jump_aware_stencils_solve_the_dissertation_problem_at_fourth_order():
+    # Fig. 4-7's lower line: read off the figure, 3e-3 at 100 nodes down to
+    # 4.5e-8 at 1600 against a 6400-node run; ours against quadrature run
+    # 4.3e-3 down to 7.4e-8 with the same slope.
+    counts = (101, 201, 401, 801, 1601)
+    errs = dissertation_errors(jump_aware_operator, counts)
+    rates = np.log2(errs[:-1] / errs[1:])
+    assert np.all(rates > 3.8), (errs, rates)
+    assert errs[0] < 6e-3 and errs[-1] < 1e-7
+    assert np.all(errs < dissertation_errors(naive_operator, counts))
+
+
+def test_the_101_node_jump_aware_solution_has_no_oscillation():
+    # Fig. 4-5: alpha u' is a negative constant, so u decreases monotonically.
+    # The §4.1 solution does; the FD4 one wiggles at the interfaces.
+    g = equispaced_grid(101)
+    m = dissertation_alpha()
+    u = solve_equilibrium(jump_aware_operator(g, m), *DISSERTATION_BC)
+    assert np.all(np.diff(u) < 0)
+    u_naive = solve_equilibrium(naive_operator(g, m), *DISSERTATION_BC)
+    assert not np.all(np.diff(u_naive) < 0)
+
+
+def test_the_eabe_problem_converges_at_fourth_order_with_the_interface_mid_cell():
+    # Even node counts put x = 0 halfway between two nodes (four straddling
+    # rows). The errors start near 1e-7 and reach rounding by 1600 nodes.
+    m = eabe_alpha()
+    errs = []
+    for n in (100, 200, 400, 800):
+        g = equispaced_grid(n)
+        u = solve_equilibrium(jump_aware_operator(g, m), 1.0, 0.0)
+        errs.append(normalized_l2(u, equilibrium_exact(m, 1.0, 0.0, g.x)))
+    rates = np.log2(np.array(errs[:-1]) / np.array(errs[1:]))
+    assert np.all(rates > 3.8), (errs, rates)
+
+
+@pytest.mark.parametrize("n", [41, 40])
+def test_a_jump_between_constants_is_solved_exactly(n):
+    # The MATLAB problem's material: the solution is piecewise linear, which
+    # the translated basis contains.
+    m = jump_alpha(1 / 9, 1.0)
+    g = equispaced_grid(n)
+    u = solve_equilibrium(jump_aware_operator(g, m), 1.0, 0.0)
+    assert normalized_l2(u, equilibrium_exact(m, 1.0, 0.0, g.x)) < 1e-12
+
+
+@pytest.mark.parametrize("n", [41, 81])
+def test_a_two_cell_layer_between_constants_is_solved_exactly(n):
+    # Both interfaces fall in one window: the basis translates twice.
+    g = equispaced_grid(n)
+    m = PiecewiseAlpha((0.0, 2 * g.h), (Constant(1.0), Constant(0.1), Constant(1.0)))
+    u = solve_equilibrium(jump_aware_operator(g, m), 1.0, 0.0)
+    assert normalized_l2(u, equilibrium_exact(m, 1.0, 0.0, g.x)) < 1e-12
+
+
+@pytest.mark.parametrize(
+    ("degree", "counts", "low", "high"),
+    [(2, (101, 201, 401, 801), 1.9, 2.1), (6, (101, 201, 401), 5.3, 6.5)],
+)
+def test_other_degrees_converge_at_their_own_order(degree, counts, low, high):
+    # Degree 6 needs about 100 nodes before its seven-node stencils are
+    # asymptotic here: u' = B / alpha and alpha is 0.1 at both interfaces, so
+    # the solution's derivatives inside the layer grow like (alpha' / alpha)^k
+    # and the interface rows' truncation error is O(1) on coarser grids.
+    m = dissertation_alpha()
+    errs = []
+    for n in counts:
+        g = equispaced_grid(n)
+        op = jump_aware_operator(g, m, degree=degree)
+        u = solve_equilibrium(op, *DISSERTATION_BC)
+        errs.append(normalized_l2(u, equilibrium_exact(m, *DISSERTATION_BC, g.x)))
+    rates = np.log2(np.array(errs[:-1]) / np.array(errs[1:]))
+    assert np.all((rates > low) & (rates < high)), (errs, rates)
