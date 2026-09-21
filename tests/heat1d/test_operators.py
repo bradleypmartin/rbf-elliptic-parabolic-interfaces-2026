@@ -194,3 +194,31 @@ def test_jump_aware_operator_is_consistent_on_the_dissertation_solution():
     rates = np.log2(np.array(residuals[:-1]) / np.array(residuals[1:]))
     assert np.all(rates > 2.7), rates
     assert np.all(np.diff(naive) > 0)
+
+
+@pytest.mark.parametrize("cells", [1, 2])
+def test_no_nodal_alpha_makes_dx_a_dx_exact_on_a_kinked_equilibrium(cells):
+    """The harmonic-mean rule is exact only as a face conductance.
+
+    `docs/stiff-diffusion.md` §1.8: with alpha at the nodes replaced by its
+    harmonic mean over ``cells`` cells, ``Dx A Dx`` still fails on the
+    piecewise-linear equilibrium of the MATLAB jump ``1/9 | 1`` (mid-cell
+    at even n), because ``Dx`` of the kink is already O(1) off beside it,
+    while the jump-aware operator annihilates the same solution to rounding.
+    The conservative three-point scheme with exact face conductances would
+    give zero; E3.5 builds it as the finite-volume comparator.
+    """
+    g = equispaced_grid(100)
+    m = jump_alpha(1.0 / 9.0, 1.0)
+    u = equilibrium_exact(m, 1.0, 0.0, g.x)
+    w = cells * g.h / 2
+    lo, hi = g.x - w, g.x + w
+    in_left = np.clip(np.minimum(hi, 0.0) - lo, 0.0, None)
+    in_right = np.clip(hi - np.maximum(lo, 0.0), 0.0, None)
+    treated = 2 * w / (9.0 * in_left + 1.0 * in_right)
+    medium = PiecewiseAlpha(
+        (), (Smooth(lambda x: np.interp(x, g.x, treated), (np.zeros_like,)),)
+    )
+    residual = (naive_operator(g, medium) @ u)[2:-2]
+    assert np.max(np.abs(residual)) > 0.5
+    assert np.max(np.abs((jump_aware_operator(g, m) @ u)[2:-2])) < 1e-9

@@ -156,8 +156,8 @@ perturbed Vandermonde matrix; the weights are `w = w̃/h_s²` with
 `A w̃ = 2 α_e e₂`. The constant-α condition numbers are 23.5 for the
 half-width normalisation `ξ_i = 0, ±½, ±1` (the companion's choice) and
 42.5 for E1.2's units of h, `ξ_i = 0, ±1, ±2`; marching in physical x at
-h = 0.01 instead gives 8e7 (a scratch check, 2026-09-21), so the march is
-done in ξ. Prediction P5 (§1.9): `cond A` stays within a small factor of
+h = 0.01 instead gives 8e7 (a scratch check, 2026-09-21; E3.4 confirms),
+so the march is done in ξ. Prediction P5 (§1.9): `cond A` stays within a small factor of
 the constant-α value at every δ (the companion saw 20 to 60 for δ from
 1e-5 to 1).
 
@@ -406,17 +406,21 @@ not item 3. `Dx A Dx` applied to a kinked solution is not exact for any
 nodal α, because `Dx` of the kink is already O(1) off at the nodes beside
 it: on the MATLAB jump sitting mid-cell at 100 nodes, the residual
 `max |L_h u_exact|` over the interior rows is 5.6 with the one-cell
-harmonic mean at the nodes and 1.2 with the two-cell mean (scratch,
-2026-09-21; an exact scheme gives 0). So #30's acceptance line "T1 is
-exact on the 1-D equilibrium problem with a piecewise-constant α" holds
-only for the conservative form. The recommendation: build both, T1 as the
-changed medium under `Dx A Dx` (the like-for-like comparator, expected
-first order at the edge like every nodal treatment) and T1-FV, the
-three-point conservative scheme with exact face conductances (second
-order at every δ, exact at equilibrium), which is the strongest low-order
-comparator and the finite-volume twin the manuscript should show. Brad
-decides; #30's text is amended either way (breadcrumb posted with this
-ticket).
+harmonic mean at the nodes and 1.2 with the two-cell mean, where the
+jump-aware operator gives rounding
+(`tests/heat1d/test_operators.py::test_no_nodal_alpha_makes_dx_a_dx_
+exact_on_a_kinked_equilibrium` pins both at 0.5 and 1e-9). Any nonzero
+residual disproves exactness; nothing below depends on the two values or
+their order. So #30's acceptance line "T1 is exact on the 1-D equilibrium
+problem with a piecewise-constant α" holds only for the conservative
+form. The recommendation: build both, T1 as the changed medium under
+`Dx A Dx` (the like-for-like comparator, expected first order at the edge
+like every nodal treatment) and T1-FV, the three-point conservative
+scheme with exact face conductances (item 3: second order at every δ,
+exact at equilibrium by construction), which is the strongest low-order
+comparator on that ground and the finite-volume twin the manuscript
+should show. Brad decides; #30's text is amended either way (breadcrumb
+posted with this ticket).
 
 ### 1.9 What the later sections check
 
