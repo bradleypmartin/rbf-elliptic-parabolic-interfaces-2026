@@ -20,6 +20,7 @@ from heat_interfaces.heat1d.operators import (
 from heat_interfaces.heat1d.solve import (
     dirichlet_system,
     normalized_l2,
+    rms_error,
     solve_equilibrium,
 )
 
@@ -170,3 +171,33 @@ def test_other_degrees_converge_at_their_own_order(degree, counts, low, high):
         errs.append(normalized_l2(u, equilibrium_exact(m, *DISSERTATION_BC, g.x)))
     rates = np.log2(np.array(errs[:-1]) / np.array(errs[1:]))
     assert np.all((rates > low) & (rates < high)), (errs, rates)
+
+
+def test_rms_error_is_the_relative_error_scaled_by_the_reference_rms():
+    g = equispaced_grid(101)
+    m = dissertation_alpha()
+    ref = equilibrium_exact(m, *DISSERTATION_BC, g.x)
+    u = solve_equilibrium(naive_operator(g, m), *DISSERTATION_BC)
+    rms_ref = np.linalg.norm(ref) / np.sqrt(g.n)
+    assert rms_error(u, ref) == pytest.approx(normalized_l2(u, ref) * rms_ref)
+    # Fig. 4-7's ordinate: RMS(u) = 0.64 on this problem, so the RMS sits
+    # 1.56x below the relative error and on the figure's lines.
+    assert rms_ref == pytest.approx(0.641, abs=1e-3)
+
+
+def test_rms_errors_land_on_fig_4_7():
+    # Read off the figure at its first and last abscissae (labelled 100 and
+    # 3200), to about ten percent: FD4 1.3e-2 and 3.1e-4, the §4.1 method
+    # 2.9e-3 and 2.9e-9.
+    m = dissertation_alpha()
+    for op, first, last in (
+        (naive_operator, 1.3e-2, 3.1e-4),
+        (jump_aware_operator, 2.9e-3, 2.9e-9),
+    ):
+        errs = []
+        for n in (101, 3201):
+            g = equispaced_grid(n)
+            u = solve_equilibrium(op(g, m), *DISSERTATION_BC)
+            errs.append(rms_error(u, equilibrium_exact(m, *DISSERTATION_BC, g.x)))
+        assert errs[0] == pytest.approx(first, rel=0.12)
+        assert errs[1] == pytest.approx(last, rel=0.12)

@@ -71,7 +71,7 @@ from .operators import (
     naive_operator,
     straddling_windows,
 )
-from .solve import dirichlet_system, normalized_l2, solve_equilibrium
+from .solve import dirichlet_system, normalized_l2, rms_error, solve_equilibrium
 
 __all__ = [
     "DISSERTATION_BC",
@@ -120,6 +120,7 @@ __all__ = [
     "ramp_boundary",
     "rk4_dt_limit",
     "rk4_march",
+    "rms_error",
     "shift_matrix",
     "smooth_step",
     "solve_equilibrium",
