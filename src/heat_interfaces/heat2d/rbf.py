@@ -226,11 +226,7 @@ def rbf_fd_weights(
         )
     for op in ops:
         _check_operator(op)
-    r = np.hypot(dx, dy)
-    radius = r.max(axis=1)
-    nearest = np.where(r > 0.0, r, np.inf).min(axis=1)
-    if not np.all(np.isfinite(nearest)) or np.any(radius <= 0.0):
-        raise ValueError("a stencil has no node away from its centre")
+    radius, nearest = _stencil_scales(dx, dy)
     out = np.empty((len(ops), m, k))
     b_poly = polynomial_rhs(degree, ops)
     for lo in range(0, m, BATCH):
@@ -247,4 +243,63 @@ def rbf_fd_weights(
         w = augmented_solve(a, p, b_rbf, b_poly)
         for c, op in enumerate(ops):
             out[c, sl] = w[:, :, c] / radius[sl, None] ** ORDER[op]
+    return out
+
+
+def _stencil_scales(dx: np.ndarray, dy: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Each stencil's radius and its centre's nearest-neighbour distance, checked."""
+    r = np.hypot(dx, dy)
+    radius = r.max(axis=1)
+    nearest = np.where(r > 0.0, r, np.inf).min(axis=1)
+    if not np.all(np.isfinite(nearest)) or np.any(radius <= 0.0):
+        raise ValueError("a stencil has no node away from its centre")
+    return radius, nearest
+
+
+def rbf_interpolation_weights(
+    dx: np.ndarray,
+    dy: np.ndarray,
+    ex: np.ndarray,
+    ey: np.ndarray,
+    degree: int,
+    shape: float = GA_SHAPE,
+) -> np.ndarray:
+    """Weights ``(m, k)`` that read ``u`` at the offset ``(ex, ey)`` from each centre.
+
+    The system of ``rbf_fd_weights`` with the identity in place of ``L`` and
+    the evaluation point off the centre: the right-hand side is every Gaussian
+    and every monomial at that point (E2.6, ``heat2d.resample``). ``dx, dy``
+    are the ``(m, k)`` neighbour offsets, ``ex, ey`` the ``(m,)`` offsets of
+    the points from the centres. Exact on polynomials through ``degree``, and
+    the unit vector of a node when the point falls on it.
+    """
+    dx = np.atleast_2d(np.asarray(dx, dtype=float))
+    dy = np.atleast_2d(np.asarray(dy, dtype=float))
+    ex = np.atleast_1d(np.asarray(ex, dtype=float))
+    ey = np.atleast_1d(np.asarray(ey, dtype=float))
+    if dx.shape != dy.shape or ex.shape != ey.shape or ex.shape != dx.shape[:1]:
+        raise ValueError("dx, dy must be (m, k) and ex, ey must be (m,)")
+    m, k = dx.shape
+    if k < polynomial_count(degree):
+        raise ValueError(
+            f"{k} nodes cannot carry the {polynomial_count(degree)} monomials "
+            f"of degree {degree}"
+        )
+    radius, nearest = _stencil_scales(dx, dy)
+    out = np.empty((m, k))
+    for lo in range(0, m, BATCH):
+        sl = slice(lo, min(lo + BATCH, m))
+        xi = dx[sl] / radius[sl, None]
+        eta = dy[sl] / radius[sl, None]
+        xe = ex[sl] / radius[sl]
+        ye = ey[sl] / radius[sl]
+        eps = (shape * radius[sl] / nearest[sl])[:, None]
+        check_coincidence(xi, eta)
+        dxi = xi[:, :, None] - xi[:, None, :]
+        deta = eta[:, :, None] - eta[:, None, :]
+        a = gaussian(dxi, deta, eps[..., None])
+        p = polynomial_block(xi, eta, degree)
+        b_rbf = gaussian(xe[:, None] - xi, ye[:, None] - eta, eps)[..., None]
+        b_poly = polynomial_block(xe, ye, degree)[..., None]
+        out[sl] = augmented_solve(a, p, b_rbf, b_poly)[:, :, 0]
     return out

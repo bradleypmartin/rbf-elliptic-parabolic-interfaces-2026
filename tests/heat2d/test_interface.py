@@ -1,6 +1,7 @@
 """The 2-D interface algebra: coefficient operators, frames, the interface expansion,
 the continuity matrices, the translated basis on curved interfaces, and the
-stencil weights (dissertation §5.3, EABE §2.2.3)."""
+stencil weights (dissertation §5.3, EABE §2.2.3), and the interpolation weights
+of E2.6's resampling on the same system."""
 
 import numpy as np
 import pytest
@@ -29,6 +30,8 @@ from heat_interfaces.heat2d.interface import (
     frame_at,
     frame_change,
     interface_expansion,
+    interface_stencil,
+    interpolation_weights,
     local_interface,
     local_taylor,
     multiplication_matrix,
@@ -745,3 +748,85 @@ def test_local_interface_dataclass_holds_its_parts():
     li = local_interface(case1().material, 0, 0.3, 0.58, 0.04, 3)
     assert isinstance(li, LocalInterface) and li.degree == 3
     assert li.expansion.shape == (4,) and li.minus.shape == (4, 4)
+
+
+# --- interpolation weights (E2.6) ------------------------------------------------
+
+
+def circle_quadratic_setup():
+    """The operator test's matched piecewise quadratic and its crossing stencils."""
+    band = Band(Circle(0.35), Circle(0.9), Constant2D(5.0), Constant2D(1.0))
+    domain = Domain(band, (Circle(0.35),), STRIP)
+    nodes = build_node_set(domain, 2500, iterations=10)
+
+    def u(x, y):
+        r2 = (x - 0.5) ** 2 + (y - 0.5) ** 2
+        return np.where(r2 < 0.35**2, r2, (r2 - 0.35**2) / 5 + 0.35**2)
+
+    idx, _ = knn(nodes.xy, 30)
+    region = band.region_index(nodes.x, nodes.y)
+    lo, hi = region[idx].min(axis=1), region[idx].max(axis=1)
+    cross = np.flatnonzero((lo == 0) & (hi == 1))[::4]
+    assert len(cross) > 40
+    return band, nodes, u, idx, cross
+
+
+@pytest.mark.parametrize("warp", [True, False])
+def test_interpolation_weights_are_exact_on_the_matched_quadratic_off_the_nodes(warp):
+    # Points halfway between the centre and its first five neighbours, on both
+    # sides of the circle: the curved basis reproduces the pair to rounding,
+    # the flat assumption misses by the local linear approximation's error.
+    band, nodes, u, idx, cross = circle_quadratic_setup()
+    worst = {True: 0.0, False: 0.0}
+    for i in cross:
+        xy = nodes.xy[idx[i]]
+        px, py = 0.5 * (xy[0, 0] + xy[1:6, 0]), 0.5 * (xy[0, 1] + xy[1:6, 1])
+        for curvature in (True, False):
+            w = interpolation_weights(
+                xy, band, P, (px, py), curvature=curvature, warp=warp
+            )
+            assert w.shape == (5, 30)
+            err = np.abs(w @ u(xy[:, 0], xy[:, 1]) - u(px, py)).max()
+            worst[curvature] = max(worst[curvature], err)
+    assert worst[True] < 1e-9, worst
+    assert worst[False] > 1e-5, worst
+
+
+def test_interpolation_weights_give_the_unit_vector_on_a_node_and_refuse_far_points():
+    # A case-1 stencil across y = 0.6 reaches regions 0 and 1; a point above
+    # y = 0.8 lies in region 2, which it has no basis for.
+    domain = case1()
+    nodes = build_node_set(domain, 1250, iterations=20)
+    idx, _ = knn(nodes.xy, 30)
+    region = domain.material.region_index(nodes.x, nodes.y)
+    lo, hi = region[idx].min(axis=1), region[idx].max(axis=1)
+    i = int(np.flatnonzero((lo == 0) & (hi == 1))[0])
+    xy = nodes.xy[idx[i]]
+    w = interpolation_weights(xy, domain.material, P, (xy[3:4, 0], xy[3:4, 1]))
+    assert np.abs(w[0] - np.eye(30)[3]).max() < 1e-10
+    with pytest.raises(ValueError, match="does not reach"):
+        interpolation_weights(xy, domain.material, P, (xy[:1, 0], np.array([0.9])))
+    with pytest.raises(ValueError, match="matching 1-D"):
+        interpolation_weights(xy, domain.material, P, (np.zeros(2), np.zeros(3)))
+
+
+def test_interface_stencil_exposes_the_blocks_stencil_weights_solves():
+    band, nodes, _, idx, cross = circle_quadratic_setup()
+    xy = nodes.xy[idx[cross[1]]]
+    st = interface_stencil(xy, band, P)
+    assert st.anchor == int(band.region_index(xy[:1, 0], xy[:1, 1])[0])
+    assert sorted(st.regions) == [0, 1] and st.warp is not None
+    assert st.polynomial_block().shape == (30, Q)
+    a = st.gaussian_block()
+    assert a.shape == (30, 30) and np.allclose(a, a.T) and np.allclose(np.diag(a), 1)
+    # The nodes' own Gaussian coordinates are the stored ones.
+    xi, eta = st.gaussian_coordinates(xy[:, 0], xy[:, 1])
+    np.testing.assert_array_equal(xi, st.xi)
+    np.testing.assert_array_equal(eta, st.eta)
+    # Without the warp the coordinates are the global offsets over the radius.
+    plain = interface_stencil(xy, band, P, warp=False)
+    assert plain.warp is None
+    r = np.hypot(xy[:, 0] - xy[0, 0], xy[:, 1] - xy[0, 1])
+    np.testing.assert_allclose(np.hypot(plain.xi, plain.eta), r / r.max(), atol=1e-15)
+    with pytest.raises(ValueError, match="one region"):
+        interface_stencil(nodes.xy[idx[0]][:1].repeat(30, axis=0) + 1e-3, band, P)

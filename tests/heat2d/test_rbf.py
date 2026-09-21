@@ -14,6 +14,7 @@ from heat_interfaces.heat2d.rbf import (
     polynomial_exponents,
     polynomial_rhs,
     rbf_fd_weights,
+    rbf_interpolation_weights,
 )
 
 
@@ -188,3 +189,55 @@ def test_weights_refuse_bad_stencils(stencils):
     near_y[:, 2] = near_y[:, 3]
     with pytest.raises(ValueError, match="nearly so"):
         rbf_fd_weights(near, near_y, ("dx",), 3)
+
+
+# --- interpolation weights (E2.6) ---------------------------------------------
+
+
+def smooth(x, y):
+    return np.sin(2 * np.pi * x) * np.exp(y)
+
+
+def interpolation_setup(n, rng):
+    """A case-1 set with 42-node stencils and a point half a spacing off each centre."""
+    nodes = build_node_set(case1(), n, iterations=20)
+    idx, dist = knn(nodes.xy, 42)
+    dx, dy = offsets(nodes.xy, idx)
+    theta = rng.uniform(0.0, 2 * np.pi, nodes.n)
+    ex, ey = 0.5 * dist[:, 1] * np.cos(theta), 0.5 * dist[:, 1] * np.sin(theta)
+    return nodes, idx, dx, dy, ex, ey
+
+
+def test_interpolation_weights_reproduce_monomials_off_centre():
+    nodes, idx, dx, dy, ex, ey = interpolation_setup(1250, np.random.default_rng(3))
+    w = rbf_interpolation_weights(dx, dy, ex, ey, 5)
+    assert w.shape == (nodes.n, 42)
+    for i, j in polynomial_exponents(5):
+        p = dx**i * dy**j
+        got = np.einsum("ij,ij->i", w, p)
+        scale = (np.abs(w) * np.abs(p)).sum(axis=1) + np.abs(ex**i * ey**j)
+        assert np.abs(got - ex**i * ey**j).max() <= 1e-12 * scale.max()
+
+
+def test_interpolation_weights_are_the_unit_vector_on_the_centre():
+    _, _, dx, dy, _, _ = interpolation_setup(900, np.random.default_rng(4))
+    w = rbf_interpolation_weights(dx, dy, np.zeros(len(dx)), np.zeros(len(dx)), 5)
+    assert np.abs(w - np.eye(42)[0]).max() < 1e-10
+
+
+def test_interpolation_is_at_least_fifth_order_on_a_smooth_field():
+    errs = []
+    for n in (1250, 5000):
+        nodes, idx, dx, dy, ex, ey = interpolation_setup(n, np.random.default_rng(5))
+        w = rbf_interpolation_weights(dx, dy, ex, ey, 5)
+        got = np.einsum("ij,ij->i", w, smooth(nodes.x, nodes.y)[idx])
+        errs.append(np.sqrt(np.mean((got - smooth(nodes.x + ex, nodes.y + ey)) ** 2)))
+    assert errs[1] < 1e-7 and errs[0] / errs[1] > 2**5, errs
+
+
+def test_interpolation_weights_refuse_mismatched_shapes():
+    _, _, dx, dy, ex, ey = interpolation_setup(900, np.random.default_rng(6))
+    with pytest.raises(ValueError, match=r"\(m,\)"):
+        rbf_interpolation_weights(dx, dy, ex[:-1], ey[:-1], 5)
+    with pytest.raises(ValueError, match="monomials"):
+        rbf_interpolation_weights(dx[:, :10], dy[:, :10], ex, ey, 5)
