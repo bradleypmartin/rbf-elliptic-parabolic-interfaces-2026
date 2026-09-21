@@ -148,8 +148,13 @@ def test_dissertation_problem_with_a_growing_end_value_is_fourth_order():
             u = bd4_march(op(g, m), v, t_end, g.h, boundary)
             errs[name].append(normalized_l2(u, np.exp(c * t_end) * v))
     naive, aware = (np.array(errs[k]) for k in ("naive", "aware"))
-    slope = -np.polyfit(np.log(counts), np.log(naive), 1)[0]
-    assert 0.9 < slope < 1.3, (naive, slope)
+    # The naive line's first pair (101 -> 201) runs at 1.33 before settling to
+    # 1.02, 1.01: at 101 nodes the layer holds 25 nodes and both interface
+    # errors still overlap. The elliptic test in test_solve.py sees the same
+    # start; here the pairs from 201 on carry the first-order claim.
+    naive_rates = np.log2(naive[:-1] / naive[1:])
+    assert np.all((naive_rates[1:] > 0.9) & (naive_rates[1:] < 1.15)), naive_rates
+    assert naive_rates[0] > 0.9
     rates = np.log2(aware[:-1] / aware[1:])
     assert np.all(rates > 3.7), (aware, rates)
     assert aware[0] < 6e-3 and aware[-1] < 2e-6

@@ -321,11 +321,13 @@ def jump_alpha(left: float, right: float, x0: float = 0.0) -> PiecewiseAlpha:
 
 
 def matlab_alpha() -> PiecewiseAlpha:
-    """``FD4heat1DAC.m``: ``k1 = 1/9`` on [-1, 0], ``k2 = 1`` on (0, 1].
+    """``FD4heat1DAC.m``: ``k1 = 1/9`` left of 0, ``k2 = 1`` right of it.
 
-    The MATLAB gives the node at 0 the left value but builds its four
-    interface stencils about a jump half a cell to the right of it, so its
-    interface sits at ``x = h / 2``; the port keeps the jump at 0 and lets the
-    node count decide whether a node lands on it (``Grid1D.placement``).
+    The port's jump is at 0 with the right piece owning it, as in eq. 64
+    (``jump_alpha``'s default): a node landing on 0 (odd counts) takes
+    ``alpha = 1``. The MATLAB differs in two ways that are not reproduced: it
+    gives the node at 0 the left value, and it builds its four interface
+    stencils about a jump half a cell to the right of that node, so its
+    interface effectively sits at ``x = h / 2`` and moves with the grid.
     """
     return jump_alpha(1.0 / 9.0, 1.0)
