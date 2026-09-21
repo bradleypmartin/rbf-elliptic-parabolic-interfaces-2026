@@ -174,9 +174,17 @@ def test_weights_refuse_bad_stencils(stencils):
         rbf_fd_weights(dx, dy[:, :10], ("dx",), 5)
     with pytest.raises(ValueError, match="cannot carry"):
         rbf_fd_weights(dx[:, :20], dy[:, :20], ("dx",), 5)
+    # An exact duplicate of the centre, and a neighbour a rounding error away
+    # from another neighbour, are both refused; the node sets never make either.
     twin = dx[:3].copy()
     twin[:, 1] = twin[:, 0]
     twin_y = dy[:3].copy()
     twin_y[:, 1] = twin_y[:, 0]
     with pytest.raises(ValueError, match="coincide"):
         rbf_fd_weights(twin, twin_y, ("dx",), 3)
+    near = dx[:3].copy()
+    near[:, 2] = near[:, 3] + 1e-13
+    near_y = dy[:3].copy()
+    near_y[:, 2] = near_y[:, 3]
+    with pytest.raises(ValueError, match="nearly so"):
+        rbf_fd_weights(near, near_y, ("dx",), 3)

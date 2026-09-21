@@ -132,6 +132,26 @@ def test_dx_is_exact_on_powers_of_x_away_from_the_seam():
         np.testing.assert_allclose(got, k * nodes.x[mid] ** max(k - 1, 0), atol=1e-9)
 
 
+def test_dx_across_the_seam_is_as_accurate_as_inside():
+    # Stencils that straddle x = 0 / x = 1 differentiate through the wrap:
+    # cos 2πx is periodic, so a wrong image would show as an O(1/h) error there.
+    errs = []
+    for n in (1250, 5000):
+        nodes, st = node_set(n)
+        dx = derivative_matrices(nodes, st, ("dx",))["dx"]
+        e = np.abs(
+            dx @ np.cos(2 * np.pi * nodes.x) + 2 * np.pi * np.sin(2 * np.pi * nodes.x)
+        )
+        seam = np.zeros(nodes.n, dtype=bool)
+        for g in st.groups:
+            seam[g.rows] = np.ptp(nodes.x[g.index], axis=1) > 0.5
+        inside = ~seam & ~st.near_boundary
+        assert seam.sum() > 20
+        assert e[seam & ~st.near_boundary].max() < 10 * e[inside].max()
+        errs.append(np.sqrt(np.mean(e[seam] ** 2)))
+    assert errs[0] / errs[1] > 2**3.5, errs
+
+
 def test_derivative_matrices_have_one_stencil_per_row():
     nodes, st = node_set(1250)
     d = derivative_matrices(nodes, st, ("dx", "dy", "lap"))
@@ -262,8 +282,12 @@ def test_case1_naive_operator_is_first_order():
     errs = np.array(errs)
     h = 1 / np.sqrt(np.array(counts, dtype=float))
     slope = np.polyfit(np.log(h), np.log(errs), 1)[0]
-    # Seed 0: 1.1; seeds 1 and 2 give 1.6 and 1.3 (port notes §2.2).
-    assert 0.7 < slope < 1.8, (errs, slope)
+    # The band is the seed scatter of a first-order line on random node sets:
+    # seeds 0, 1, 2 fit at 1.1, 1.6 and 1.3 (port notes §2.2), and the same
+    # naive form runs at 1.0-1.3 in 1-D. Anything near the control's 4.5 or
+    # the direct operator's 0 fails; the floors catch an operator that is
+    # accidentally too good.
+    assert 0.7 < slope < 1.7, (errs, slope)
     assert errs[0] > 2e-3 and errs[-1] > 5e-4
 
 

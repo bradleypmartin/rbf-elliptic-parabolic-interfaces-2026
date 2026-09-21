@@ -38,6 +38,14 @@ ORDER = {"dx": 1, "dy": 1, "dxx": 2, "dxy": 2, "dyy": 2, "lap": 2}
 BATCH = 4096
 """Stencils solved per ``np.linalg.solve`` call, to bound the working memory."""
 
+COINCIDENCE = 1e-8
+"""Two nodes closer than this fraction of the stencil radius count as one.
+
+Below it the Gaussian matrix has two rows equal to rounding and the solve
+returns a large, meaningless weight row without raising; the repulsion node
+sets keep pairs at 0.8 spacings or more, so only a malformed stencil trips it.
+"""
+
 
 @dataclass(frozen=True)
 class StencilSpec:
@@ -208,13 +216,15 @@ def rbf_fd_weights(
         xi = dx[sl] / radius[sl, None]
         eta = dy[sl] / radius[sl, None]
         eps = (shape * radius[sl] / nearest[sl])[:, None]
-        a = gaussian(
-            xi[:, :, None] - xi[:, None, :],
-            eta[:, :, None] - eta[:, None, :],
-            eps[..., None],
-        )
-        if np.any(a - np.eye(k) == 1.0):
-            raise ValueError("two nodes of a stencil coincide")
+        dxi = xi[:, :, None] - xi[:, None, :]
+        deta = eta[:, :, None] - eta[:, None, :]
+        closest = (np.hypot(dxi, deta) + np.eye(k)).min(axis=(1, 2))
+        if np.any(closest < COINCIDENCE):
+            raise ValueError(
+                "two nodes of a stencil coincide or nearly so: the closest pair is "
+                f"{closest.min():.1e} stencil radii apart"
+            )
+        a = gaussian(dxi, deta, eps[..., None])
         p = polynomial_block(xi, eta, degree)
         b_rbf = np.stack([gaussian_derivative(xi, eta, eps, op) for op in ops], axis=-1)
         w = augmented_solve(a, p, b_rbf, b_poly)
