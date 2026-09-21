@@ -239,4 +239,95 @@ its figures always carry the placement of §1.1.
 
 ## 2. The 2-D heat port (E2, dissertation ch. 5 and EABE 2017)
 
-Filled in by E2.11 (#25).
+Every case is `∇·(α ∇u) = 0` (case 1 also `u_t = ∇·(α ∇u)`) on the
+x-periodic unit strip with Dirichlet rows at `y = 0` and `y = 1`, the
+material one smooth piece on a closed band between two interfaces and
+another outside (`heat2d.domain.Band`). The parameters are the EABE paper's
+(`docs/paper-index.md`): case 1 `α = 0.2` on `y ∈ [0.6, 0.8]`; case 2
+`0.2 + 0.1 sin 2πx sin 2πy` between `y = 0.6 + 0.02 sin 2πx` and
+`0.8 + 0.02 sin 2πx`; case 3 `1/1500 + (1/3000) sin 2πx sin 2πy` on the
+ring `0.349 ≤ r ≤ 0.35` about (0.5, 0.5) with the Dirichlet circle
+`r = 0.05` cut out. Sides are decided by the exact sign of each curve's
+level function (`y − c(x)`, `r − R`), never by a tolerance (§1.6); the
+bands own both of their edges, as the papers' brackets and the MATLAB's
+`y <= c2 && y >= c1` say.
+
+### 2.1 Node sets (E2.1)
+
+**The MATLAB versions.** `heatEq2DMatlab/ExeprepRBFHeatLaplace1..4.m`
+were diffed on 2026-09-20. `Laplace1` (flat interfaces only:
+`curvedinterface1/2` return `y′ = 0`) already has the full node layout
+below. `Laplace2` ("closed boundary all around") adds Dirichlet rows on
+`x = 0` and `x = 1` and makes the repulsion non-periodic; nothing in the
+papers uses it. `Laplace3` adds the `curvedFlag` switch (the sine
+interfaces) and a `thinFlag` layout that straddles the *midline*
+`(c₁ + c₂)/2` of the two interfaces with one set of six rows. `Laplace4`
+differs from `Laplace3` only in giving nodes within `3/√N` of a boundary
+their own stencil size and degree (`stencilsizeBound`, `polydegreeBound`,
+the paper's 30 / degree 4). The row order changes between `Laplace1/2` and
+`Laplace3/4`; the rows themselves do not. The operator halves differ by
+about 140 lines between `Laplace1/2` and `Laplace4` and by 49 between
+`Laplace3` and `Laplace4`; E2.2–E2.4 follow the paper and read the MATLAB
+for constants (plan R5). The case-3 code (ring, inner circle, s-sweep) is
+not in the folder.
+
+**The layout** (`build_node_set`, the port of `mos2dsqperiodic7` and the
+row construction of `Laplace4`), for an `N`-node set:
+
+- `m = round(0.95 √N)` nodes per unit length of row (`numIntNodes`, halves
+  rounded up as MATLAB's `round` does), row spacing `h = 1/m`; a row along
+  a curve of length `L` holds `round(L m)` nodes, so the ring's rows hold
+  105 at `N = 2500` and the cooling circle's 15.
+- Six fixed rows straddle every interface in a hexagonal layout: the
+  innermost pair at `±0.5 h` along the normal at the foot points
+  `s = 0, 1/m, …`, the next pair at `±(0.5 + √3/2) h` staggered by half a
+  spacing along the curve, the third at `±(0.5 + √3) h` in line with the
+  first. Paired nodes share their foot point, so each pair sits
+  orthogonally across the curve (tested to 1e-13).
+- A fixed row of `m` nodes at `x = 0, 1/m, …` on `y = 0` and on `y = 1`
+  (Dirichlet); case 3 adds one on the circle `r = 0.05`.
+- The remaining `N − 14 m` (case 1, 2) or `N − 6·105 − 2 m − 15` (case 3)
+  nodes start uniform, kept out of the strip `|level| ≤ (0.5 + √3) h`
+  about each straddled curve and out of the cooling disc, and move 100
+  times by `0.05 √(2500/N) / k` (iteration `k`) along the unit resultant
+  of `1/r⁴` repulsions from their ten nearest nodes, periodic in x. A free
+  node that leaves the domain or enters a band is redrawn.
+- Case 3 straddles the ring's midline `r = 0.3495`, the `thinFlag` layout:
+  both interfaces pass between the innermost pair at every count of EABE
+  Fig. 14, which is what Fig. 12b shows (its two nodes across the ring sit
+  at `±0.5 h` on a common radius, `h ≈ 0.028`, so that coarse set had
+  about 1400 nodes).
+
+Three departures from the MATLAB, none of which the papers' figures can
+see: a free node that strays is redrawn in both coordinates instead of
+`y` alone (and instead of being wrapped from `y = 1` to `y = 0`); periodic
+neighbours come from `cKDTree` with a box size in x and none in y rather
+than from tiling; and a circle's rows share their angular positions so
+the pairs stay orthogonal (their spacing varies by `±15 %` between the
+innermost and outermost rows at `r = 0.35`).
+
+`scripts/heat2d_nodesets.py`, 2500 nodes, seed 0, 2026-09-20 (nearest
+neighbour spacing of the free nodes in units of `h`):
+
+```
+case      n       h  per row  straddle  Dirichlet   free   NN/h min  median   max    time
+   1   2500  0.0208       48       576         96   1828      0.847   0.962  1.13   0.15 s
+   2   2500  0.0208       48       576         96   1828      0.842   0.960  1.13   0.15 s
+   3   2500  0.0208      105       630        111   1759      0.825   0.959  1.11   0.14 s
+```
+
+![case 1 nodes](figures/heat2d_nodes_case1.png)
+
+Dissertation Fig. 5-3 (2500 nodes, case 1) shows the same three dense
+rows on each side of `y = 0.6` and `y = 0.8` and the boundary rows.
+
+![case 2 nodes](figures/heat2d_nodes_case2.png)
+
+![case 3 nodes](figures/heat2d_nodes_case3.png)
+
+EABE Fig. 12a/b: the rows follow the ring and the zoom
+`[0.73, 0.79] × [0.24, 0.30]` shows the two interfaces between one
+straddling pair.
+
+Later tickets add their subsections here; E2.11 (#25) closes the section
+with the decisions and the regeneration commands.
