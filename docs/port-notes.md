@@ -329,5 +329,146 @@ EABE Fig. 12a/b: the rows follow the ring and the zoom
 `[0.73, 0.79] × [0.24, 0.30]` shows the two interfaces between one
 straddling pair.
 
+### 2.2 RBF-FD weights, the interface-blind operators and the control (E2.2)
+
+**Weights** (`heat2d.rbf`). The saddle-point system of EABE eq. 2
+(dissertation eq. 33): Gaussians ``exp(-(εr)²)`` centred on the stencil's
+nodes plus every bivariate monomial through the stencil's degree, with
+`ε = 0.4/d` and `d` the distance from the centre to its nearest neighbour
+(eq. 31, eq. 45; the MATLAB's `exp(-shp² r² / dmin²)`). Each stencil is
+solved in coordinates scaled by its radius `R` (the MATLAB scaled only its
+polynomial block, by the distance to the farthest node) and the weights of
+an order-`q` operator are divided by `R^q` afterwards. The Gaussian
+derivatives are closed forms; the MATLAB's Laguerre recursion was for its
+hyperviscosity powers. Solves are batched, 4096 stencils per
+`np.linalg.solve`: 0.4 s for the 10,000 42-node stencils of a case-1 set.
+
+On the E2.1 node sets `R/d` runs from 3.2 to 5.4 (median 3.7), the 63 × 63
+systems have condition numbers of 4e5 (median) to 2e6 (worst) at 2500 and
+at 10,000 nodes alike, and every monomial through degree 5 is reproduced to
+3e-16 of `‖w‖₁ ‖p‖∞` (on stencils of uniformly random points the same test
+gives 1e-7: the quasi-uniformity is what keeps the systems tame). The
+truncation error of the Laplacian stencil on `sin 2πx e^y`, RMS over the
+nodes, falls from 2.5e-3 at 2500 nodes to 1.1e-4 at 10,000, order 4.5 per
+halving of `h`; `Dx` from 1.1e-5 to 3.6e-7, order 4.9.
+
+**Stencils and operators** (`heat2d.operators`). 42 nodes / degree 5 away
+from the boundary, 30 / degree 4 within `3/√N` of a Dirichlet curve (the
+MATLAB's `boundVec`, `3 · hApprox` with `hApprox = 1/√N`); the zone holds
+about `6.9 √N` nodes (243, 348, 483, 686 at 1250, 2500, 5000, 10,000). The
+MATLAB also flagged nodes within `3/√N` of `x = 0` and `x = 1`, a remnant of
+its non-periodic variant; the paper's "close to the domain boundary" is
+followed and the x-seam is not a boundary here. Every node, the Dirichlet
+nodes included, gets a row of `Dx` and `Dy`, because the naive operator
+applies them twice; the Dirichlet rows of the assembled operator are then
+replaced by the identity. The naive `Dx A Dx + Dy A Dy` (plan D3) reaches
+the neighbours of the neighbours: 137–148 nonzeros per row against 40–41
+for a direct stencil, which is what makes its solves three to six times
+slower below. The direct `α ∇² + ∇α·∇` on the owning piece is kept for the
+record, as its 1-D twin was, and supplies E2.3's rows off the interfaces.
+
+**The control and case 1** (`scripts/heat2d_control.py`, seed 0,
+2026-09-20; RMS error, order per halving of `h`, solve time):
+
+```
+     n       h  zone |   control-lap  order  time | control-naive  order  time |   case1-naive  order  time |  case1-direct  order  time
+  1250  0.0294   243 |      2.38e-05      -   0.1s |      9.68e-05      -   0.1s |      4.14e-03      -   0.1s |      3.60e-02      -   0.1s
+  2500  0.0208   348 |      4.76e-06   4.67   0.1s |      2.23e-06  10.94   0.4s |      2.78e-03   1.15   0.4s |      3.61e-02  -0.00   0.1s
+  5000  0.0149   483 |      7.77e-07   5.44   0.3s |      1.35e-07   8.40   1.5s |      1.36e-03   2.14   1.5s |      3.61e-02  -0.00   0.3s
+ 10000  0.0105   686 |      1.59e-07   4.55   0.8s |      2.78e-08   4.53   2.9s |      1.28e-03   0.19   2.8s |      3.62e-02  -0.01   0.9s
+```
+
+The control is `α ≡ 1`, `u = sin 2πx` on `y = 1`, 0 on `y = 0`, exact
+solution `sin 2πx sinh 2πy / sinh 2π` (`heat2d.exact.control_exact`); case
+1 is EABE eq. 32–34 with the analytic eq. 34 (`case1_exact`, checked
+against MATLAB `laplaceSetup.m`'s 6 × 6 system to 1e-13). At 20,000 nodes
+(node set 1.3 s, the four operators 3.2 s, direct solves 1.6 s, naive
+solves 9.9 s) the errors are 2.65e-8, 5.81e-9, 4.42e-4 and 3.64e-2.
+
+- *Control, Laplacian stencil*: order 4.7, 5.4, 4.6, 5.2 per halving of
+  `h`, a fit of 4.9 over 1250–20,000 nodes. The 30 / degree-4 zone does not
+  show in the RMS.
+- *Control, `Dx Dx + Dy Dy`*: order 4.5 from 2500 nodes on and an error
+  five times smaller than the Laplacian stencil's there. The 1250-node
+  point is spoiled by a spurious growing mode of the product operator (see
+  the spectrum below); seed 1 gives 8.1e-6 at 1250, seed 2 1.03e-4.
+- *Case 1, naive*: first order with the scatter of random node sets. The
+  fit of `log error` against `log h` over 1250–10,000 nodes is 1.1 for
+  seed 0, 1.6 and 1.3 for seeds 1 and 2:
+
+  ```
+      n |  seed 0   seed 1   seed 2
+   1250 | 4.14e-3  4.28e-3  3.12e-3
+   2500 | 2.78e-3  2.44e-3  3.05e-3
+   5000 | 1.36e-3  1.16e-3  1.37e-3
+  10000 | 1.28e-3  8.31e-4  8.18e-4
+  ```
+
+  This is the 2-D analogue of the "FD4" line of EABE Fig. 10 (whose
+  own wobble is visible in the rendered figure); it is the top line the
+  E2.3 stencils are measured against.
+- *Case 1, direct*: 3.6e-2 at every count, the 2-D twin of the straight
+  line of dissertation §4.2. Blind to the jump, as intended.
+
+![control and case-1 convergence](figures/heat2d_control_convergence.png)
+
+**The control's spectrum** (the α ≡ 1 baseline of epic #4, item 6). The
+eigenvalues of the interior operators (Dirichlet rows removed,
+`heat1d.march.interior_operator` with the node set's mask), 2000 nodes,
+`h = 0.0238`, BD4 at `dt = h`:
+
+```
+operator        eigs  complex     max Re   h² min Re  h² max |Im|  BD4 max |ζ|
+control-lap     1916     1096     -9.870      -13.47        0.119        0.790
+control-naive   1916     1638     -9.870       -6.84        0.747        0.790
+```
+
+- Scattered-node RBF-FD is non-normal without any interface: 1096 of the
+  1916 Laplacian eigenvalues are complex, 1638 of the product operator's,
+  and the complex modes are not confined to the boundary zone (the median
+  complex eigenvector carries 10–14 % of its mass in a zone holding 19 % of
+  the nodes). The 1-D finding that the complex eigenvalues came entirely
+  from the one-sided end rows does not carry over to 2-D; Fig. 5-6's cloud
+  is the scattered-node method's own before any interface is added.
+- The physical eigenvalues `-π²`, `-4π²`, `-5π²` (the modes `sin πy`,
+  `sin 2πy` and `sin 2πx sin πy` of the periodic strip) come out to four
+  digits from both operators.
+- The product operator's spectrum is half as deep on the real axis
+  (`h² min Re` −6.8 against −13.5) and six times as wide in the imaginary
+  direction (0.75 against 0.12).
+- At 1250 and 1600 nodes the product operator has a real **positive**
+  eigenvalue: 169, 207 and 35 at 1250 for seeds 0, 1, 2; 992, 18 and −2.4
+  at 1600; the rightmost eigenvalue is `-π²` for every seed from 2000
+  nodes on. Its eigenvector sits on a handful of nodes (26–69 % of its mass
+  on five) at `y ≈ 0.67`, where the straddling rows of `y = 0.6` meet the
+  2h-wide strip of free nodes inside the band, and BD4 at `dt = h`
+  amplifies it (root modulus 2.0 at 1250). The Laplacian stencil has no such
+  mode at any count tried. From 2000 nodes BD4 at `dt = h` damps every
+  mode of both operators (largest root modulus 0.79).
+
+![control spectra](figures/heat2d_control_spectrum.png)
+
+**Decisions (E2.2).**
+
+- Stencil algebra in local coordinates scaled by the stencil radius, `ε`
+  from the centre's own nearest neighbour (E1 lesson 5 applied to the
+  weights; the continuity matrices of E2.3 will follow).
+- The boundary zone is measured from the Dirichlet curves only; the MATLAB's
+  x-seam check is not ported.
+- `heat1d.march` now takes a Dirichlet mask or index list (`dirichlet=`)
+  with `boundary(t)` returning the values in index order; the 1-D default is
+  `{0, n−1}` and the 1-D results are unchanged (epic #4, item 7). E2.5 marches
+  the 2-D operators through it with `nodes.dirichlet`.
+- `heat2d.exact.LayeredExact` gives the eq. 34 / eq. 86 solution for any
+  stack of constant-α layers and any growth rate `c_t`, so E2.5's parabolic
+  case 1 has its reference already.
+- The product operator's coarse-set growing mode is recorded, not fixed:
+  it is the baseline's own failure, and the case sweeps of E2.5–E2.7 start
+  at 1250 nodes as the papers do, so the first naive point may carry it.
+
+Regenerate with `uv run python scripts/heat2d_control.py` (16 s at the
+defaults; `--spectrum-n 1250` shows the growing mode, `--counts 2500 5000
+10000 20000` the 20,000-node points, about 40 s).
+
 Later tickets add their subsections here; E2.11 (#25) closes the section
 with the decisions and the regeneration commands.
