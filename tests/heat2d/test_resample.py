@@ -6,9 +6,12 @@ import pytest
 from heat_interfaces.heat2d.domain import build_node_set, case1
 from heat_interfaces.heat2d.exact import case1_exact
 from heat_interfaces.heat2d.fd4 import cartesian_grid
+from heat_interfaces.heat2d.interface import interpolation_weights
+from heat_interfaces.heat2d.neighbors import knn
 from heat_interfaces.heat2d.operators import (
     build_stencils,
     interface_aware_operator,
+    interface_crossings,
 )
 from heat_interfaces.heat2d.rbf import BOUNDARY
 from heat_interfaces.heat2d.resample import Reference, reference_solution, resample
@@ -79,6 +82,31 @@ def test_resampling_is_the_identity_on_the_nodes_and_covers_a_grid_and_the_seam(
         np.array([0.5]),
     )
     assert seam[0] == pytest.approx(float(EXACT(0.0, 0.5)), abs=1e-8)
+
+
+def test_points_sharing_a_crossing_centre_match_the_one_point_systems():
+    # Several points nearest one fine node whose stencil crosses an interface
+    # go through one translated-basis system; each must equal its own.
+    f = fine_set()
+    nodes, st = f["nodes"], f["aware"]
+    group = st.groups[-1]
+    cross = interface_crossings(nodes, DOMAIN.material, group.index)
+    row = group.index[np.flatnonzero(cross)[7]]
+    rng = np.random.default_rng(11)
+    theta = rng.uniform(0.0, 2 * np.pi, 6)
+    px = nodes.x[row[0]] + 0.2 * nodes.h * np.cos(theta)
+    py = nodes.y[row[0]] + 0.2 * nodes.h * np.sin(theta)
+    assert np.all(knn(nodes.xy, 1, query=np.column_stack([px, py]))[0][:, 0] == row[0])
+    got = resample(f["u"], nodes, st, DOMAIN.material, px, py)
+    for k in range(6):
+        w = interpolation_weights(
+            nodes.xy[row],
+            DOMAIN.material,
+            group.spec.degree,
+            (px[k : k + 1], py[k : k + 1]),
+        )
+        assert got[k] == pytest.approx(float(w[0] @ f["u"][row]), abs=1e-12)
+    assert np.abs(got - EXACT(px, py)).max() < 1e-7
 
 
 def test_resample_refuses_bad_shapes():

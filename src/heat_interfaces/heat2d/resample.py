@@ -94,17 +94,29 @@ def resample(
                 shape,
             )
             out[plain] = np.einsum("ij,ij->i", w, u[plain_idx])
-        for p, i in zip(sel[cross], idx[cross], strict=True):
+        crossing = sel[cross]
+        if not crossing.size:
+            continue
+        # Points sharing a fine node share its stencil: one translated-basis
+        # system per centre, with every point of the centre on its right-hand
+        # side, as the plain branch batches its systems.
+        centres, first, inverse = np.unique(
+            centre[crossing], return_index=True, return_inverse=True
+        )
+        order = np.argsort(inverse, kind="stable")
+        bounds = np.searchsorted(inverse[order], np.arange(centres.size + 1))
+        for k, row in enumerate(idx[cross][first]):
+            pts = crossing[order[bounds[k] : bounds[k + 1]]]
             w = interpolation_weights(
-                nodes.xy[i],
+                nodes.xy[row],
                 material,
                 g.spec.degree,
-                (x[p : p + 1], y[p : p + 1]),
+                (x[pts], y[pts]),
                 shape,
                 curvature,
                 warp,
             )
-            out[p] = w[0] @ u[i]
+            out[pts] = w @ u[row]
     return out
 
 

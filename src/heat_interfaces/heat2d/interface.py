@@ -603,12 +603,25 @@ class InterfaceStencil:
         """The anchor frame: that of the interface next to the centre's region."""
         return self.interfaces[self.regions[self.anchor].frame].frame
 
+    def reach(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """The region of each point, refused where the stencil has no basis.
+
+        Both ``basis`` and ``gaussian_coordinates`` go through here, so an
+        out-of-reach point is a ``ValueError`` whichever is called first; the
+        warp's slope table would otherwise be indexed past its end (or, with
+        the warp off, the point read as if the stencil covered it).
+        """
+        region = self.band.region_index(x, y)
+        if region.size == 0:
+            raise ValueError("no points to read")
+        if region.min() < min(self.regions) or region.max() > max(self.regions):
+            raise ValueError("a point lies in a region the stencil does not reach")
+        return region
+
     def basis(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """``(len(x), q)``: the translated basis at points, in each point's frame."""
         x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
-        region = self.band.region_index(x, y)
-        if region.min() < min(self.regions) or region.max() > max(self.regions):
-            raise ValueError("a point lies in a region the stencil does not reach")
+        region = self.reach(x, y)
         out = np.empty((x.size, polynomial_count(self.degree)))
         for index, reg in self.regions.items():
             mask = region == index
@@ -621,7 +634,8 @@ class InterfaceStencil:
         self, x: np.ndarray, y: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray]:
         """``(xi, eta)`` of points in the Gaussian block's coordinates (see ``xi``)."""
-        region = self.band.region_index(x, y)
+        x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        region = self.reach(x, y)
         return _gaussian_coordinates(
             x, y, region, self.xy[0], self.anchor, self.scale, self.frame, self.warp
         )

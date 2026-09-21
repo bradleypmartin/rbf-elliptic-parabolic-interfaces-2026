@@ -372,8 +372,9 @@ def print_reference(ref: Reference, reused: bool, rows: list[dict[str, float]]) 
     estimate, n = reference_error_estimate(rows, ref.nodes.n)
     finest = next(r["curved"] for r in rows if r["n"] == n)
     print(
-        f"its own error, from the {n}-node curved point at fourth order:"
-        f" about {estimate:.1e} (that point's measured error is {finest:.2e})"
+        f"its own error, from the {n}-node curved point if the error falls as N^-2:"
+        f" about {estimate:.0e} to one figure, the local order not being pinned"
+        f" (that point's measured error is {finest:.2e})"
     )
 
 

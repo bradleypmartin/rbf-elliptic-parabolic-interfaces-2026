@@ -830,3 +830,26 @@ def test_interface_stencil_exposes_the_blocks_stencil_weights_solves():
     np.testing.assert_allclose(np.hypot(plain.xi, plain.eta), r / r.max(), atol=1e-15)
     with pytest.raises(ValueError, match="one region"):
         interface_stencil(nodes.xy[idx[0]][:1].repeat(30, axis=0) + 1e-3, band, P)
+
+
+@pytest.mark.parametrize("warp", [True, False])
+def test_gaussian_coordinates_alone_refuse_a_point_the_stencil_does_not_reach(warp):
+    # The warp's slope table is indexed by region: without the guard an
+    # out-of-reach point is an IndexError with the warp on and a silent
+    # misread with it off. ``basis`` and ``gaussian_coordinates`` share it.
+    domain = case1()
+    nodes = build_node_set(domain, 1250, iterations=20)
+    idx, _ = knn(nodes.xy, 30)
+    region = domain.material.region_index(nodes.x, nodes.y)
+    lo, hi = region[idx].min(axis=1), region[idx].max(axis=1)
+    i = int(np.flatnonzero((lo == 0) & (hi == 1))[0])
+    st = interface_stencil(nodes.xy[idx[i]], domain.material, P, warp=warp)
+    far = (nodes.x[idx[i, :1]], np.array([0.9]))
+    for method in (st.gaussian_coordinates, st.basis):
+        with pytest.raises(ValueError, match="does not reach"):
+            method(*far)
+    with pytest.raises(ValueError, match="no points"):
+        st.reach(np.empty(0), np.empty(0))
+    near = (nodes.x[idx[i, :3]], nodes.y[idx[i, :3]] + 1e-4)
+    xi, eta = st.gaussian_coordinates(*near)
+    assert xi.shape == eta.shape == (3,)

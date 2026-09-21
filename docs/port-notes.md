@@ -978,17 +978,23 @@ analytic values, aware then blind; `--check-n`):
   = 0.010`), so no crossing fine stencil is ever asked; grid points land
   anywhere, which is why the grid column is bad at every count.
 - Reading 80,000 points costs 5.8 s, of which the per-stencil Python loop
-  over the 2300 crossing stencils is most.
+  over the 2300 crossing stencils is most. Points that share a fine centre
+  share one system (its second commit, after review): that leaves the
+  80,000-node read at 5.8 s, since coarse nodes rarely share a centre, and
+  cuts the 640,800-point grid read of the FD4 table below from 48.5 s to
+  29.5 s.
 
 **The reference's own error** (the E1 breadcrumb on #20). If the curved
 error falls as `N⁻²`, the measured difference at `N` is `m(N) = e(N)(1 −
 q)` with `q = (N/160,000)²`, and the reference's own error is
 `e(R) = q m/(1 − q)`: from the 80,000-node point (7.52e-9 measured) about
-**2.5e-9**, a third of that point; at 40,000 nodes `q = 1/16` and the
-reference moves the plotted value by 6 %. So the fourth-order line has to
-bend once `N` passes about 10⁵, the 80,000-node marker sits where the bend
-begins (its true error is nearer 1.0e-8 than 7.5e-9), and the 40,000-node
-one is inside the trustworthy range. EABE Fig. 10 and 11 plotted the same
+**3e-9**, a third of that point, to one figure only: the order per halving
+in the table below swings between 2 and 6, so the exponent is the assumed
+one and not a fitted one (fitting the last three points gives 4.4 and
+2e-9). At 40,000 nodes `q = 1/16` and the reference moves the plotted value
+by 6 %. So the fourth-order line has to bend once `N` passes about 10⁵, the
+80,000-node marker sits where the bend begins (its true error is nearer
+1e-8 than 7.5e-9), and the 40,000-node one is inside the trustworthy range. EABE Fig. 10 and 11 plotted the same
 seven counts against the same 160,000-node reference, so their last marker
 carries the same caveat.
 
