@@ -22,7 +22,9 @@ Cartesian FD4 baseline ``Dx A Dx + Dy A Dy`` of EABE Fig. 10 and 14 on a grid
 that is itself a ``NodeSet``; ``resample``: reading a fine solution at other
 points through the fine set's own stencils, the translated basis where they
 cross an interface, and the cached ``Reference`` runs of the cases without
-an analytic solution (E2.6).
+an analytic solution (E2.6); ``precondition``: the diagonal dominance ratio
+and Appendix B's row-recombination preconditioner, with ``solve``'s reduced
+interior system, ``gmres`` / ``bicgstab`` and ``spilu`` (E2.8).
 """
 
 from .domain import (
@@ -129,6 +131,13 @@ from .operators import (
     laplacian_operator,
     naive_operator,
 )
+from .precondition import (
+    NEIGHBOURS,
+    SWEEPS,
+    diagonal_dominance_ratio,
+    dominance_preconditioner,
+    neighbour_table,
+)
 from .rbf import (
     BOUNDARY,
     GA_SHAPE,
@@ -147,7 +156,18 @@ from .rbf import (
     rbf_interpolation_weights,
 )
 from .resample import Reference, reference_solution, resample
-from .solve import normalized_l2, rms_error, solve_equilibrium
+from .solve import (
+    ILU_ORDERING,
+    METHODS,
+    IterativeResult,
+    ReducedSystem,
+    ilu_preconditioner,
+    normalized_l2,
+    reduced_system,
+    rms_error,
+    solve_equilibrium,
+    solve_iterative,
+)
 
 __all__ = [
     "BOUNDARY",
@@ -267,4 +287,16 @@ __all__ = [
     "rbf_interpolation_weights",
     "reference_solution",
     "resample",
+    "ILU_ORDERING",
+    "METHODS",
+    "NEIGHBOURS",
+    "SWEEPS",
+    "IterativeResult",
+    "ReducedSystem",
+    "diagonal_dominance_ratio",
+    "dominance_preconditioner",
+    "ilu_preconditioner",
+    "neighbour_table",
+    "reduced_system",
+    "solve_iterative",
 ]

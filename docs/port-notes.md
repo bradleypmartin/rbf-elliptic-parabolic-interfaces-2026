@@ -1427,5 +1427,257 @@ reference 76 s, RBF-FD sweep 2.5 min, FD4 sweep 22 min of which the
 1.28M-point grid is 7.5 min, the resampling check 54 s, the mesh plot
 16 s).
 
+### 2.8 Case 3 solved iteratively: the control problem, gmres and bicgstab, and Appendix B's diagonal-dominance preconditioner (E2.8)
+
+**The problem** (dissertation §5.4.4 and Appendix B, EABE §3.3.2;
+`scripts/heat2d_iterative.py`). Case 3 of §2.7 solved with `gmres` and
+`bicgstab` in place of SuperLU, on the section's 19-node / degree-3 stencils
+everywhere (`rbf.ITERATIVE`; curvature and warped Gaussians where they cross
+the ring), next to the *control problem*: case 3's geometry, rows and
+boundary data with `α ≡ 1`, here the plain RBF-FD Laplacian with no
+interface group at all ("no interfaces are actually present"; the case-3
+driver's `no_ring()`, the same material through 1 : 1 : 1 chains, is FD4's
+control of §2.7). 2016 found the iterative solvers competitive with
+backslash on the control (Fig. 5-16), gmres "far slower" on case 3 and
+bicgstab failing outright (Fig. 5-17), and both restored by Appendix B's
+preconditioner (Fig. 5-18). Errors are RMS against the 160,000-node
+references of §2.7 read at the nodes through the fine stencils: case 3's
+cached file, and the control's twin
+(`outputs/heat2d_case3_control_reference_n160000_seed0.npz`, 82 s: node set
+8.7 s, operator 42.3 s, solve 31.2 s). The tolerance is `|r| ≤ 1e-8 |b|`;
+every iterative solution lands within 4e-11 to 6e-6 (relative) of the direct
+one against a discretisation error of 1e-3 to 1e-4 relative, so the error
+columns below agree to three figures and the 2016 device of plotting the
+error against the time to solution is available.
+
+**The reduced system, and a trap.** The iterative solvers see the interior
+block of the operator with the Dirichlet columns moved to the right-hand
+side (`heat2d.solve.reduced_system`, `ReducedSystem`; the same solution as
+`solve_equilibrium` to 1e-12). On the identity-row form that the direct
+path keeps, `bicgstab` breaks down at its **first** step on either problem,
+ring or not: the right-hand side lives on the Dirichlet rows alone, so the
+shadow residual `r̂ = b` is exactly orthogonal to every later residual
+(`r̂ · (b − A b) = 0` when the Dirichlet rows are the identity;
+`tests/heat2d/test_solve.py::test_bicgstab_breaks_down_on_the_identity_row_form`).
+It is not 2016's failure, which spared the control problem, but it is the
+one way found here to make bicgstab "completely fail".
+
+**Appendix B, transcribed** (`heat2d.precondition`). A row's diagonal
+dominance ratio (DDR, eq. 93) is `|a_ii| / Σ_{j≠i} |a_ij|`; the sweep adds to
+a row, neighbour by neighbour outward from the diagonal, `−r_j / a_jj` times
+the *original* row of neighbour `j`, cancelling the combined row's weight
+there (eq. 94–97). The 1-D worked example, eq. 93's `D_Loc` transcribed to
+its two printed decimals, comes back step by step: DDR 0.848, 0.802, 0.865,
+0.940, 0.971 against the printed 0.846, 0.808, 0.872, 0.936, 0.968, and
+`P_m = (0.021, 0.048, 0.149, 1, 0.603, 0.267, 0.125)` against eq. 98's
+`(0.02, 0.05, 0.15, 1, 0.60, 0.27, 0.13)`
+(`test_appendix_b_worked_example_is_reproduced_step_by_step`). The 2-D
+recipe is the dissertation's for case 3: the 37 nearest nodes in distance
+order, one sweep out, one in (farthest first), one out again, for every
+interior row ("each RBF-FD stencil"); a Dirichlet neighbour is skipped,
+its column being on the right-hand side already. `dominance_preconditioner`
+runs the 111 cancellation steps for all rows at once, one sparse product
+per step, and returns `P`; the preconditioned problem is `P A u = P b`
+(eq. 99) formed explicitly, not SciPy's `M`. `P A` carries 89–93 nonzeros
+per row against the operator's 19; `P` builds in 0.06 s at 1250 nodes and
+1.4 s at 20,000.
+
+**`spilu`, and its ordering.** The off-the-shelf comparison of plan D6 is
+SuperLU's incomplete LU at its default drop tolerance 1e-4 and fill factor
+10, used as SciPy's `M`. At SuperLU's default column ordering (COLAMD) the
+factor is nonsense on case 3 from 20,000 nodes on: `M b` is off the solution
+by 1e67 (3.8e28 at 40,000), bicgstab breaks down at step 1 and gmres stops
+after one step 0.9 away from the solution; on the control it merely
+degrades (47 and 79 bicgstab iterations at 20,000 and 40,000 where 10,000
+took 3). The symmetric-pattern ordering `MMD_AT_PLUS_A`, everything else
+equal, holds 2–3 bicgstab iterations to 40,000 nodes on both problems with
+less fill (6.4–7.4× the operator's nonzeros against 7.7–8.3×) and faster
+builds; full partial pivoting (`diag_pivot_thresh = 1`) does not rescue
+COLAMD (144 iterations at 20,000, divergence at 40,000), a fill factor of
+20 does (5 and 9 iterations), and a drop tolerance of 1e-5 makes it worse
+(a factor "exactly singular" at 10,000). Probed 2026-09-21 at 10,000,
+20,000 and 40,000 nodes; `ILU_ORDERING = "MMD_AT_PLUS_A"` is the module's
+default and `--ilu-ordering COLAMD` reproduces the failure.
+
+**The setup, the direct solve and the DDR** (`--reference-n 160000
+--counts 1250 … 20000`, seed 0, 2026-09-21; `interior` is the reduced
+system's size, `group` the rows whose stencils cross the ring, `build` the
+node set with stencils and operator, `direct` SuperLU on the reduced
+system; DDR min / median / fraction below 1 over every interior row and
+over the group, before and after the three sweeps; `P build` and the
+nonzeros per row of `P A`; `ilu` the `spilu` build):
+
+```
+control (α ≡ 1, no interface group)
+     n  interior  group  build  nnz/row  direct  direct err |  DDR all: min  med  <1 |  P build  nnz/row | after all: min  med  <1 |  ilu
+  1250      1171      0   0.1s     18.5   0.01s    2.21e-03 |  0.634 0.798 0.98 |   0.06s     88.9 |  0.866 0.939 0.77 |  0.00s
+  2500      2389      0   0.2s     18.6   0.02s    7.78e-04 |  0.652 0.789 0.99 |   0.12s     90.5 |  0.914 0.936 0.84 |  0.01s
+  5000      4845      0   0.4s     18.7   0.04s    2.02e-04 |  0.617 0.786 0.99 |   0.25s     91.7 |  0.909 0.936 0.89 |  0.04s
+ 10000      9780      0   0.9s     18.8   0.10s    8.10e-05 |  0.657 0.783 1.00 |   0.56s     92.5 |  0.914 0.935 0.92 |  0.10s
+ 20000     19690      0   1.5s     18.9   0.26s    2.43e-05 |  0.599 0.783 1.00 |   1.40s     93.2 |  0.903 0.935 0.95 |  0.26s
+
+case 3 (the ring at 1500 : 1, curvature and warp on)
+     n  interior  group  build  nnz/row  direct  direct err |  DDR all: min  med  <1 | group: min  med  <1 |  P build  nnz/row | after all: min  med  <1 | group: min  med  <1 |  ilu
+  1250      1171    300   0.6s     18.5   0.01s    2.94e-03 |  0.167 0.786 0.98 | 0.167 0.631 1.00 |   0.06s     88.9 |  0.413 0.923 0.79 | 0.413 0.490 1.00 |  0.00s
+  2500      2389    420   0.9s     18.6   0.02s    1.16e-03 |  0.207 0.786 0.99 | 0.207 0.612 1.00 |   0.12s     90.5 |  0.475 0.933 0.84 | 0.475 0.514 1.00 |  0.01s
+  5000      4845    588   1.4s     18.7   0.04s    4.07e-04 |  0.240 0.785 0.99 | 0.240 0.584 1.00 |   0.25s     91.7 |  0.469 0.934 0.89 | 0.469 0.546 1.00 |  0.04s
+ 10000      9780    836   2.4s     18.8   0.10s    1.63e-04 |  0.267 0.782 1.00 | 0.267 0.546 1.00 |   0.57s     92.5 |  0.452 0.934 0.92 | 0.452 0.561 1.00 |  0.10s
+ 20000     19690   1176   3.9s     18.9   0.27s    5.78e-05 |  0.285 0.782 1.00 | 0.285 0.531 1.00 |   1.39s     93.2 |  0.455 0.934 0.95 | 0.455 0.566 1.00 |  0.25s
+```
+
+**The iterative solves** (inner iterations and the solver's own seconds;
+full GMRES, then SciPy's restarted GMRES(20), then BiCGSTAB; each without
+preconditioning, with Appendix B's `P`, with `spilu`; every solve converged
+to the tolerance, none broke down; the RMS errors against the reference
+equal the direct solve's to three figures in every cell and are not
+repeated):
+
+```
+control
+     n |   gmres none | gmres App. B |  gmres spilu | gmres(20) none | (20) App. B | (20) spilu | bicgstab none | bicgstab App. B | bicgstab spilu
+  1250 |  110   0.03s |   36   0.01s |    3   0.00s |   202   0.01s |   42  0.00s |   3  0.00s |    73   0.00s |     23    0.00s |     1    0.00s
+  2500 |  152   0.06s |   47   0.01s |    4   0.00s |   234   0.02s |   56  0.01s |   4  0.00s |   116   0.01s |     32    0.01s |     1    0.00s
+  5000 |  191   0.12s |   62   0.03s |    4   0.00s |   428   0.05s |   86  0.03s |   4  0.00s |   136   0.02s |     42    0.02s |     2    0.00s
+ 10000 |  264   0.31s |   85   0.07s |    4   0.00s |   716   0.13s |  119  0.07s |   4  0.00s |   183   0.04s |     57    0.06s |     2    0.00s
+ 20000 |  336   0.73s |  107   0.18s |    5   0.01s |   797   0.25s |  138  0.16s |   5  0.01s |   280   0.11s |     68    0.14s |     2    0.01s
+
+case 3
+     n |   gmres none | gmres App. B |  gmres spilu | gmres(20) none | (20) App. B | (20) spilu | bicgstab none | bicgstab App. B | bicgstab spilu
+  1250 |  139   0.04s |   69   0.01s |    3   0.00s |   231   0.02s |   89  0.01s |   3  0.00s |    98   0.00s |     50    0.01s |     1    0.00s
+  2500 |  167   0.07s |   73   0.02s |    4   0.00s |   271   0.02s |   93  0.02s |   4  0.00s |   130   0.01s |     61    0.02s |     2    0.00s
+  5000 |  248   0.20s |  102   0.06s |    4   0.00s |   482   0.06s |  127  0.04s |   4  0.00s |   182   0.02s |     67    0.03s |     2    0.00s
+ 10000 |  316   0.44s |  132   0.14s |    5   0.00s |   721   0.12s |  181  0.11s |   5  0.00s |   211   0.04s |     89    0.09s |     2    0.00s
+ 20000 |  381   0.95s |  154   0.30s |    6   0.01s |   877   0.26s |  207  0.25s |   6  0.01s |   319   0.12s |    104    0.22s |     2    0.01s
+
+case 3 / control, unpreconditioned (iterations, seconds), and the gmres time ratio read off Fig. 5-17 / 5-16
+  1250  gmres 1.26x  1.58x | bicgstab 1.34x  1.34x | 2016 gmres 75x
+  2500  gmres 1.10x  1.21x | bicgstab 1.12x  1.10x | 2016 gmres 43x
+  5000  gmres 1.30x  1.65x | bicgstab 1.34x  1.26x | 2016 gmres 75x
+ 10000  gmres 1.20x  1.42x | bicgstab 1.15x  1.07x | 2016 gmres 50x
+ 20000  gmres 1.13x  1.29x | bicgstab 1.14x  1.08x | 2016 gmres 71x
+```
+
+![iterative performance](figures/heat2d_iterative_performance.png)
+
+![iterations against N](figures/heat2d_iterative_iterations.png)
+
+- *2016's breakdown is not reproduced.* On our case-3 operator gmres takes
+  1.10–1.30× the control's iterations and 1.2–1.65× its time, bicgstab
+  1.12–1.34× and 1.05–1.34×, where Fig. 5-17 against 5-16 has gmres 43–75×
+  slower in time and no bicgstab line at all; bicgstab converges on case 3
+  at every count (98 to 319 iterations), and none of the 90 solves failed.
+  Our gmres reaches the direct solve's error on case 3 in 0.04–0.95 s where
+  2016's took 0.9–250 s; our SuperLU takes 0.01–0.27 s against backslash's
+  0.04–0.8 s. Why the 2016 rows broke the solvers and ours do not, the lost
+  code cannot tell; the rows here are anchored on the centre's side with a
+  frame at each interface's foot point (§2.3), the same construction whose
+  flat variant was 3–10× better than 2016's on the ring (§2.7). As with the
+  §2.7 discrepancies, this is stated without a theory.
+- *The DDR says the same.* Case 3's crossing rows have DDR 0.17–0.29 at
+  the least and medians 0.53–0.63, against 0.60–0.66 and 0.78–0.80 for the
+  standard rows: lower, but not Fig. B-1a's "large peaks at very low
+  value". At 10,000 nodes they sit in two spikes at 0.26 and 0.41 (the
+  stencils of the two straddling rows are all alike) and a cluster at 0.8
+  (crossing stencils whose centre is off the rows). Not one interior row of
+  either problem is diagonally dominant before preconditioning (the
+  19-node Laplacian rows sit at 0.78–0.80), and the solvers do not mind.
+- *Appendix B works as a preconditioner, less as a dominance restorer.*
+  The three sweeps cut the iterations 3.1–3.2× (gmres) and 3.2–4.1×
+  (bicgstab) on the control and 2.0–2.5× and 2.0–3.1× on case 3, growing
+  with N. The median DDR over all rows rises from 0.78 to 0.93 and 5–23 %
+  of the rows become dominant (more at small N); the crossing rows' least
+  DDR rises from 0.17–0.29 to 0.41–0.48, but their median does not move
+  (0.63 → 0.49 at 1250, 0.53 → 0.57 at 20,000): the neighbours' rows bring
+  their own off-diagonal mass in, and the group's histogram spreads over
+  0.45–0.6 instead of shifting up (Fig. B-1 twin below). Applied to the
+  crossing rows alone (the probe of 2026-09-21 at 2500 and 5000 nodes, not
+  in the driver) the sweeps move the group's DDR the same way (least 0.21 →
+  0.48, median 0.61 → 0.51) and cut the iteration counts by 5–9 % only; the
+  gain comes from preconditioning every row. In wall-clock the gain is
+  gmres's: 0.95 → 0.30 s at 20,000 nodes, full GMRES's cost being quadratic
+  in the iterations; bicgstab gets slower (0.12 → 0.22 s), each product
+  with `P A` costing five times the operator's, and the `P` build (1.4 s at
+  20,000) exceeds the direct solve (0.27 s) at every count. Fig. 5-18 has
+  2016's preconditioned gmres at 0.9–5× and bicgstab at 0.6–1.8× of
+  backslash's time; ours, solver alone, are 1.0–1.5× (gmres) and 0.75–1.0×
+  (bicgstab) of SuperLU's, and 6–8× with the `P` build counted.
+- *`spilu` is the strong baseline.* 3–6 gmres and 1–2 bicgstab iterations
+  at every count on both problems, its build (0.00–0.26 s) about the
+  direct solve's time, so bicgstab with `spilu` ties SuperLU in total
+  time (0.26 against 0.27 s at 20,000) and no iterative variant beats it.
+  The direct solve is 0.01 s at 1250 nodes and 0.27 s at 20,000; the only
+  unpreconditioned solve under it is bicgstab from 10,000 nodes on (0.04
+  against 0.10 s, 0.12 against 0.27 s), where 2016's bicgstab was 1.7×
+  slower than backslash at the last marker. Full GMRES is 3.5× the direct
+  solve at 20,000 (2016: 5×).
+- *Iterations grow like √N or a little slower.* Over the 16-fold range,
+  gmres 110 → 336 (exponent 0.40) and bicgstab 73 → 280 (0.48) on the
+  control, 139 → 381 (0.36) and 98 → 319 (0.43) on case 3. GMRES(20) needs
+  1.5–2.7× the iterations of full GMRES and is 2.4–3.7× faster in time at
+  10,000–20,000 nodes, the orthogonalisation being what full GMRES pays for.
+- *The 19 / 3 stencils converge at third order.* Control 2.21e-3 →
+  2.43e-5 over 1250–20,000 nodes (fit 3.25; 3.0, 3.9, 2.6, 3.5 per
+  doubling of N), case 3 2.94e-3 → 5.78e-5 (fit 2.83), 1.3–2.4× the
+  control's. Against the 2016 markers, read with the counts taken to be
+  1250 … 20,000: control 1.7, 1.3, 1.0, 1.2, 1.7× (the same error sequence,
+  which is what supports the reading), case 3 2.9, 2.9, 3.1, 3.3, 4.1×; in
+  2016 the case-3 error was 0.75× the control's, here 1.3–2.4×.
+
+**Fig. B-1 twin and the DDR of the other operators** (`--ddr-n 10000`):
+
+```
+case 3 at 10,000 nodes: the 836 rows crossing the ring, median DDR 0.546 (min 0.267) before, 0.561 (min 0.452) after;
+all 9780 interior rows 0.782 before, 0.934 after; fraction below 1: 1.00 → 0.92
+
+DDR of other operators on the same node set (min / median / <1; the crossing rows)
+  case 3, 19 / 3, warp on (this study)   0.267 0.782 1.00 | 0.267 0.546 1.00
+  case 3, 19 / 3, plain Gaussians        0.330 0.782 1.00 | 0.330 0.516 1.00
+  case 3, 42 / 5 and 30 / 4 (E2.7)       0.080 0.608 1.00 | 0.080 0.681 1.00
+  control, 19 / 3                        0.657 0.783 1.00 | no group
+  control, 42 / 5 and 30 / 4             0.318 0.608 1.00 | no group
+```
+
+![DDR histograms](figures/heat2d_iterative_ddr.png)
+
+- The bigger stencils are the less dominant: E2.7's 42 / 5 and 30 / 4
+  operator has a least DDR of 0.08 and a median of 0.61 on case 3 (0.32 and
+  0.61 on the control) against 0.27 and 0.78 for the 19 / 3, so the E4.5
+  (#36) operators, on the papers' stencils with seed rows, start lower than
+  anything here. The warp does not decide the dominance either way (least
+  0.33 with plain Gaussians against 0.27 warped, median 0.516 against
+  0.546), so the E2.7 note's "take the papers' setting" stands.
+
+**Decisions (E2.8).**
+
+- The iterative solvers see the reduced interior system (`reduced_system`);
+  `solve_equilibrium` keeps its identity-row form for the direct path.
+  The identity-row bicgstab breakdown is pinned by a test as the trap it is.
+- Full GMRES is the primary (MATLAB's default; one Arnoldi cycle of up to
+  `maxiter` steps, SciPy's `legacy` semantics so that a cycle ending on the
+  preconditioned residual is followed by another until the true residual
+  passes), SciPy's GMRES(20) alongside; `rtol = 1e-8`, cap 3000 inner
+  iterations; inner iterations are what is counted.
+- Appendix B is applied to every interior row with 37 neighbours and
+  three sweeps (out, in, out), Dirichlet neighbours skipped, the original
+  rows combined, and `P A u = P b` formed explicitly (eq. 99).
+- `spilu` at its default drop tolerance and fill factor with the
+  `MMD_AT_PLUS_A` ordering (`ILU_ORDERING`), SuperLU's COLAMD default having
+  failed from 20,000 nodes; the driver's `--ilu-ordering` reaches it.
+- Times are the solver's wall-clock; a preconditioner's build is a
+  separate column, included in the filled markers of the performance
+  figure and excluded from the hollow ones.
+- The 2016 markers are read off Fig. 5-16 to 5-18 as `(seconds, error)`
+  pairs (`FIG2016` in the driver, ±15 %), the counts taken to be 1250 to
+  20,000 since neither text states them.
+- The ticket's "done when" (bicgstab fails and gmres is slow on case 3,
+  both recover with Appendix B) is answered rather than met: neither
+  fails here, and the DDR before and after is tabulated above.
+
+Regenerate with `uv run python scripts/heat2d_iterative.py` (31 s with the
+references cached; the control's 40,000-node reference adds 16 s the first
+time) and `uv run python scripts/heat2d_iterative.py --reference-n 160000
+--counts 1250 2500 5000 10000 20000` for the tables above (46 s cached; the
+control's 160,000-node reference adds 82 s the first time).
+
 Later tickets add their subsections here; E2.11 (#25) closes the section
 with the decisions and the regeneration commands.
