@@ -141,6 +141,22 @@ def test_interface_group_holds_exactly_the_nodes_whose_interior_stencil_crosses(
     assert not interface_crossings(nodes, ONE, interior.index).any()
 
 
+def test_crossing_test_uses_the_largest_stencil_size_not_the_interior_one():
+    # With a 19-node interior and 30-node boundary and interface stencils the
+    # crossing test must look at 30 nodes, or a boundary stencil could see a
+    # jump that the smaller interior stencil does not.
+    nodes, _ = node_set(1250)
+    st = build_stencils(nodes, DOMAIN, ITERATIVE, BOUNDARY, interface=BOUNDARY)
+    region = DOMAIN.material.region_index(nodes.x, nodes.y)
+    idx30, _ = knn(nodes.xy, BOUNDARY.size)
+    np.testing.assert_array_equal(st.near_interface, np.ptp(region[idx30], axis=1) > 0)
+    idx19, _ = knn(nodes.xy, ITERATIVE.size)
+    assert st.near_interface.sum() > (np.ptp(region[idx19], axis=1) > 0).sum()
+    for g in st.groups:
+        if g.kind != INTERFACE_KIND:
+            assert not interface_crossings(nodes, DOMAIN.material, g.index).any()
+
+
 # --- derivative matrices ----------------------------------------------------
 
 

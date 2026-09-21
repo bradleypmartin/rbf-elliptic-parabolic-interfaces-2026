@@ -18,9 +18,9 @@ and blind to a jump. With ``α ≡ 1`` it is the Laplacian of the control
 problem. ``interface_aware_operator`` (E2.3, dissertation §5.3) is the same
 operator with the rows of the stencils that cross an interface recomputed
 on the translated basis of ``interface.py``: ``build_stencils`` given an
-``interface`` spec puts every node whose interior stencil would cross an
-interface into a third group of 30-node / degree-4 stencils (EABE §3,
-"across interfaces"), so no standard stencil ever sees a jump, and the
+``interface`` spec puts every node whose stencil at the largest size would
+cross an interface into a third group of 30-node / degree-4 stencils (EABE
+§3, "across interfaces"), so no standard stencil ever sees a jump, and the
 members of that group whose own 30 nodes cross are translated.
 """
 
@@ -67,7 +67,7 @@ class Stencils:
     """Every node's stencil, grouped by spec and kind.
 
     ``near_boundary`` marks the boundary zone; ``near_interface`` the nodes
-    whose interior stencil crosses an interface (all False unless
+    whose stencil at the largest size crosses an interface (all False unless
     ``build_stencils`` was given an ``interface`` spec).
     """
 
@@ -118,10 +118,12 @@ def build_stencils(
 ) -> Stencils:
     """Nearest-neighbour stencils: ``interior`` off the zones, ``boundary`` in the zone.
 
-    With an ``interface`` spec, every node whose ``interior``-size stencil
-    crosses an interface of ``domain.material`` gets that spec instead (the
-    interface group takes precedence over the boundary zone); without one
-    the interfaces are ignored, as the naive operator wants.
+    With an ``interface`` spec, every node whose stencil at the largest of
+    the three sizes crosses an interface of ``domain.material`` gets that
+    spec instead (the interface group takes precedence over the boundary
+    zone), so no stencil of any group but the interface group can see a
+    jump; without one the interfaces are ignored, as the naive operator
+    wants.
     """
     near = boundary_zone(nodes, domain, zone)
     specs = [interior, boundary] + ([interface] if interface is not None else [])
@@ -131,7 +133,7 @@ def build_stencils(
     index, _ = knn(nodes.xy, k)
     cross = np.zeros(nodes.n, dtype=bool)
     if interface is not None:
-        cross = interface_crossings(nodes, domain.material, index[:, : interior.size])
+        cross = interface_crossings(nodes, domain.material, index)
     groups = []
     for spec, rows, kind in (
         (interior, np.flatnonzero(~near & ~cross), INTERIOR_KIND),

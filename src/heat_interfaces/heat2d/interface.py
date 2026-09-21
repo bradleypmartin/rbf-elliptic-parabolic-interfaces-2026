@@ -51,6 +51,7 @@ from .neighbors import periodic_dx
 from .rbf import (
     GA_SHAPE,
     augmented_solve,
+    check_coincidence,
     gaussian,
     gaussian_derivative,
     polynomial_block,
@@ -283,6 +284,8 @@ def frame_at(curve: Curve, s: float, scale: float) -> Frame:
 
 def frame_change(a: Frame, b: Frame, degree: int) -> np.ndarray:
     """``S`` with ``c_b = S c_a``: one polynomial in two frames of one stencil."""
+    # Exact equality on purpose: one stencil threads one Python float through
+    # every frame it builds, so a mismatch is a wiring error, not rounding.
     if a.scale != b.scale:
         raise ValueError("frames of one stencil share their scale")
     xi, eta = a.local(b.x0, b.y0)
@@ -449,8 +452,8 @@ def stencil_weights(
     r = np.hypot(dx, dy)
     scale = float(r.max())
     nearest = float(r[1:].min())
-    if nearest <= 0.0:
-        raise ValueError("two nodes of the stencil coincide")
+    xi_g, eta_g = dx / scale, dy / scale
+    check_coincidence(xi_g, eta_g)
 
     anchor = int(region[0])
     locals_ = {
@@ -478,7 +481,6 @@ def stencil_weights(
     b_poly = a0 * (v @ (ddx @ ddx + ddy @ ddy) @ c) + g_xi * (v @ ddx @ c)
     b_poly = b_poly + g_eta * (v @ ddy @ c)
 
-    xi_g, eta_g = dx / scale, dy / scale
     eps = shape * scale / nearest
     a = gaussian(xi_g[:, None] - xi_g[None, :], eta_g[:, None] - eta_g[None, :], eps)
     b_rbf = (

@@ -517,9 +517,10 @@ and 14's "linear interface") sets `f = 0` and keeps everything else, so on
 case 1 the two variants build the same matrix to the last bit.
 
 **Stencil groups** (`operators.build_stencils(…, interface=BOUNDARY)`).
-A node whose 42-node interior stencil reaches more than one region joins
-the interface group and gets the 30-node / degree-4 stencil the paper uses
-"across interfaces"; no standard stencil ever sees a jump. The MATLAB
+A node whose stencil at the largest of the three sizes (the 42-node
+interior stencil) reaches more than one region joins the interface group
+and gets the 30-node / degree-4 stencil the paper uses "across
+interfaces"; no standard stencil ever sees a jump. The MATLAB
 instead flagged nodes within `queryFactor/√N = 5/√N` of an interface
 (`seqFlag`); the crossing test needs no width and gives a zone of about
 the interior stencil radius, `3.8/√N`. Of the group's members, 98 % have

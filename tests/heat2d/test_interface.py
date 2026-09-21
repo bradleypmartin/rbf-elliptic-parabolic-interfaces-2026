@@ -493,6 +493,104 @@ def test_stencil_weights_are_exact_on_a_matched_quadratic_across_a_circle():
     assert np.abs(residual[False]).max() > 0.1
 
 
+def test_stencil_weights_refuse_near_coincident_nodes_anywhere_in_the_stencil():
+    # The guard of rbf_fd_weights (#16) is shared: two non-centre nodes 1e-12
+    # apart would make the Gaussian block singular without any exception.
+    domain = case1()
+    nodes = build_node_set(domain, 1250)
+    idx, _ = knn(nodes.xy, 30)
+    region = domain.material.region_index(nodes.x, nodes.y)
+    i = int(np.flatnonzero(np.ptp(region[idx], axis=1) > 0)[0])
+    xy = nodes.xy[idx[i]].copy()
+    xy[7] = xy[12] + 1e-12
+    with pytest.raises(ValueError, match="coincide or nearly so"):
+        stencil_weights(xy, domain.material, P)
+
+
+def concentric_band():
+    """alpha 1 inside r = 0.30 and outside r = 0.35, 4 on the ring between."""
+    return Band(Circle(0.30), Circle(0.35), Constant2D(4.0), Constant2D(1.0))
+
+
+def matched_radial_quadratic(r):
+    """Continuous, with continuous alpha u_r, and div(alpha grad u) = 4 everywhere."""
+    b1 = 0.30**2 - 0.25 * 0.30**2
+    b2 = 0.25 * 0.35**2 + b1 - 0.35**2
+    return np.where(r < 0.30, r**2, np.where(r <= 0.35, 0.25 * r**2 + b1, r**2 + b2))
+
+
+def test_stencil_weights_chain_across_two_curved_interfaces_end_to_end():
+    # Real 30-node stencils of a node set straddling the ring's midline reach
+    # all three regions: the foot points, both frames, the curvature and the
+    # frame change are all exercised by stencil_weights itself.
+    band = concentric_band()
+    domain = Domain(band, (Circle(0.325),), STRIP)
+    nodes = build_node_set(domain, 2500, iterations=10)
+    r = np.hypot(nodes.x - 0.5, nodes.y - 0.5)
+    u = matched_radial_quadratic(r)
+    idx, _ = knn(nodes.xy, 30)
+    region = band.region_index(nodes.x, nodes.y)
+    lo, hi = region[idx].min(axis=1), region[idx].max(axis=1)
+    triple = np.flatnonzero((lo == 0) & (hi == 2))
+    assert len(triple) > 40, len(triple)
+    residual = {
+        curvature: np.array(
+            [
+                stencil_weights(nodes.xy[idx[i]], band, P, curvature=curvature)
+                @ u[idx[i]]
+                - 4.0
+                for i in triple[::3]
+            ]
+        )
+        for curvature in (True, False)
+    }
+    assert np.abs(residual[True]).max() < 1e-6, np.abs(residual[True]).max()
+    assert np.abs(residual[False]).max() > 0.1
+
+
+def test_chain_through_two_curved_sine_interfaces_is_continuous_at_both():
+    # Two sine graphs 0.03 apart: the foot points on the two curves lie at
+    # different x, so the frame change between them rotates as well as
+    # shifts. Anchored above both, the basis reaches region 0 through region
+    # 1; the jumps at each interface fall as xi^(p+1) in u and xi^p in flux.
+    band = Band(SineGraph(0.6), SineGraph(0.63), SineProduct(0.2, 0.1), Constant2D(1))
+    x, y, scale = 0.13, 0.66, 0.05
+    locals_ = {j: local_interface(band, j, x, y, scale, P) for j in (0, 1)}
+    assert locals_[0].frame.angle != locals_[1].frame.angle
+    regions = translated_basis(locals_, 2, 0, 2)
+    dx, dy = coefficient_dx(P), coefficient_dy(P)
+    for j in (0, 1):
+        curve = band.interfaces[j]
+        s0 = curve.closest(x, y)
+        jumps = []
+        for xi in (0.5, 0.25, 0.125):
+            s = s0 + np.array([-xi, xi]) * scale / curve.length
+            px, py = curve.point(s)
+            nx, ny = curve.normal(s)
+            values, fluxes = [], []
+            for rr in (j, j + 1):
+                frame = locals_[regions[rr].frame].frame
+                v = polynomial_block(*frame.local(px, py), P)
+                c = regions[rr].coefficients
+                g_xi, g_eta = frame.rotate_in(nx, ny)
+                alpha = band.region_piece(rr).alpha(px, py)[:, None]
+                values.append(v @ c)
+                fluxes.append(
+                    alpha
+                    * (g_xi[:, None] * (v @ dx @ c) + g_eta[:, None] * (v @ dy @ c))
+                )
+            jumps.append(
+                (
+                    np.abs(values[0] - values[1]).max(),
+                    np.abs(fluxes[0] - fluxes[1]).max(),
+                )
+            )
+        jumps = np.array(jumps)
+        ratio = jumps[:-1] / jumps[1:]
+        np.testing.assert_allclose(ratio[:, 0], 2 ** (P + 1), rtol=0.1)
+        np.testing.assert_allclose(ratio[:, 1], 2**P, rtol=0.1)
+
+
 def test_stencil_weights_scale_as_the_inverse_square_of_the_spacing():
     domain = case1()
     band = domain.material
