@@ -3,8 +3,10 @@
 BD4 (fourth-order backward differentiation) with the time step scaled with
 the node spacing and one sparse LU per operator, as in dissertation §5.4;
 the first three steps come from RK4 sub-cycled below its stability limit so
-the start-up is fourth order too. Explicit RK4 on its own is the integrator
-of the MATLAB solver (``FD4heat1DAC.m``) and is kept for small node counts.
+the start-up is fourth order too, unless the caller supplies the starting
+values (``history``) from an analytic solution. Explicit RK4 on its own is
+the integrator of the MATLAB solver (``FD4heat1DAC.m``) and is kept for
+small node counts.
 The Dirichlet values may depend on time and are imposed on the Dirichlet
 rows at every stage, as that code does. Those rows are the two ends by
 default; a ``dirichlet`` mask or index list names them in 2-D (the node set's
@@ -17,7 +19,7 @@ outside the closed curve.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import numpy as np
 import scipy.sparse as sp
@@ -157,8 +159,12 @@ def _stepper(
     return fixed, mask, impose, rk4_step
 
 
-def _steps(t_end: float, dt: float) -> tuple[int, float]:
-    """Round the step count so the march lands exactly on ``t_end``."""
+def march_steps(t_end: float, dt: float) -> tuple[int, float]:
+    """``(steps, dt)``: the step count rounded so the march lands on ``t_end``.
+
+    Both marchers round this way, so a caller supplying BD4's starting
+    ``history`` evaluates it at multiples of the ``dt`` returned here.
+    """
     steps = max(1, round(t_end / dt))
     return steps, t_end / steps
 
@@ -178,7 +184,7 @@ def rk4_march(
     checks it. The boundary values are re-imposed at every stage.
     """
     _, _, impose, rk4_step = _stepper(operator, boundary, forcing, dirichlet)
-    steps, dt = _steps(t_end, dt)
+    steps, dt = march_steps(t_end, dt)
     u = impose(0.0, np.array(u0, dtype=float))
     for k in range(steps):
         u = rk4_step(k * dt, u, dt)
@@ -193,38 +199,55 @@ def bd4_march(
     boundary: Boundary,
     forcing: Forcing | None = None,
     dirichlet: Dirichlet = None,
+    history: Sequence[np.ndarray] | None = None,
 ) -> np.ndarray:
     """BD4 from ``u0`` at ``t = 0`` to ``t_end`` in steps of about ``dt``, one LU.
 
     ``u^{n+1} - (48 u^n - 36 u^{n-1} + 16 u^{n-2} - 3 u^{n-3}) / 25
     = (12/25) dt (L u^{n+1} + f^{n+1})`` inside; the Dirichlet rows carry
-    the boundary values at ``t^{n+1}``. The three starting values come from
-    RK4 sub-cycled at half ``rk4_dt_limit`` or less, so the whole march is
-    fourth order in ``dt``. A run of three steps or fewer is all RK4.
+    the boundary values at ``t^{n+1}``. Without ``history`` the three
+    starting values come from RK4 sub-cycled at half ``rk4_dt_limit`` or
+    less, so the whole march is fourth order in ``dt``, and a run of three
+    steps or fewer is all RK4. A caller that knows ``u`` before ``t = 0``
+    (a run started from an analytic solution) passes ``history``, the values
+    at ``t = -3 dt, -2 dt, -dt`` in that order with ``dt`` as ``march_steps``
+    rounds it; then every step is BD4.
     """
     fixed, mask, impose, rk4_step = _stepper(operator, boundary, forcing, dirichlet)
-    steps, dt = _steps(t_end, dt)
+    steps, dt = march_steps(t_end, dt)
     n = operator.shape[0]
 
-    history = [impose(0.0, np.array(u0, dtype=float))]
-    # Half the stability limit: at the limit the stage error of a
-    # time-dependent end value is about a hundred times the interior's at the
-    # node next to it, and it falls sixteen-fold per halving of the sub-step.
-    limit = rk4_dt_limit(operator, dirichlet)
-    substeps = max(1, int(np.ceil(dt / (STARTUP_FRACTION * limit))))
-    for k in range(min(3, steps)):
-        u = history[-1]
-        for j in range(substeps):
-            u = rk4_step(k * dt + j * dt / substeps, u, dt / substeps)
-        history.append(u)
-    if steps <= 3:
-        return history[-1]
+    if history is not None:
+        if len(history) != 3:
+            raise ValueError("BD4 needs the three values before u0, oldest first")
+        history = [
+            impose(-(3 - k) * dt, np.array(u, dtype=float))
+            for k, u in enumerate(history)
+        ]
+        history.append(impose(0.0, np.array(u0, dtype=float)))
+        started = 0
+    else:
+        history = [impose(0.0, np.array(u0, dtype=float))]
+        # Half the stability limit: at the limit the stage error of a
+        # time-dependent end value is about a hundred times the interior's
+        # at the node next to it, and it falls sixteen-fold per halving of
+        # the sub-step.
+        limit = rk4_dt_limit(operator, dirichlet)
+        substeps = max(1, int(np.ceil(dt / (STARTUP_FRACTION * limit))))
+        for k in range(min(3, steps)):
+            u = history[-1]
+            for j in range(substeps):
+                u = rk4_step(k * dt + j * dt / substeps, u, dt / substeps)
+            history.append(u)
+        if steps <= 3:
+            return history[-1]
+        started = 3
 
     matrix = sp.diags_array(mask) @ (
         sp.eye_array(n, format="csr") - BD4_STEP * dt * sp.csr_array(operator)
     ) + sp.diags_array(1.0 - mask)
     lu = splu(sp.csc_array(matrix))
-    for k in range(3, steps):
+    for k in range(started, steps):
         t_next = (k + 1) * dt
         rhs = mask * (
             BD4_HISTORY[0] * history[-1]

@@ -16,6 +16,7 @@ from heat_interfaces.heat1d.march import (
     bd4_march,
     bd4_stability_boundary,
     interior_operator,
+    march_steps,
     ramp_boundary,
     rk4_dt_limit,
     rk4_march,
@@ -247,3 +248,20 @@ def test_dirichlet_index_rejects_bad_masks():
         dirichlet_index(5, np.ones(4, dtype=bool))
     with pytest.raises(ValueError, match="range"):
         dirichlet_index(5, [0, 5])
+
+
+def test_bd4_from_an_analytic_history_is_fourth_order_and_matches_the_rk4_start():
+    operator, u0, boundary, forcing, exact = quartic_problem()
+    errs = []
+    for dt in (0.1, 0.05, 0.025):
+        _, dt = march_steps(1.0, dt)
+        history = [exact(-k * dt) for k in (3, 2, 1)]
+        u = bd4_march(operator, u0, 1.0, dt, boundary, forcing, history=history)
+        errs.append(np.max(np.abs(u - exact(1.0))))
+    rates = np.log2(np.array(errs[:-1]) / np.array(errs[1:]))
+    assert np.all((rates > 3.9) & (rates < 4.1)), (errs, rates)
+    started = bd4_march(operator, u0, 1.0, 0.05, boundary, forcing)
+    assert errs[1] == pytest.approx(np.max(np.abs(started - exact(1.0))), rel=0.2)
+    # Three values, oldest first, or nothing.
+    with pytest.raises(ValueError, match="three values"):
+        bd4_march(operator, u0, 1.0, 0.05, boundary, forcing, history=[u0, u0])
