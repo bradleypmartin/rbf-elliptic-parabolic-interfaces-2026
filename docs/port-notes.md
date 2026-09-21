@@ -775,5 +775,140 @@ the same to 0.1 s):
 Regenerate with `uv run python scripts/heat2d_warp.py` (39 s at the
 defaults; `--counts 2500 5000 10000 20000` adds the 20,000-node row, 50 s).
 
+### 2.5 Case 1: elliptic and parabolic convergence, and the spectrum against BD4 (E2.5)
+
+**The march** (`heat2d.march`; dissertation §5.4, §5.4.1). The one
+time-dependent problem of 2016 is eq. 84–85 with `c_t = 1`:
+`u = e^t sin 2πx v(y)`, `v` the eq. 86 profile with `κ = sqrt(4π² + c_t/α)`
+per layer (`case1_exact(growth=1.0)`, §2.2), started from the analytic
+solution at `t = 0`, the top row `e^t sin 2πx`, the error read at
+`t = 0.1`. The integrator is the 1-D module's BD4 (§1.4) behind the node
+set's Dirichlet mask (`bd4_march(dirichlet=nodes.dirichlet)`, the §2.2
+decision; epic #4, item 7), one LU of `I − (12/25) dt L` per operator;
+`heat2d.march.dirichlet_boundary` turns per-curve values `(x, y, t) → u`
+into the index-ordered `boundary(t)` it expects. `dt = h` is the row
+spacing `1/round(0.95 √N)` (0.0294 at 1250 nodes, 0.0053 at 40,000), so the
+march to `t = 0.1` is 3 to 19 steps. BD4's three starting values are the
+analytic solution at `t = −3dt, −2dt, −dt` (`bd4_march(history=)`, new;
+`heat2d.march.march_parabolic(..., solution=exact)`), so every step is BD4. Without
+them the 1-D module's RK4 start-up runs on its ∞-norm bound: the row sums
+of the 42-node stencils are about `20/h²`, so the start-up takes about
+`30/h` sub-steps per step (1053 at 1250 nodes, 1909 at 4900); it lands
+within 2.3 % of the analytic-history error at 2500 nodes (4.08e-6 against
+3.99e-6, `tests/heat2d/test_march.py`).
+
+**Convergence** (`scripts/heat2d_case1.py`, seed 0, 2026-09-21; RMS error
+against the analytic solution and order per halving of `h`; the elliptic
+column is §2.4's `warp+rows` line, bit for bit, since the node sets and the
+operator are the same; "steps" are the BD4 steps to `t = 0.1`; the
+`dt = h/2` column is the same march at twice the steps and its ratio to the
+`dt = h` error; the last two columns are dissertation Fig. 5-5's parabolic
+line read off the rendered page and EABE Fig. 7, which is Fig. 5-5's
+elliptic line to reading accuracy; the 20,000- and 40,000-node rows are from
+`--counts 1250 2500 5000 10000 20000 40000`, 40 s):
+
+```
+     n       h  group |   elliptic  order  time |  parabolic  order  steps  time |  dt = h/2   ratio  steps |  Fig. 5-5 par.  Fig. 7 ell.
+  1250  0.0294    414 |   1.60e-05      -  0.0s |   1.76e-05      -      3  0.0s |   1.75e-05  0.991      7 |       1.8e-05      1.0e-05
+  2500  0.0208    588 |   3.79e-06   4.17  0.0s |   3.99e-06   4.31      5  0.0s |   4.03e-06  1.009     10 |       3.8e-06      2.6e-06
+  5000  0.0149    809 |   6.11e-07   5.48  0.2s |   6.01e-07   5.68      7  0.2s |   6.02e-07  1.002     13 |       6.3e-07      5.5e-07
+ 10000  0.0105   1155 |   1.45e-07   4.11  0.5s |   1.54e-07   3.90     10  0.5s |   1.54e-07  1.001     19 |       1.7e-07      8.0e-08
+ 20000  0.0075   1614 |   1.92e-08   5.88  1.6s |   2.13e-08   5.75     13  1.6s |   2.13e-08  1.001     27 |       2.7e-08      1.8e-08
+ 40000  0.0053   2294 |   5.28e-09   3.70  3.6s |   5.51e-09   3.87     19  3.9s |   5.51e-09  1.001     38 |       6.6e-09      6.0e-09
+```
+
+![case-1 convergence](figures/heat2d_case1_convergence.png)
+
+- *The parabolic line lands on 2016's.* 1.0, 1.0, 1.0, 0.9, 0.8 and 0.8×
+  Fig. 5-5's parabolic markers at 1250–40,000 nodes; the fit over the six
+  counts is 4.77 (Fig. 5-5's read-off fits at 4.63). The elliptic line is
+  1.6, 1.5, 1.1, 1.8, 1.1 and 0.9× Fig. 7 (§2.4 had the first five), fit
+  4.77 too, and its sixth point, 5.28e-9 at 40,000 nodes, is the first below
+  the 2016 marker.
+- *Our two lines coincide; 2016's did not.* The parabolic error is 1.10,
+  1.05, 0.98, 1.06, 1.11 and 1.04× the elliptic one, where Fig. 5-5 shows
+  1.8, 1.5, 1.2, 2.1, 1.5 and 1.1×. Halving `dt` moves our parabolic error
+  by 0.9 % at 1250 nodes and by 0.1 % or less from 5000 on, so BD4's error
+  over 3–19 steps at `dt = h` is invisible next to the spatial error, and
+  the parabolic line is the spatial error of the `κ = sqrt(4π² + c_t/α)`
+  profile. Whatever put 2016's parabolic line above its elliptic one (a
+  start-up, or an error that a time step of the "average node spacing"
+  carried) is not in this port; the 2016 2-D BD4 code is not preserved
+  (`docs/paper-index.md`), so this stays an observation.
+
+**The spectrum** (the Fig. 5-6 twin, `--spectrum-n 4900`, the default:
+`h = 1/67 = 0.0149`, the 4766 interior eigenvalues of each operator, dense,
+21 s for the three; BD4's largest root modulus at `dt = h` and at
+Fig. 5-6's `dt = 0.02`):
+
+```
+operator        eigs  complex     max Re   h² min Re  h² max |Im|  BD4 max |ζ| @h  @0.02
+aware-warp      4766     2828     -7.266      -13.19        0.385           0.897  0.865
+aware-plain     4766     3062     -7.266      -13.19        1.489           0.897  0.865
+naive           4766     4330     -7.271       -6.80        0.672           0.897  0.865
+```
+
+![case-1 spectra](figures/heat2d_case1_spectrum.png)
+
+- *Placement against Fig. 5-6.* Its top panel runs from 0 to about
+  `−5.4·10⁴` along the real axis with a cluster of complex eigenvalues,
+  `|Im|` to about `1.5·10³`, near `−4·10⁴`; the warped operator here reaches
+  `−5.9·10⁴` (`h² min Re = −13.19`, the control Laplacian's −13.47 of §2.2)
+  with `|Im|` to `1.7·10³` in a cloud between `−2·10⁴` and `−6·10⁴`. In the
+  zoom every eigenvalue of the interface-aware operators within ±700 of the
+  origin sits on the real axis, as in the 2016 picture; the closed curve of
+  BD4 at `dt = 0.02` is the same one (its right end at `Re λ = 533`, the
+  root-locus `Σ (1 − e^{−iθ})^j / j` divided by `dt`).
+- *The warp narrows the spectrum.* With plain Gaussians the crossing rows
+  put a loop of 128 eigenvalues with `|Im| > 2·10³` (to `6.7·10³`,
+  `h² max |Im|` 1.489) between `Re λ ≈ −0.5·10⁴` and `−2·10⁴`; the warped
+  rows have none above `1.8·10³`, a largest `|Im|` four times smaller
+  (0.385), and 234 fewer complex eigenvalues. So the warp moves eigenvalues
+  toward the real axis, which is the direction BD4 likes: both operators
+  are far outside its curve at `dt = h` (the loop's `Im(dt λ) ≈ ±100` sits
+  at `Re(dt λ) ≈ −80` to `−300`), but a time integrator with a bounded
+  region (RK4, the MATLAB's) would see the difference.
+- *Every mode is damped, and the slowest one is physical.* The largest root
+  modulus, 0.897 at `dt = h` and 0.865 at `dt = 0.02`, is the slowest mode's
+  own `e^{λ dt}` with `λ = −7.27`, which all three operators give to three
+  digits (−7.266, −7.266, −7.271): case 1's slowest mode is slower than the
+  control's `−π²` because the band diffuses five times more slowly. No
+  spurious mode outranks it at 4900 nodes.
+- *The naive operator on case 1.* Half the depth on the real axis
+  (`h² min Re` −6.80, as on the control), 4330 of 4766 eigenvalues complex,
+  and §2.2's spurious growing mode is here too: a real eigenvalue at +847 at
+  900 nodes and +17.7 at 1250, none at 1800, 2000 or 4900. At 1250 nodes BD4
+  amplifies it (root moduli 1.69 at `dt = h`, 1.43 at 0.02, the point inside
+  both curves in the driver's `--spectrum-n 1250` figure). At 900 nodes
+  `dt λ = 29` lies to the right of the closed curve, outside it, and BD4
+  damps a mode the operator says should grow: the integrator's unstable
+  region is bounded, so a wrong operator can march stably.
+
+**Decisions (E2.5).**
+
+- BD4 in 2-D is `heat1d.march.bd4_march` behind the Dirichlet mask;
+  `heat2d.march` adds the per-curve time-dependent values, the analytic
+  history and the interior spectrum, and no second integrator.
+- Verification runs start BD4 from the analytic history, the standard start
+  for a multistep method measured against a known solution; the RK4
+  start-up stays the default for marches without one. E4's stiff-edge
+  marches (#33 onward) start from a separable reference that is known at
+  every time, so they can use the history too.
+- `dt = h` means the row spacing `nodes.h`, as in §2.2's spectra, 4 % above
+  the `1/√N` the dissertation calls the average spacing; Fig. 5-6's
+  `dt = 0.02` is tabulated next to it.
+- The elliptic line is solved again rather than quoted from §2.4, so the
+  driver is self-contained and the coincidence is a regression check.
+- The E1 breadcrumb's Chebyshev cross-check of the separable reference is
+  left to E4.2 (#33), whose smooth edges need it; for constant layers the
+  exponentials of `LayeredExact` are exact and pinned by the MATLAB 6 × 6
+  system and the per-layer ODE test (§2.2).
+
+Regenerate with `uv run python scripts/heat2d_case1.py` (30 s at the
+defaults: 8 s for the sweep to 10,000 nodes, 21 s for the three
+eigenvalue problems at 4900; `--counts 1250 2500 5000 10000 20000 40000`
+adds the two rows, 40 s; `--spectrum-n 1250` shows the naive operator's
+growing mode).
+
 Later tickets add their subsections here; E2.11 (#25) closes the section
 with the decisions and the regeneration commands.

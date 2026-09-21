@@ -13,8 +13,11 @@ interfaces with curvature and the multi-interface chain (dissertation §5.3,
 EABE §2.2.3) and ``operators.interface_aware_operator``; ``solve``: the
 SuperLU equilibrium solve; ``exact``: the separable piecewise-exponential
 solutions of the control and of case 1 (EABE eq. 34), with the warped
-Gaussians of EABE §2.2.4 (``interface.Warp``) on by default. BD4 and the
-case drivers follow in E2.5 onward.
+Gaussians of EABE §2.2.4 (``interface.Warp``) on by default; ``march``:
+``march_parabolic``, BD4 on the node set (the 1-D marcher behind the
+Dirichlet mask, dissertation §5.4), the analytic-history start of a
+verification run and the interior spectrum of Fig. 5-6. The case drivers
+follow in E2.6 onward.
 """
 
 from .domain import (
@@ -73,6 +76,14 @@ from .interface import (
     translated_basis,
     translation_matrix,
     vector_to_table,
+)
+from .march import (
+    Solution,
+    TimeBoundaryValue,
+    analytic_history,
+    dirichlet_boundary,
+    interior_eigenvalues,
+    march_parabolic,
 )
 from .neighbors import (
     PERIOD,
@@ -159,10 +170,13 @@ __all__ = [
     "Row",
     "SineGraph",
     "SineProduct",
+    "Solution",
     "StencilGroup",
     "StencilSpec",
     "Stencils",
+    "TimeBoundaryValue",
     "alpha_matrix",
+    "analytic_history",
     "augmented_solve",
     "boundary_zone",
     "build_node_set",
@@ -179,6 +193,7 @@ __all__ = [
     "control_exact",
     "derivative_matrices",
     "derivative_matrix",
+    "dirichlet_boundary",
     "direct_operator",
     "dirichlet_system",
     "dirichlet_values",
@@ -189,10 +204,12 @@ __all__ = [
     "interface_aware_operator",
     "interface_crossings",
     "interface_expansion",
+    "interior_eigenvalues",
     "knn",
     "laplacian_operator",
     "local_interface",
     "local_taylor",
+    "march_parabolic",
     "multiplication_matrix",
     "naive_operator",
     "nearest_spacing",
