@@ -198,3 +198,52 @@ def test_bd4_boundary_has_unit_amplification_and_the_negative_axis_is_stable():
     assert np.all(bd4_amplification(-np.logspace(-3, 3, 30)) < 1)
     # A growing mode grows: z = 0.05 is amplified by about e^0.05.
     assert bd4_amplification(0.05)[0] == pytest.approx(np.exp(0.05), rel=1e-3)
+
+
+def test_dirichlet_mask_generalises_the_end_rows():
+    # The same quartic problem with the grid nodes shuffled: the Dirichlet
+    # nodes are named by a mask, the boundary values come in index order.
+    operator, u0, boundary, forcing, exact = quartic_problem()
+    n = operator.shape[0]
+    rng = np.random.default_rng(11)
+    perm = rng.permutation(n)  # new position -> old node
+    p = np.eye(n)[perm]
+    shuffled = p @ operator.toarray() @ p.T
+    mask = np.zeros(n, dtype=bool)
+    mask[np.flatnonzero((perm == 0) | (perm == n - 1))] = True
+    ends = np.flatnonzero(mask)  # ascending index; which end is first?
+    first_is_left = perm[ends[0]] == 0
+
+    def shuffled_boundary(t):
+        left, right = boundary(t)
+        return (left, right) if first_is_left else (right, left)
+
+    reference = bd4_march(operator, u0, 1.0, 0.05, boundary, forcing)
+    u = bd4_march(
+        shuffled,
+        u0[perm],
+        1.0,
+        0.05,
+        shuffled_boundary,
+        lambda t: forcing(t)[perm],
+        dirichlet=mask,
+    )
+    np.testing.assert_allclose(u[np.argsort(perm)], reference, atol=1e-12)
+    # Index arrays and the default agree; the interior operator drops the mask.
+    same = bd4_march(operator, u0, 1.0, 0.05, boundary, forcing, dirichlet=[0, n - 1])
+    np.testing.assert_allclose(same, reference, atol=0)
+    assert interior_operator(operator, mask[np.argsort(perm)]).shape == (n - 2, n - 2)
+    lam_ref = np.sort(np.linalg.eigvals(interior_operator(operator).toarray()))
+    lam = np.sort(np.linalg.eigvals(interior_operator(shuffled, mask).toarray()))
+    np.testing.assert_allclose(lam, lam_ref, atol=1e-9)
+
+
+def test_dirichlet_index_rejects_bad_masks():
+    from heat_interfaces.heat1d.march import dirichlet_index
+
+    np.testing.assert_array_equal(dirichlet_index(5), [0, 4])
+    np.testing.assert_array_equal(dirichlet_index(5, [4, 0, 4]), [0, 4])
+    with pytest.raises(ValueError, match="one entry per node"):
+        dirichlet_index(5, np.ones(4, dtype=bool))
+    with pytest.raises(ValueError, match="range"):
+        dirichlet_index(5, [0, 5])

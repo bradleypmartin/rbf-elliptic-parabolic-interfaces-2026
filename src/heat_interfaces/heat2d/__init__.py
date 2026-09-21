@@ -3,8 +3,15 @@
 ``domain``: curves (flat and sine graphs, circles), the closed-band
 materials of the three 2016 cases, the case geometries and the node sets
 with straddling rows (dissertation §5.4, EABE §3); ``neighbors``: nearest
-neighbours periodic in x only. RBF-FD weights, interface-aware stencils,
-operators, solvers, references and seeds follow in E2.2 onward.
+neighbours periodic in x only; ``rbf``: Gaussian RBF-FD weights with
+polynomial augmentation, batched over stencils (EABE eq. 2, 31);
+``operators``: stencil groups (42 / degree 5 inside, 30 / degree 4 near a
+Dirichlet curve), sparse ``Dx``, ``Dy``, the Laplacian, ``A``, the naive
+``Dx A Dx + Dy A Dy`` (plan D3), the direct ``α ∇² + ∇α·∇`` and the
+Dirichlet rows; ``solve``: the SuperLU equilibrium solve; ``exact``: the
+separable piecewise-exponential solutions of the control and of case 1
+(EABE eq. 34). Interface-aware stencils, warped RBFs, BD4 and the case
+drivers follow in E2.3 onward.
 """
 
 from .domain import (
@@ -38,6 +45,7 @@ from .domain import (
     step_delta,
     straddle_count,
 )
+from .exact import LayeredExact, case1_exact, control_exact
 from .neighbors import (
     PERIOD,
     knn,
@@ -47,12 +55,50 @@ from .neighbors import (
     periodic_tree,
     wrap_x,
 )
+from .operators import (
+    BOUNDARY_ZONE,
+    StencilGroup,
+    Stencils,
+    alpha_matrix,
+    boundary_zone,
+    build_stencils,
+    derivative_matrices,
+    derivative_matrix,
+    direct_operator,
+    dirichlet_system,
+    dirichlet_values,
+    laplacian_operator,
+    naive_operator,
+)
+from .rbf import (
+    BOUNDARY,
+    GA_SHAPE,
+    INTERIOR,
+    ITERATIVE,
+    OPERATORS,
+    StencilSpec,
+    augmented_solve,
+    gaussian,
+    gaussian_derivative,
+    polynomial_block,
+    polynomial_count,
+    polynomial_exponents,
+    polynomial_rhs,
+    rbf_fd_weights,
+)
+from .solve import normalized_l2, rms_error, solve_equilibrium
 
 __all__ = [
+    "BOUNDARY",
+    "BOUNDARY_ZONE",
     "CASES",
     "COOLING_RADIUS",
     "DIRICHLET",
     "FREE",
+    "GA_SHAPE",
+    "INTERIOR",
+    "ITERATIVE",
+    "OPERATORS",
     "PERIOD",
     "RING",
     "ROW",
@@ -67,21 +113,48 @@ __all__ = [
     "Curve",
     "Domain",
     "FlatLine",
+    "LayeredExact",
     "NodeSet",
     "Piece2D",
     "Row",
     "SineGraph",
     "SineProduct",
+    "StencilGroup",
+    "StencilSpec",
+    "Stencils",
+    "alpha_matrix",
+    "augmented_solve",
+    "boundary_zone",
     "build_node_set",
+    "build_stencils",
     "case1",
+    "case1_exact",
     "case2",
     "case3",
+    "control_exact",
+    "derivative_matrices",
+    "derivative_matrix",
+    "direct_operator",
+    "dirichlet_system",
+    "dirichlet_values",
+    "gaussian",
+    "gaussian_derivative",
     "knn",
+    "laplacian_operator",
+    "naive_operator",
     "nearest_spacing",
+    "normalized_l2",
     "offsets",
     "periodic_dx",
     "periodic_tree",
+    "polynomial_block",
+    "polynomial_count",
+    "polynomial_exponents",
+    "polynomial_rhs",
+    "rbf_fd_weights",
+    "rms_error",
     "row_count",
+    "solve_equilibrium",
     "step_delta",
     "straddle_count",
     "wrap_x",
