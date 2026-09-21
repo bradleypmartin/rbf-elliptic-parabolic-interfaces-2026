@@ -44,7 +44,8 @@ src/heat_interfaces/   library (filled in by the epics; module names are the pla
   plotting.py          style; blue = interface-aware / seeds, orange = naive;
                        use_print_style() for the manuscript
   results_cache.py     JSON results cache the stiff drivers write (E5.3)
-  heat1d/              domain, operators (naive Dx A Dx; translated basis; seeds
+  heat1d/              domain, interface (continuity matrices, translated basis,
+                       stencil solve), operators (naive Dx A Dx; jump-aware; seeds
                        dispatch), solve, march (BD4), exact (quadrature; Chebyshev
                        reference), stiff (seeds), treatments (comparators)
   heat2d/              domain (x-periodic strip, Dirichlet rows, interfaces,
