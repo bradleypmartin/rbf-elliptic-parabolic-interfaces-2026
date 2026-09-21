@@ -318,3 +318,14 @@ def eabe_alpha() -> PiecewiseAlpha:
 def jump_alpha(left: float, right: float, x0: float = 0.0) -> PiecewiseAlpha:
     """Two constants meeting at ``x0`` (the MATLAB problem is ``1/9 | 1`` at 0)."""
     return PiecewiseAlpha(interfaces=(x0,), pieces=(Constant(left), Constant(right)))
+
+
+def matlab_alpha() -> PiecewiseAlpha:
+    """``FD4heat1DAC.m``: ``k1 = 1/9`` on [-1, 0], ``k2 = 1`` on (0, 1].
+
+    The MATLAB gives the node at 0 the left value but builds its four
+    interface stencils about a jump half a cell to the right of it, so its
+    interface sits at ``x = h / 2``; the port keeps the jump at 0 and lets the
+    node count decide whether a node lands on it (``Grid1D.placement``).
+    """
+    return jump_alpha(1.0 / 9.0, 1.0)

@@ -5,8 +5,10 @@
 stencil and the §4.1 jump-aware operator; ``interface``: the coefficient-space
 algebra behind it (continuity matrices, the translated basis, the stencil
 solve); ``solve``: Dirichlet rows and the sparse solve; ``exact``: the
-quadrature reference ``u = A + B ∫ dξ/alpha``. Time stepping (E1.3), seeds
-(E3) and treatments (E3.5) follow.
+quadrature reference ``u = A + B ∫ dξ/alpha`` and the piecewise Chebyshev
+reference for the parabolic problems; ``march``: BD4 and RK4 with
+time-dependent Dirichlet ends and the BD4 stability region. Seeds (E3) and
+treatments (E3.5) follow.
 """
 
 from .domain import (
@@ -23,9 +25,18 @@ from .domain import (
     equispaced_grid,
     grid_for,
     jump_alpha,
+    matlab_alpha,
     node_counts,
 )
-from .exact import equilibrium_exact, equilibrium_flux, inverse_alpha_integral
+from .exact import (
+    ChebyshevPieces,
+    chebyshev_equilibrium,
+    chebyshev_lobatto,
+    chebyshev_parabolic,
+    equilibrium_exact,
+    equilibrium_flux,
+    inverse_alpha_integral,
+)
 from .interface import (
     Jump,
     Region,
@@ -38,6 +49,17 @@ from .interface import (
     stencil_weights,
     translated_basis,
     translation_matrix,
+)
+from .march import (
+    bd4_amplification,
+    bd4_march,
+    bd4_stability_boundary,
+    constant_boundary,
+    interior_operator,
+    ramp_boundary,
+    rk4_dt_limit,
+    rk4_march,
+    smooth_step,
 )
 from .operators import (
     alpha_matrix,
@@ -54,6 +76,7 @@ from .solve import dirichlet_system, normalized_l2, solve_equilibrium
 __all__ = [
     "DISSERTATION_BC",
     "PLACEMENT_TOL",
+    "ChebyshevPieces",
     "Constant",
     "Grid1D",
     "Jump",
@@ -63,6 +86,19 @@ __all__ = [
     "Sinusoid",
     "Smooth",
     "alpha_matrix",
+    "smooth_step",
+    "rk4_march",
+    "rk4_dt_limit",
+    "ramp_boundary",
+    "matlab_alpha",
+    "interior_operator",
+    "constant_boundary",
+    "chebyshev_parabolic",
+    "chebyshev_lobatto",
+    "chebyshev_equilibrium",
+    "bd4_stability_boundary",
+    "bd4_march",
+    "bd4_amplification",
     "coefficient_dx",
     "coefficient_operator",
     "continuity_conditions",
