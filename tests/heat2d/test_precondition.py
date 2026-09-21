@@ -83,6 +83,26 @@ def test_appendix_b_worked_example_is_reproduced_step_by_step():
     np.testing.assert_array_equal(identity_rows, np.eye(11))
 
 
+def test_sweeps_alternate_outward_and_inward():
+    """Two neighbours ``m+1, m+2``: each sweep's last cancellation leaves an exact zero.
+
+    Outward sweeps end at the farther neighbour, inward ones at the nearer,
+    so after an odd number of sweeps the row's weight at ``m+2`` is zero and
+    the one at ``m+1`` is not (row ``m+2`` puts 1.33 back there), and after an
+    even number the other way round (row ``m+1`` puts 1.24 back at ``m+2``).
+    Any other ordering of the sweeps fails one parity or the other.
+    """
+    a = appendix_b_matrix()
+    neighbours = -np.ones((11, 2), dtype=int)
+    neighbours[5] = [6, 7]
+    for sweeps in (1, 2, 3, 4):
+        p = dominance_preconditioner(a, neighbours, rows=np.array([5]), sweeps=sweeps)
+        row = (p @ a)[[5], :].toarray().ravel()
+        cancelled, refilled = (7, 6) if sweeps % 2 else (6, 7)
+        assert abs(row[cancelled]) < 1e-12, sweeps
+        assert abs(row[refilled]) > 1e-3, sweeps
+
+
 def test_preconditioner_input_checks():
     a = appendix_b_matrix()
     with pytest.raises(ValueError):

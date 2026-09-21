@@ -66,13 +66,17 @@ class ReducedSystem:
     ``a`` is the operator's interior block, ``b`` the forcing there minus the
     Dirichlet columns times their values ``g`` (a full-length vector, zero
     off the Dirichlet nodes); ``interior`` are the unknowns' node indices.
-    ``expand`` puts an interior solution back on the whole node set.
+    ``expand`` puts an interior solution back on the whole node set. A
+    left-preconditioned system (``left_preconditioned``) keeps the system it
+    came from as ``original``, so residuals can be measured in the
+    unweighted norm; it is ``None`` on a system built from the operator.
     """
 
     a: sp.csr_array
     b: np.ndarray
     interior: np.ndarray
     g: np.ndarray
+    original: ReducedSystem | None = None
 
     @property
     def n(self) -> int:
@@ -93,7 +97,18 @@ class ReducedSystem:
         if p.shape != (self.n, self.n):
             raise ValueError("the preconditioner must be square on the interior")
         return ReducedSystem(
-            sp.csr_array(p @ self.a), p @ self.b, self.interior, self.g
+            sp.csr_array(p @ self.a),
+            p @ self.b,
+            self.interior,
+            self.g,
+            self.original or self,
+        )
+
+    def residual(self, u_interior: np.ndarray) -> float:
+        """``|b − a u| / |b|`` of the *original* system (itself if unpreconditioned)."""
+        base = self.original or self
+        return float(
+            np.linalg.norm(base.b - base.a @ u_interior) / np.linalg.norm(base.b)
         )
 
 
@@ -124,9 +139,11 @@ class IterativeResult:
 
     ``iterations`` counts inner iterations (GMRES's Arnoldi steps across
     restarts, BiCGSTAB's steps); ``residual`` is the final ``|b − a u| / |b|``
-    of the system the solver saw; ``info`` is SciPy's flag (0 converged,
-    positive: the iteration cap, negative: breakdown); ``seconds`` is the
-    solver's wall-clock alone.
+    of the *unpreconditioned* system (``ReducedSystem.residual``), which on
+    a left-preconditioned system differs from the ``P``-weighted residual
+    the solver's own test used; ``info`` is SciPy's flag on the system the
+    solver saw (0 converged, positive: the iteration cap, negative:
+    breakdown); ``seconds`` is the solver's wall-clock alone.
     """
 
     u: np.ndarray
@@ -155,8 +172,11 @@ def solve_iterative(
     ``restart=None`` is full GMRES (MATLAB's default: one Arnoldi cycle of up
     to ``maxiter`` steps); an integer restarts every that many steps, with
     ``maxiter`` still the cap on inner iterations. ``m`` is SciPy's approximate
-    inverse (``ilu_preconditioner``); a left preconditioner in matrix form goes
-    through ``ReducedSystem.left_preconditioned`` instead, dissertation eq. 99.
+    inverse (``ilu_preconditioner``), whose convergence test SciPy makes on
+    the true residual; a left preconditioner in matrix form goes through
+    ``ReducedSystem.left_preconditioned`` instead (dissertation eq. 99), and
+    the solver then tests ``|P b − P a u| <= rtol |P b|`` while the result's
+    ``residual`` reports the unweighted one.
     """
     if method not in METHODS:
         raise ValueError(f"method must be one of {METHODS}, not {method!r}")
@@ -191,9 +211,8 @@ def solve_iterative(
         )
     seconds = time.perf_counter() - t0
     u = np.asarray(u, dtype=float)
-    residual = float(np.linalg.norm(b - a @ u) / np.linalg.norm(b))
     return IterativeResult(
-        system.expand(u), method, count[0], residual, int(info), seconds
+        system.expand(u), method, count[0], system.residual(u), int(info), seconds
     )
 
 

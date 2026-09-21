@@ -1530,7 +1530,15 @@ full GMRES, then SciPy's restarted GMRES(20), then BiCGSTAB; each without
 preconditioning, with Appendix B's `P`, with `spilu`; every solve converged
 to the tolerance, none broke down; the RMS errors against the reference
 equal the direct solve's to three figures in every cell and are not
-repeated):
+repeated). One caveat on the Appendix B column: the solver's test there is
+`|P b − P A u| ≤ 1e-8 |P b|`, a `P`-weighted norm, where the other two
+columns are tested on `|b − A u|` (SciPy tests its `M`-preconditioned
+solves on the true residual). The unweighted `|b − A u| / |b|` the
+Appendix B solves stop at is 7e-9 to 1.1e-8 on the control and 7e-9 to
+3.9e-8 on case 3 (the driver prints it; `IterativeResult.residual` is the
+unweighted one), so the iteration counts compare at the same accuracy to
+within a few per cent, and every solution's distance from the direct one
+(4e-11 to 6e-6) is the check:
 
 ```
 control
@@ -1585,15 +1593,21 @@ case 3 / control, unpreconditioned (iterations, seconds), and the gmres time rat
   The three sweeps cut the iterations 3.1–3.2× (gmres) and 3.2–4.1×
   (bicgstab) on the control and 2.0–2.5× and 2.0–3.1× on case 3, growing
   with N. The median DDR over all rows rises from 0.78 to 0.93 and 5–23 %
-  of the rows become dominant (more at small N); the crossing rows' least
-  DDR rises from 0.17–0.29 to 0.41–0.48, but their median does not move
-  (0.63 → 0.49 at 1250, 0.53 → 0.57 at 20,000): the neighbours' rows bring
-  their own off-diagonal mass in, and the group's histogram spreads over
-  0.45–0.6 instead of shifting up (Fig. B-1 twin below). Applied to the
+  of the rows become dominant (more at small N). The crossing rows, the
+  ones the sweeps are for, come out *less* dominant in the median at the
+  low counts and barely more at the high ones: their least DDR rises from
+  0.17–0.29 to 0.41–0.48, but their median goes 0.63 → 0.49 at 1250 nodes
+  (−22 %), 0.61 → 0.51 at 2500 (−16 %), 0.58 → 0.55 at 5000 (−7 %),
+  0.55 → 0.56 at 10,000 (+3 %) and 0.53 → 0.57 at 20,000 (+7 %). The
+  neighbours' rows bring their own off-diagonal mass in, and the group's
+  histogram spreads over 0.45–0.6 instead of shifting up (Fig. B-1 twin
+  below). The iteration win is the other rows' doing: applied to the
   crossing rows alone (the probe of 2026-09-21 at 2500 and 5000 nodes, not
   in the driver) the sweeps move the group's DDR the same way (least 0.21 →
-  0.48, median 0.61 → 0.51) and cut the iteration counts by 5–9 % only; the
-  gain comes from preconditioning every row. In wall-clock the gain is
+  0.48, median 0.61 → 0.51) and cut the iteration counts by 5–9 % only.
+  Appendix B's benefit to the rows it was designed for is therefore not
+  shown here; its benefit as a preconditioner of the whole matrix is. In
+  wall-clock the gain is
   gmres's: 0.95 → 0.30 s at 20,000 nodes, full GMRES's cost being quadratic
   in the iterations; bicgstab gets slower (0.12 → 0.22 s), each product
   with `P A` costing five times the operator's, and the `P` build (1.4 s at
@@ -1659,7 +1673,9 @@ DDR of other operators on the same node set (min / median / <1; the crossing row
   iterations; inner iterations are what is counted.
 - Appendix B is applied to every interior row with 37 neighbours and
   three sweeps (out, in, out), Dirichlet neighbours skipped, the original
-  rows combined, and `P A u = P b` formed explicitly (eq. 99).
+  rows combined, and `P A u = P b` formed explicitly (eq. 99); the
+  preconditioned `ReducedSystem` keeps its `original`, and residuals are
+  reported in the unweighted norm.
 - `spilu` at its default drop tolerance and fill factor with the
   `MMD_AT_PLUS_A` ordering (`ILU_ORDERING`), SuperLU's COLAMD default having
   failed from 20,000 nodes; the driver's `--ilu-ordering` reaches it.

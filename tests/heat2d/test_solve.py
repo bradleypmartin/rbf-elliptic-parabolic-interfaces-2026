@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+import scipy.sparse as sp
 from scipy.sparse.linalg import bicgstab
 
 from heat_interfaces.heat2d.domain import (
@@ -116,3 +117,23 @@ def test_bicgstab_breaks_down_on_the_identity_row_form():
         a, b, rtol=1e-8, atol=0.0, callback=lambda x: count.__setitem__(0, count[0] + 1)
     )
     assert info < 0 and count[0] <= 1
+
+
+def test_left_preconditioned_system_reports_the_unweighted_residual():
+    """Finding 3 of the E2.8 review: the solver's test is in the P-weighted norm."""
+    nodes, op = control()
+    system = reduced_system(op, nodes, VALUES)
+    p = sp.diags_array(1.0 / system.a.diagonal())  # a Jacobi P, cheap and far from I
+    pre = system.left_preconditioned(p)
+    assert pre.original is system and system.original is None
+    assert pre.left_preconditioned(p).original is system
+    result = solve_iterative(pre, "bicgstab", rtol=1e-8)
+    assert result.converged
+    u_i = result.u[system.interior]
+    unweighted = np.linalg.norm(system.b - system.a @ u_i) / np.linalg.norm(system.b)
+    weighted = np.linalg.norm(pre.b - pre.a @ u_i) / np.linalg.norm(pre.b)
+    assert result.residual == pytest.approx(unweighted, rel=1e-12)
+    assert result.residual != pytest.approx(weighted, rel=1e-3)
+    assert weighted <= 1e-8
+    with pytest.raises(ValueError):
+        system.left_preconditioned(sp.eye_array(3))

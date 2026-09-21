@@ -406,7 +406,7 @@ def print_solves(problem: str, rows: list[dict]) -> None:
         " GMRES(20), BiCGSTAB) and preconditioner (none, Appendix B, spilu);"
         " '!' did not converge within the cap, 'x' broke down; 'err' is the RMS"
         " error against the reference and 'dist' the relative distance from the"
-        " direct solution"
+        " direct solution; 'residual' is the unweighted |b - A u| / |b|"
     )
     header = "     n |"
     for label, _, _ in METHODS:
@@ -421,6 +421,19 @@ def print_solves(problem: str, rows: list[dict]) -> None:
                 line += f" {c['iterations']:5d}{_flag(c)} {c['seconds']:6.2f}s"
                 line += f" {c['distance']:6.0e} |"
         print(line)
+    print(
+        "largest unweighted residual |b - A u| / |b| over the three methods, per"
+        " preconditioner (Appendix B's solver tests |P b - P A u| <= rtol |P b|):"
+    )
+    for r in rows:
+        worst = {
+            pc: max(r[(label, pc)]["residual"] for label, _, _ in METHODS)
+            for pc in PRECONDITIONERS
+        }
+        print(
+            f"{int(r['n']):6d}  "
+            + "  ".join(f"{pc} {v:.1e}" for pc, v in worst.items())
+        )
     print("errors against the reference (direct first, then each solve):")
     for r in rows:
         errs = [f"{r['direct-error']:.2e}"]
