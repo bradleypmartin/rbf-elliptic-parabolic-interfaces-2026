@@ -1695,5 +1695,401 @@ time) and `uv run python scripts/heat2d_iterative.py --reference-n 160000
 --counts 1250 2500 5000 10000 20000` for the tables above (46 s cached; the
 control's 160,000-node reference adds 82 s the first time).
 
+### 2.9 The extremizing parameter: eq. 40 at s = 10³ … 10¹¹, and the continuity matrices' conditioning (E2.9)
+
+**The problem** (EABE §3.3.3, eq. 40; `heat2d.domain.case3(s)`,
+`scripts/heat2d_extremes.py`). Case 3 with its ring made thinner and more
+insulating together: `α = 1/(1.5 s) + (1/(3 s)) sin 2πx sin 2πy` on
+`0.35 − 1/s ≤ r ≤ 0.35`, 1 elsewhere, everything else as in §2.7, for
+`s = 10³` (case 3 itself: `0.35 − 1/1000 == 0.349` and the midline
+`0.35 − 0.5/1000 == 0.3495` in double precision, so `case3()` is
+`case3(1000)` bit for bit and the s = 10³ line below is §2.7's curved line
+re-solved), 10⁸, 10⁹, 10¹⁰ and 10¹¹. The ring's resistance, its width over
+its diffusivity, is `(1/s) / (1/(1.5 s)) = 1.5` at every s (`1.5 / (1 + 0.5
+sin sin)` with the sine part), so as s grows the solutions tend to a
+thin-layer limit with a contact resistance of 1.5 on `r = 0.35` and differ
+from it by O(1/s): the s ≥ 10⁸ problems are one problem to eight or more
+figures, and only the s = 10³ ring, 0.001 wide, is physically distinct.
+2016 solved each against its own fine reference (Fig. 19) and found the
+lines "almost as well, if not identically" to case 3 up to s ≈ 10⁸–10⁹,
+degrading at 10⁹–10¹⁰ and flat at 7e-4 for s = 10¹¹, with the average
+condition number of the continuity matrices growing like s² (Fig. 20,
+about 4.5 s²) as the cause.
+
+**What double precision holds.** At s = 10¹¹ the ring is 1e-11 wide at a
+radius of 0.35, 1.8e5 ulps; `Circle(0.35 − 1/s)` stores its inner radius to
+half an ulp, so the stored width is `1/s` to 5e-10 (s = 10⁸), 2.7e-8 (10⁹)
+and 8.3e-8 (10¹⁰, 10¹¹) relative, and everything built from the two radii
+inherits that and nothing worse: the frame shift between the two circles
+that a crossing stencil computes from their foot points equals the stored
+width to 6e-11 or better on the stencils probed (2026-09-21), and
+`ring_exact(s)`'s climb across the ring matches `1.5 × α R'` to the same
+8e-8 at s ≥ 10¹⁰ once its walk is formed from increments (decisions). The
+stored geometry is therefore the problem to about seven figures at the
+largest s, and nothing below is limited by it.
+
+**Fig. 20 twin: the continuity matrices as s grows** (`--conditioning-n
+10000`, 2026-09-21; every stencil of the 30-node / degree-4 interface group
+crossing the ring, 1254 of them, both sides at both circles; 2-norm
+condition numbers of the matrices `continuity_matrix` builds in the
+stencil-radius frame, mean over the stencils in the first table and largest
+in the second; "eq" scales each row by its largest entry; `P` is the
+polynomial block of the RBF-FD system and "aug" the whole system
+`[[A, P], [Pᵀ, 0]]`, with the translated basis anchored on the centre's
+region as this port does, on the ring as the MATLAB did (§2.3;
+`InterfaceStencil.polynomial_block(regions=)`), and with the flat frames;
+"far" the largest coefficient of the basis on the region across the ring
+from the centre; "residual" the worst relative residual of `stencil_weights`
+on the matched radial quadratic through the ring, §2.7's exactness check at
+every s, warp on and off; the DDR of the assembled operator's crossing rows
+and of all interior rows, least and median):
+
+```
+     s |  ring raw   out raw  ring eq  out eq |  P centre    P band    P flat |  aug centre   aug band |       far  far flat |  Fig. 20
+   1e3 |  6.07e+05  2.23e+02     16.5    16.5 |  2.88e+03  1.44e+08  2.91e+03 |    1.93e+06   4.15e+14 |  3.78e+03  1.72e+02 |   4.0e+06
+   1e4 |  6.07e+07  2.23e+02     16.5    16.5 |  7.28e+03  1.93e+10  1.29e+03 |    4.23e+06   1.21e+19 |  3.79e+04  1.70e+02 |   4.5e+08
+   1e5 |  6.07e+09  2.23e+02     16.5    16.5 |  6.96e+04  2.33e+12  1.24e+03 |    4.09e+07   7.63e+22 |  3.78e+05  1.70e+02 |   4.5e+10
+   1e6 |  6.07e+11  2.23e+02     16.5    16.5 |  6.93e+05  1.93e+14  1.24e+03 |    4.04e+08   6.22e+26 |  3.78e+06  1.70e+02 |   4.0e+12
+   1e7 |  6.07e+13  2.23e+02     16.5    16.5 |  6.87e+06  1.92e+16  1.23e+03 |    4.13e+09   6.13e+30 |  3.78e+07  1.70e+02 |   4.5e+14
+   1e8 |  6.07e+15  2.23e+02     16.5    16.5 |  6.86e+07  1.94e+18  1.23e+03 |    4.03e+10   6.31e+34 |  3.78e+08  1.70e+02 |   4.5e+16
+   1e9 |  6.07e+17  2.23e+02     16.5    16.5 |  6.86e+08  1.95e+20  1.23e+03 |    4.08e+11   6.28e+38 |  3.78e+09  1.70e+02 |   4.5e+18
+  1e10 |  6.07e+19  2.23e+02     16.5    16.5 |  6.88e+09  1.93e+22  1.23e+03 |    4.09e+12   4.79e+42 |  3.78e+10  1.70e+02 |   4.5e+20
+  1e11 |  6.07e+21  2.23e+02     16.5    16.5 |  6.88e+10  1.94e+24  1.23e+03 |    4.05e+13   3.49e+46 |  3.78e+11  1.70e+02 |   4.5e+22
+```
+
+```
+     s |  ring raw   out raw  ring eq |  P centre    P band    P flat |  aug centre   aug band |       far |  residual warp  plain |  DDR group      all  | build  analysis
+   1e3 |  1.52e+06  2.23e+02     16.6 |  1.02e+04  1.69e+09  1.05e+04 |    1.12e+07   1.11e+16 |  1.03e+04 |   2.1e-14   1.1e-14 |  0.080 0.681  0.080 0.608 |   4.7s    9.9s
+   1e4 |  1.52e+08  2.23e+02     16.6 |  5.68e+04  1.66e+11  4.03e+03 |    5.30e+07   2.32e+20 |  1.02e+05 |   3.8e-14   3.9e-14 |  0.076 0.689  0.076 0.608 |   4.7s    9.9s
+   1e5 |  1.52e+10  2.23e+02     16.6 |  5.37e+05  1.64e+13  3.51e+03 |    4.87e+08   1.65e+24 |  1.01e+06 |   1.7e-13   7.2e-14 |  0.104 0.687  0.104 0.608 |   4.7s    9.8s
+   1e6 |  1.52e+12  2.23e+02     16.6 |  5.29e+06  1.70e+15  3.45e+03 |    2.77e+09   1.16e+28 |  1.01e+07 |   1.5e-12   8.3e-13 |  0.080 0.692  0.080 0.607 |   4.7s    9.9s
+   1e7 |  1.52e+14  2.23e+02     16.6 |  5.27e+07  1.65e+17  3.45e+03 |    5.31e+10   1.11e+32 |  1.02e+08 |   1.3e-11   8.4e-12 |  0.118 0.693  0.118 0.608 |   4.7s   10.0s
+   1e8 |  1.52e+16  2.23e+02     16.6 |  5.25e+08  1.65e+19  3.44e+03 |    2.47e+11   1.96e+36 |  1.02e+09 |   1.2e-10   1.4e-10 |  0.081 0.690  0.081 0.607 |   4.7s    9.8s
+   1e9 |  1.52e+18  2.23e+02     16.6 |  5.24e+09  1.83e+21  3.44e+03 |    5.26e+12   5.54e+40 |  1.02e+10 |   1.6e-09   1.0e-09 |  0.081 0.692  0.081 0.608 |   4.7s    9.9s
+  1e10 |  1.52e+20  2.23e+02     16.6 |  5.26e+10  1.87e+23  3.44e+03 |    5.26e+13   2.08e+44 |  1.01e+11 |   2.2e-08   7.7e-09 |  0.081 0.693  0.081 0.608 |   4.7s    9.9s
+  1e11 |  1.52e+22  2.23e+02     16.6 |  5.26e+11  1.80e+25  3.44e+03 |    5.26e+14   8.72e+47 |  1.02e+12 |   1.4e-07   1.2e-07 |  0.079 0.691  0.079 0.608 |   4.7s    9.9s
+growth with s (fit exponent): ring raw 2.00, all four 2.00, P centre 0.96, P band 2.01, aug centre 0.95, aug band 3.97, residual 0.91
+median residual over the stencils (warp on / off): 1e3: 1.3e-16 / 1.5e-16; 1e4: 1.2e-16 / 1.9e-16; 1e5: 4.3e-16 / 6.5e-16; 1e6: 3.7e-15 / 6.1e-15; 1e7: 4.2e-14 / 6.6e-14; 1e8: 4.2e-13 / 6.3e-13; 1e9: 4.1e-12 / 6.7e-12; 1e10: 4.4e-11 / 6.5e-11; 1e11: 4.4e-10 / 6.4e-10
+```
+
+![conditioning against s](figures/heat2d_extremes_conditioning.png)
+
+- *Fig. 20 is reproduced in its exponent and to a constant.* The ring
+  side's matrices grow as `0.61 s²` (fit exponent 2.00; the mean over all
+  four is the same line, the ring side's dominating it) against 2016's
+  `4.5 s²`, 7× below at every s; the units are the stencil radius here and
+  unrecorded in 2016, and a constant factor is all a change of units moves.
+  The exponent is the row scaling of eq. 28 at degree 4: the rows of `D u`
+  and of the flux carry one factor of `α = 1/(1.5 s)`, those of `D² u` and
+  of the flux of `D u` two, so the matrix on the ring's side has rows of
+  size 1, α, α, α², α² and its condition number is O(s²); with the interior
+  spec's degree 5 across the ring the flux of `D² u` adds an α³ row and the
+  exponent is 3 (2.8e7 at s = 10³ to 2.8e31 at 10¹¹ on the 42 / 5 stencils,
+  probed 2026-09-21, not in the driver). The outside's matrices sit at 223
+  at every s (§2.3's 223 on case 1).
+- *The matrices are badly scaled, not badly conditioned.* With each row
+  scaled by its largest entry the ring side's condition number is 16.5 at
+  every s (largest 16.6) and the outside's 16.5. `translation_matrix`
+  solves `C_to c = C_from` by LU with partial pivoting after scaling each
+  row of `[C_from | C_to]` by its largest entry (the MATLAB's equilibration,
+  which the outside's O(1) rows dominate, so the ring side's rows keep
+  their 1, α, α² sizes going in); the accuracy of such a solve is that of
+  the row-equilibrated matrix, not of the matrix as built, and the 10²² of
+  Fig. 20 never reaches the weights. It is the number 2016 plotted; whether
+  it was what broke the 2016 code cannot be checked.
+- *What does grow into the weights is the far side's basis.* Anchored on
+  the centre's region, the translated basis on the region across the ring
+  carries coefficients of order s (`3.8 s`: 3.8e3 at 10³, 3.8e11 at 10¹¹),
+  the polynomial block's condition number grows like s (2.9e3 to 6.9e10,
+  exponent 0.96) and the RBF-FD system's like s (1.9e6 to 4.1e13); with the
+  flat frames the far side stays at 170 and `P` at 1.2e3–2.9e3 for every s.
+  The O(s) is the curvature's doing, and it is exact arithmetic, not
+  rounding: along the inner circle the `D u` row reads
+  `12 c₄₀ + 2 c₂₂ + (2 c₂₁ + 6 c₀₃) f₂ = O(s)` with `c₀₃ ~ (1.5 s)²` from
+  the flux of `D u` and `f₂ = κ scale / 2 ≈ −0.09`, so the ring's
+  polynomial has `c₂₂ ~ 0.6 s²` in `ξ² η²`; the change of frame to the
+  outer circle shifts η by `δ = (1/s) / scale` and turns it into
+  `2 c₂₂ δ ~ 1.2 s / scale` in `ξ² η`, and restricting along the outer
+  circle, `η = f₂' ξ²`, leaves `2 c₂₂ δ f₂' ~ 0.6 s κ² scale` in ξ⁴ that
+  the far side's u-rows must match. The exact solution's tangential
+  derivatives along the outer circle are O(1); the degree-4 polynomial's
+  are O(s κ² scale) because its `ξ² η²` term, fixed at the inner circle,
+  is read a ring's width away where the tangent frame has turned. The
+  weights stay exact on the span but lose digits like s: the worst
+  relative residual on the matched quadratic is 2.1e-14 at s = 10³ and
+  1.4e-7 at 10¹¹, about `1.4e-18 s` from s = 10⁵ on, warp on or off, and
+  the median over the stencils 1.3e-16 to 4.4e-10 (`4e-21 s`). So the
+  translated basis is good to about seven figures at s = 10¹¹, three
+  orders below the 2016 floor of 7e-4 and one above the stored geometry's.
+- *Anchored on the ring, the same span is hopeless from s = 10³.* The
+  MATLAB anchored the standard monomials on the band (§2.3) and translated
+  outward; on the ring that basis has `P` at 1.4e8 to 1.9e24 (exponent 2)
+  and the RBF-FD system at 4.2e14 to 3.5e46 (exponent 4): the monomials of
+  the ring translate to the outside with their normal derivatives divided
+  by 1.5 s, so the 15 functions on each outside region are nearly the 5
+  tangential ones and `P` is rank-deficient to O(1/s) there. Weights from
+  such a system have no digits left by s = 10⁵ in this arithmetic. Whether
+  the 2016 code's anchoring, units or equilibration put its breakdown at
+  10⁹–10¹¹ rather than there cannot be checked, the code being lost; the
+  ordering is the point: on this span the anchoring decides the
+  conditioning, and this port anchors on the centre's side, a §2.3 decision
+  made for a different reason.
+
+**Fig. 19 twin: errors against N per s** (`--reference-n 160000 --counts
+1250 … 80000`, seed 0, 2026-09-21; the papers' setting, curvature and warped
+Gaussians, against a 160,000-node reference at the same s read at the coarse
+nodes through its stencils; `plain` the same operator with plain Gaussians;
+order per halving of h; the last column Fig. 19 read off the rendered page,
+±30 %; `spread` in the first table is the RMS difference from the s = 10⁸
+reference read at the 80,000-node set):
+
+```
+     s       n        h  group    nodes  operator   solve        max |u|     spread
+   1e3  160000  0.00263   5038     8.2s     38.6s   28.8s  1.000000001   5.34e-06  (cached)
+   1e8  160000  0.00263   5055     9.1s     40.2s   27.8s  1.000000000   0.00e+00  (solved)
+   1e9  160000  0.00263   5053     8.2s     40.0s   28.7s  1.000000000   2.26e-08  (solved)
+  1e10  160000  0.00263   5051     8.2s     40.2s   27.0s  1.000000000   1.77e-08  (solved)
+  1e11  160000  0.00263   5057     8.3s     40.0s   28.3s  1.000000000   3.15e-08  (solved)
+```
+
+```
+s = 1e3
+     n       h  group  in ring |     curved  order  nodes  build  solve  read |      plain  order |  Fig. 19
+  1250  0.0294    512        0 |   1.58e-03      -   0.1s   1.2s   0.0s   0.1s |   1.96e-03      - |   1.3e-03
+  2500  0.0208    694        0 |   4.69e-04   3.52   0.1s   1.7s   0.0s   0.1s |   9.51e-04   2.09 |   6.0e-04
+  5000  0.0149    949        0 |   1.13e-04   4.27   0.4s   2.6s   0.1s   0.3s |   9.90e-05   6.78 |   1.6e-04
+ 10000  0.0105   1314        0 |   3.02e-05   3.78   0.8s   3.9s   0.4s   1.5s |   2.06e-05   4.50 |   5.5e-05
+ 20000  0.0075   1813        0 |   6.03e-06   4.68   1.3s   6.2s   1.2s   2.3s |   4.58e-06   4.37 |   1.6e-05
+ 40000  0.0053   2534        0 |   1.39e-06   4.20   2.2s  10.7s   3.3s   5.3s |   9.04e-07   4.65 |   2.7e-06
+ 80000  0.0037   3567        0 |   3.02e-07   4.39   4.2s  19.7s   9.6s   9.1s |   2.91e-07   3.26 |   8.0e-07
+ratio to Fig. 19: 1.22, 0.78, 0.68, 0.55, 0.38, 0.50, 0.38
+
+s = 1e8
+     n       h  group  in ring |     curved  order  nodes  build  solve  read |      plain  order |  Fig. 19
+  1250  0.0294    518        0 |   1.51e-03      -   0.1s   1.2s   0.0s   0.1s |   4.48e-03      - |   1.4e-03
+  2500  0.0208    700        0 |   4.08e-04   3.80   0.1s   1.8s   0.0s   0.1s |   5.71e-04   5.97 |   6.5e-04
+  5000  0.0149    947        0 |   1.30e-04   3.43   0.4s   2.5s   0.1s   0.2s |   2.28e-04   2.76 |   2.2e-04
+ 10000  0.0105   1313        0 |   2.58e-05   4.63   0.8s   3.9s   0.4s   1.5s |   7.29e-05   3.26 |   7.4e-05
+ 20000  0.0075   1800        0 |   6.19e-06   4.15   1.3s   6.3s   1.2s   2.3s |   1.17e-05   5.31 |   2.4e-05
+ 40000  0.0053   2543        0 |   1.30e-06   4.46   2.2s  10.8s   3.7s   5.4s |   2.18e-06   4.82 |   4.9e-06
+ 80000  0.0037   3570        0 |   2.83e-07   4.40   4.2s  19.9s   9.9s   9.1s |   1.20e-06   1.73 |   1.2e-06
+ratio to Fig. 19: 1.04, 0.63, 0.59, 0.35, 0.26, 0.27, 0.24
+
+s = 1e9
+     n       h  group  in ring |     curved  order  nodes  build  solve  read |      plain  order |  Fig. 19
+  1250  0.0294    515        0 |   1.58e-03      -   0.1s   1.2s   0.0s   0.1s |   4.91e-03      - |   1.6e-03
+  2500  0.0208    702        0 |   4.11e-04   3.90   0.1s   1.8s   0.0s   0.1s |   7.06e-04   5.63 |   5.4e-04
+  5000  0.0149    942        0 |   1.25e-04   3.57   0.4s   2.5s   0.1s   0.2s |   1.84e-03  -2.87 |   1.8e-04
+ 10000  0.0105   1315        0 |   2.21e-05   4.96   0.8s   3.9s   0.4s   1.5s |   6.07e-05   9.77 |   9.0e-05
+ 20000  0.0075   1797        0 |   6.17e-06   3.71   1.3s   6.3s   1.2s   2.3s |   9.40e-06   5.42 |   2.5e-05
+ 40000  0.0053   2544        0 |   1.34e-06   4.37   2.2s  10.6s   3.7s   5.4s |   1.89e-06   4.60 |   9.6e-06
+ 80000  0.0037   3577        0 |   2.93e-07   4.37   4.2s  19.7s  10.8s   9.0s |   6.79e-07   2.94 |   6.9e-06
+ratio to Fig. 19: 0.99, 0.76, 0.69, 0.25, 0.25, 0.14, 0.04
+
+s = 1e10
+     n       h  group  in ring |     curved  order  nodes  build  solve  read |      plain  order |  Fig. 19
+  1250  0.0294    515        0 |   1.51e-03      -   0.1s   1.2s   0.0s   0.1s |   4.41e-03      - |   1.1e-03
+  2500  0.0208    706        0 |   4.14e-04   3.75   0.1s   1.8s   0.0s   0.1s |   1.32e-03   3.51 |   5.7e-04
+  5000  0.0149    942        0 |   1.24e-04   3.62   0.4s   2.6s   0.1s   0.2s |   1.07e-03   0.64 |   1.6e-04
+ 10000  0.0105   1310        0 |   2.49e-05   4.58   0.8s   3.9s   0.4s   1.5s |   3.50e-05   9.78 |   6.7e-05
+ 20000  0.0075   1797        0 |   6.12e-06   4.08   1.3s   6.3s   1.2s   2.3s |   1.76e-05   2.00 |   4.5e-05
+ 40000  0.0053   2529        0 |   1.42e-06   4.19   2.2s  10.7s   3.5s   5.4s |   1.99e-06   6.25 |   1.3e-05
+ 80000  0.0037   3574        0 |   3.10e-07   4.37   4.2s  19.7s  10.4s   9.0s |   5.48e-07   3.70 |   1.1e-05
+ratio to Fig. 19: 1.31, 0.73, 0.75, 0.37, 0.14, 0.11, 0.03
+
+s = 1e11
+     n       h  group  in ring |     curved  order  nodes  build  solve  read |      plain  order |  Fig. 19
+  1250  0.0294    513        0 |   1.54e-03      -   0.1s   1.2s   0.0s   0.1s |   6.88e-03      - |   2.0e-03
+  2500  0.0208    700        0 |   4.07e-04   3.87   0.1s   1.8s   0.0s   0.1s |   5.33e-04   7.42 |   1.2e-03
+  5000  0.0149    951        0 |   1.30e-04   3.42   0.4s   2.6s   0.1s   0.2s |   2.40e-04   2.40 |   8.5e-04
+ 10000  0.0105   1316        0 |   2.40e-05   4.85   0.8s   3.9s   0.4s   1.5s |   3.75e-05   5.31 |   7.8e-04
+ 20000  0.0075   1802        0 |   6.24e-06   3.91   1.3s   6.3s   1.3s   2.3s |   1.34e-05   2.98 |   7.4e-04
+ 40000  0.0053   2537        0 |   1.28e-06   4.52   2.2s  10.7s   3.6s   5.4s |   1.03e-05   0.77 |   7.4e-04
+ 80000  0.0037   3577        0 |   2.96e-07   4.23   4.2s  19.6s  10.2s   9.0s |   5.07e-07   8.66 |   7.4e-04
+ratio to Fig. 19: 0.77, 0.34, 0.15, 0.03, 0.01, 0.00, 0.00
+
+ratio of each s line to the s = 1e3 line at each count (curved): 1e8: 0.96, 0.87, 1.15, 0.85, 1.03, 0.94, 0.94; 1e9: 1.00, 0.88, 1.11, 0.73, 1.02, 0.97, 0.97; 1e10: 0.95, 0.88, 1.09, 0.83, 1.02, 1.02, 1.03; 1e11: 0.98, 0.87, 1.15, 0.79, 1.03, 0.93, 0.98
+```
+
+![convergence per s](figures/heat2d_extremes_convergence.png)
+
+- *The breakdown is not reproduced.* Every s line is the s = 10³ line to
+  within the node sets' scatter, 0.73–1.15× at every count, and fourth
+  order throughout (fits over 1250–80,000 nodes: 4.14, 4.14, 4.15, 4.10,
+  4.13 for s = 10³ … 10¹¹). At s = 10¹¹ the error is 2.96e-7 at 80,000
+  nodes, the reference's own floor (§2.7: about 1e-7), where Fig. 19 has
+  7.4e-4 flat from 5000 nodes: 0.03× the marker at 10,000 nodes and below
+  0.01× beyond; the 10¹⁰ line ends at 0.03× its marker, the 10⁹ at 0.04×,
+  the 10⁸ at 0.24×, the 10³ at 0.38× (this reading of Fig. 19 sits 0.7–1.0×
+  §2.7's reading of Fig. 14 for the same line). The s ε loss of the basis
+  (1.4e-7 worst, 4e-10 median at 10¹¹) is below the discretisation error
+  at every count run; the floor it would set is not reached by 80,000
+  nodes. `max |u|` stays within 1 at every s, as at s = 10³.
+- *The references agree.* The s ≥ 10⁸ references differ from the 10⁸ one
+  by 1.8e-8 to 3.2e-8 RMS at the 80,000-node set, below their own error of
+  about 1e-7, as one problem solved on node sets that differ by the
+  rows' 0.5/s: the O(1/s) physics is not visible at 160,000 nodes. The
+  10³ reference differs by 5.3e-6, the 0.001-wide ring's own O(w).
+- *Plain Gaussians are the one setting that degrades with s.* At s = 10³
+  the plain line is 0.65–1.24× the warped one (§2.7); at s ≥ 10⁸ it is
+  1.2–14× above it and erratic (1.84e-3 at 5000 nodes for s = 10⁹ after
+  7.1e-4 at 2500; 1.03e-5 at 40,000 for 10¹¹ after 1.34e-5 at 20,000),
+  converging in the end to 5.1e-7 to 1.2e-6 at 80,000. The spectrum
+  below says why.
+
+**The spectrum** (the E2.5 note on #23; `--spectrum-n 2000`, the dense
+eigenvalues of the interior operator on the 2000-node set at each s, 1903
+interior nodes; `complex` means `|Im λ| > 1e-8 max |λ|`, `positive` counts
+real parts above zero):
+
+```
+     s  operator  complex  positive     max Re   h² min Re  h² max |Im|   time
+   1e3  curved       1026         0    -14.340     -13.445        0.182   2.1s
+   1e3  plain         956        53   2725.888     -13.445        0.128   2.0s
+   1e8  curved       1070         0    -14.328     -13.323        0.406   2.1s
+   1e8  plain         956        60   7083.363     -13.324        0.407   2.0s
+   1e9  curved       1066         0    -14.330     -13.518        0.475   2.1s
+   1e9  plain         956        59   6937.031     -13.518        0.475   2.0s
+  1e10  curved       1094         0    -14.329     -13.546        0.532   2.1s
+  1e10  plain         970        60   6836.736     -13.549        0.532   2.0s
+  1e11  curved       1058         0    -14.332     -13.645        0.386   2.1s
+  1e11  plain         968        60   6968.740     -13.646        0.386   2.0s
+```
+
+- *The warped operator is stable at every s and the plain one is not.* With
+  the warp, `max Re λ = −14.3` at every s, the complex count 1026–1094 and
+  `h² max |Im|` 0.18 at s = 10³ and 0.39–0.53 at s ≥ 10⁸; there is no loop
+  of the case-1 kind (§2.5), the plain and warped `h² max |Im|` coinciding
+  at s ≥ 10⁸. The plain-Gaussian operator has eigenvalues with positive
+  real parts, 53 to 60 of them on this set, the largest `+2.7e3` at
+  s = 10³ and `+6.8e3` to `+7.1e3` at s ≥ 10⁸; on 1250, 2500 and 4000
+  nodes (probed 2026-09-21, not in the driver) 48, 48 and 0 of them at
+  s = 10³ against 50, 69 and 87 at s = 10¹¹, the count growing with N
+  there; the warped operator has none on any set at any s.
+  So the warp's 1.5-unit shift of the far side, "not decisive" for accuracy
+  or dominance at s = 10³ (§2.7, §2.8), decides the sign of the spectrum on
+  the ring: a march of the plain operator would grow like `e^{7000 t}`, and
+  its elliptic solves are the erratic plain lines above. The E2.4 note's
+  "the sweep may run both cheaply" stands, with this as the result.
+
+**The DDR** (the E2.8 note on #23). The crossing rows' diagonal dominance
+ratio at 10,000 nodes is 0.076–0.118 at the least and 0.681–0.693 in the
+median at every s (all interior rows: the same least, median 0.607–0.608;
+§2.8's 42 / 5 + 30 / 4 numbers at s = 10³ were 0.080 and 0.681): the
+dominance of the assembled rows does not see s at all.
+
+**The resampling check** (the E2.7 note on #23; `ring_exact(s=s)`, the
+harmonic mode through the ring at `α = 1/(1.5 s)`, on the 160,000-node
+constant-ring layout at each s, read at the coarse case-3 nodes within 0.1
+of the ring; RMS / largest error, aware then blind):
+
+```
+     s      n  points |       aware        max |       blind        max
+   1e3   1250     586 |    1.76e-12   1.04e-11 |    1.76e-12   1.04e-11
+   1e3   2500    1076 |    1.67e-12   1.02e-11 |    1.67e-12   1.02e-11
+   1e3   5000    2165 |    8.72e-12   3.45e-10 |    1.68e-04   4.60e-03
+   1e3  10000    4364 |    1.37e-11   2.36e-10 |    7.38e-04   1.29e-02
+   1e3  20000    8733 |    9.09e-12   9.24e-11 |    6.54e-04   8.16e-03
+   1e3  40000   17634 |    3.75e-11   5.15e-10 |    9.03e-03   7.00e-02
+   1e3  80000   35304 |    2.71e-11   3.07e-10 |    6.77e-03   5.68e-02
+   1e8   1250     582 |    1.59e-12   1.11e-11 |    1.59e-12   1.11e-11
+   1e8   2500    1073 |    2.06e-12   2.38e-11 |    2.06e-12   2.38e-11
+   1e8   5000    2173 |    1.11e-11   3.08e-10 |    1.87e-04   3.68e-03
+   1e8  10000    4358 |    8.05e-12   1.54e-10 |    7.84e-04   1.27e-02
+   1e8  20000    8741 |    5.78e-12   9.60e-11 |    6.46e-04   8.33e-03
+   1e8  40000   17618 |    2.05e-11   3.52e-10 |    9.03e-03   6.32e-02
+   1e8  80000   35325 |    1.93e-11   3.13e-10 |    6.80e-03   5.56e-02
+   1e9   1250     583 |    1.69e-12   1.08e-11 |    1.69e-12   1.08e-11
+   1e9   2500    1081 |    1.86e-12   1.78e-11 |    1.86e-12   1.78e-11
+   1e9   5000    2174 |    1.08e-11   3.67e-10 |    1.20e-04   2.94e-03
+   1e9  10000    4357 |    7.61e-12   1.46e-10 |    7.63e-04   1.17e-02
+   1e9  20000    8741 |    5.70e-12   7.42e-11 |    6.49e-04   8.32e-03
+   1e9  40000   17613 |    2.00e-11   3.70e-10 |    9.05e-03   6.36e-02
+   1e9  80000   35328 |    1.93e-11   3.26e-10 |    6.80e-03   5.58e-02
+  1e10   1250     584 |    1.68e-12   1.10e-11 |    1.68e-12   1.10e-11
+  1e10   2500    1077 |    2.00e-12   1.93e-11 |    2.00e-12   1.93e-11
+  1e10   5000    2169 |    2.30e-12   2.94e-11 |    1.06e-04   2.64e-03
+  1e10  10000    4358 |    6.72e-12   1.01e-10 |    7.15e-04   1.21e-02
+  1e10  20000    8745 |    6.69e-12   7.27e-11 |    6.46e-04   8.30e-03
+  1e10  40000   17614 |    2.26e-11   3.49e-10 |    9.07e-03   6.34e-02
+  1e10  80000   35332 |    2.55e-11   5.78e-10 |    6.81e-03   5.60e-02
+  1e11   1250     580 |    1.62e-12   9.38e-12 |    1.62e-12   9.38e-12
+  1e11   2500    1075 |    1.95e-12   2.52e-11 |    1.95e-12   2.52e-11
+  1e11   5000    2172 |    7.77e-12   3.08e-10 |    1.03e-04   2.89e-03
+  1e11  10000    4358 |    7.82e-12   1.40e-10 |    7.92e-04   1.32e-02
+  1e11  20000    8747 |    5.09e-11   1.44e-09 |    6.44e-04   8.34e-03
+  1e11  40000   17612 |    1.01e-10   2.30e-09 |    9.05e-03   6.33e-02
+  1e11  80000   35323 |    1.80e-10   5.82e-09 |    6.80e-03   5.60e-02
+```
+
+- The aware read is 1.6e-12 to 3.8e-11 RMS for s ≤ 10¹⁰, §2.7's 1.8e-12 to
+  3.8e-11 at s = 10³ reproduced bit for bit there, and 5e-11 to 1.8e-10
+  (largest 5.8e-9) at s = 10¹¹ from 20,000 nodes on: the reading goes
+  through the same far-side basis as the weights and loses digits like s
+  with them, and 1.8e-10 is where the s = 10¹¹ line would floor if its
+  discretisation error got there (it is 3e-7 at 80,000 nodes). The blind
+  read coincides with the aware one at 1250 and 2500 nodes (§2.6's reason)
+  and is 1e-4 to 9e-3 beyond, at every s.
+
+**Decisions (E2.9).**
+
+- `case3(s)` is eq. 40 at any s with `case3()` its s = 1000 (`ring_radii`,
+  `CASE3_S`); the straddling rows sit on the midline `0.35 − 0.5/s`, so the
+  ownership check of §2.7 (no node in the ring, the innermost pair
+  straddling both circles) holds and is run on every node set and
+  reference.
+- Each s has its own reference in the papers' setting, cached as
+  `heat2d_extremes_reference_s<s>_n<N>_seed<seed>.npz`; s = 10³ reads the
+  case-3 file. The references are read against one another at one node set
+  and the spread is reported, since for s ≥ 10⁸ they solve one problem to
+  O(1/s).
+- `RingMode`'s walk forms the climb across each ring from `expm1` / `log1p`
+  increments of `r^m` and `r^-m` (the pair `(a, b)` on a ring 1/s thick is
+  O(s), and evaluating `a r^m + b r^-m` at the outer radius cancelled two
+  O(s) terms to an O(1) climb, losing log10(s) digits); `ring_exact(s=s)`
+  takes the parameter. The coefficients at s = 10³ are unchanged to 1e-8
+  and the climb at s = 10¹¹ is `1.5 × α R'` to the stored width's 8e-8.
+  `radial` at a point inside a thin ring still evaluates the O(s) pair;
+  only FD4 grids have such points and the sweep runs none.
+- The matched quadratic of the exactness check is formed from the stored
+  radii (`(R₂ − R₁)(R₂ + R₁)(1.5 s − 1)`, no cancellation), so it agrees
+  with the geometry the stencils see; the worst and the median residual over
+  every crossing stencil are reported, since a few stencils centred on the
+  outermost row with three nodes across the ring reproduce it to 3e-6 only
+  at every s including 10³ (a stencil-geometry property, not an s effect;
+  seen on 1250-node sets, not on 2500).
+- The condition numbers are those of the matrices `continuity_matrix`
+  builds, in stencil-radius units, both sides at both circles, mean over
+  the crossing stencils; the ring side's alone and the row-equilibrated
+  ones are tabulated beside them because Fig. 20 does not say which it
+  averaged. The band-anchored comparison evaluates `translated_basis`
+  anchored on region 1 at the stencil's nodes through
+  `InterfaceStencil.polynomial_block(regions=)`; the operator itself is not
+  re-anchored (the anchor and the centre's region are one in
+  `stencil_weights`, and separating them is not this ticket's).
+- The 2016 markers are read off Fig. 19 (`FIG19`, ±30 %; its s = 10³ line
+  is Fig. 14's curved line and reads 0.7–1.0× §2.7's reading of Fig. 14)
+  and Fig. 20 (`FIG20`, about 4.5 s², ±40 %).
+- The driver's default is a 20,000-node reference per s, counts to 5000
+  and conditioning at 2500 nodes (4.5 min in all; the 2500-node
+  conditioning numbers are within 10 % of the 10,000-node ones above); the
+  tables above are the 160,000-node run.
+- The ticket's "done when": both figures regenerate; the breakdown near
+  s = 10¹¹ is not reproduced, every line being fourth order to the
+  reference's floor, and its absence is explained above: the O(s²) of
+  Fig. 20 is row scaling that a pivoting solve never sees, what this port's
+  basis does lose is s ε (seven figures left at 10¹¹), and on the same
+  span the ring-anchored basis of the MATLAB is hopeless from s = 10⁵ in
+  this arithmetic, which points at the anchoring without the lost code to
+  confirm it. Two more 2016 discrepancies for E2.11's list: the s = 10¹¹
+  floor, and Fig. 20's prefactor (7×, units).
+
+Regenerate with `uv run python scripts/heat2d_extremes.py` (4.5 min; the
+five 20,000-node references are cached under `outputs/` on the first run)
+and `uv run python scripts/heat2d_extremes.py --reference-n 160000 --counts
+1250 2500 5000 10000 20000 40000 80000 --conditioning-n 10000` for the
+tables above (25 min: the four new references 5.2 min, the sweeps 13 min,
+the conditioning 3.2 min, the spectra 21 s, the resampling check 3 min).
+
 Later tickets add their subsections here; E2.11 (#25) closes the section
 with the decisions and the regeneration commands.

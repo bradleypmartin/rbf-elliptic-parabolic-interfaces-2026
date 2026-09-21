@@ -65,7 +65,7 @@ drops signs and piecewise braces:
 | 29–32 | **§3.2 case 2**: eq. 35–36, Fig. 8–9; Fig. 10 FD4 / flat / curved vs 160,000-node reference (extrapolation: 10¹¹ nodes for 1e−8); Fig. 11 warp-and-straddle ablation | E2.6 |
 | 33–37 | **§3.3 case 3**: eq. 37–39 (ring, inner circle, `sin 6πx` at both y = 0 and y = 1, confirmed from the rendered page); multi-interface translation; Fig. 12–14 | E2.7 |
 | 38–42 | **§3.3.2 iterative solvers** (19 nodes / degree 3; control problem; gmres, bicgstab; the preconditioner reference is the dissertation's Appendix B; Fig. 15–18) | E2.8 |
-| 42–45 | **§3.3.3 the extremizing parameter** eq. 40 (s = 10³ … 10¹¹, layer thickness 1/s, alpha ~ 1/(1.5 s)); Fig. 19 errors vs N per s; Fig. 20 condition number of the continuity matrices ~ O(s²) | E2.9, E4.8 |
+| 42–45 | **§3.3.3 the extremizing parameter** eq. 40 (s = 10³ … 10¹¹, layer thickness 1/s, alpha ~ 1/(1.5 s)); Fig. 19 errors vs N per s (PDF 44; read off as `FIG19` in `scripts/heat2d_extremes.py`, ±30 %, the s = 10³ line being Fig. 14's curved line); Fig. 20 condition number of the continuity matrices ~ O(s²) (PDF 45; `FIG20`, about 4.5 s², ±40 %; the text does not say which side's matrices or what units) | E2.9, E4.8 |
 | 45–46 | §4 conclusions (open issues: corners, higher-order RBF modification, 3-D cost, preconditioning, extreme contrasts) | Manuscript §7 |
 | 47–49 | References (29 entries; [20] Reutskiy 2016, [21] Bayona et al. 2017, [26] Flyer et al. 2016) | Citations |
 

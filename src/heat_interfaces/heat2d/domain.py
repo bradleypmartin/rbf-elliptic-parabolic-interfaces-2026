@@ -425,22 +425,43 @@ def case2() -> Domain:
 RING = (0.349, 0.35)
 COOLING_RADIUS = 0.05
 
+CASE3_S = 1000.0
+"""EABE eq. 40's extremizing parameter at which eq. 37–39, case 3, is recovered."""
 
-def case3() -> Domain:
-    """EABE eq. 37–39: the insulating ring ``0.349 ≤ r ≤ 0.35`` and the cooling circle.
 
-    The rows straddle the ring's midline, since at every count of Fig. 14
-    the ring is thinner than the spacing; the circle ``r = 0.05`` is a
-    Dirichlet row and its inside is cut out.
+def ring_radii(s: float = CASE3_S) -> tuple[float, float]:
+    """The insulating ring ``0.35 − 1/s ≤ r ≤ 0.35`` of EABE eq. 40 (§3.3.3).
+
+    ``s = 1000`` gives ``RING`` bit for bit (``0.35 − 1/1000 == 0.349`` in
+    double precision, and the midline ``0.35 − 0.5/1000 == 0.3495``). At
+    ``s = 10¹¹`` the ring is 1.8e5 ulps of its radius wide and the stored
+    width is off by 8e-8 relative, the floor of everything derived from the
+    two radii (port notes §2.9).
     """
+    if not s > 0.0:
+        raise ValueError("the extremizing parameter s must be positive")
+    return (0.35 - 1.0 / s, 0.35)
+
+
+def case3(s: float = CASE3_S) -> Domain:
+    """EABE eq. 37–39, or eq. 40 at any ``s``: the insulating ring and cooling circle.
+
+    ``α = 1/(1.5 s) + (1/(3 s)) sin 2πx sin 2πy`` on the ring
+    ``0.35 − 1/s ≤ r ≤ 0.35`` (``ring_radii``), 1 elsewhere; eq. 38's
+    ``1/1500 + (1/3000) sin 2πx sin 2πy`` on ``0.349 ≤ r ≤ 0.35`` at the
+    default ``s = 1000``. The rows straddle the ring's midline, since at
+    every count of Fig. 14 the ring is thinner than the spacing; the circle
+    ``r = 0.05`` is a Dirichlet row and its inside is cut out.
+    """
+    inner, outer = ring_radii(s)
     band = Band(
-        Circle(RING[0]),
-        Circle(RING[1]),
-        SineProduct(1.0 / 1500.0, 1.0 / 3000.0),
+        Circle(inner),
+        Circle(outer),
+        SineProduct(1.0 / (1.5 * s), 1.0 / (3.0 * s)),
         Constant2D(1.0),
     )
     cooling = Circle(COOLING_RADIUS)
-    return Domain(band, (Circle(sum(RING) / 2),), (*STRIP, cooling), (cooling,))
+    return Domain(band, (Circle(outer - 0.5 / s),), (*STRIP, cooling), (cooling,))
 
 
 CASES = {1: case1, 2: case2, 3: case3}

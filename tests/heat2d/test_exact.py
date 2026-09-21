@@ -122,6 +122,37 @@ def test_ring_mode_is_continuous_with_its_flux_and_harmonic_on_every_ring():
     assert u.ring(np.array([0.1, 0.349, 0.3495, 0.35, 0.4])).tolist() == [0, 1, 1, 2, 2]
 
 
+def test_ring_mode_walk_is_stable_across_a_ring_a_billionth_wide():
+    # E2.9: on EABE eq. 40's ring, 1/s wide at α = 1/(1.5 s), the pair (a, b) is
+    # O(s) and evaluating a r^m + b r^-m at the outer radius cancels to an O(1)
+    # climb; the walk forms the climb from expm1 increments instead, so the
+    # outside coefficients keep their digits and tend to the thin-layer limit,
+    # where the climb is the resistance 1.5 times the flux.
+    old = ring_exact()
+    np.testing.assert_allclose(
+        old._coefficients,
+        [
+            [6.36305165e-01, 0.0],
+            [4.77547026e02, -7.07520118],
+            [3.34804304, 4.07473100e-02],
+        ],
+        rtol=1e-8,
+    )
+    outer = {}
+    for s in (1e6, 1e9, 1e11):
+        u = ring_exact(s=s)
+        r1, r2 = u.radii
+        assert u.radii == pytest.approx((0.35 - 1 / s, 0.35)) and u.alphas[1] == 1 / (
+            1.5 * s
+        )
+        climb = u.radial(r2) - u._coefficients[0, 0] * r1**2
+        # O(1/s) from the ring's thickness, plus the stored width's rounding (8e-8).
+        assert climb == pytest.approx(1.5 * u.flux(r2), rel=3.0 / s + 2e-7)
+        assert u.radial(u.scale_radius) == pytest.approx(1.0)
+        outer[s] = u._coefficients[2]
+    np.testing.assert_allclose(outer[1e11], outer[1e9], rtol=1e-6)
+
+
 def test_ring_mode_refuses_malformed_rings():
     with pytest.raises(ValueError, match="one radius fewer"):
         RingMode((0.3,), (1.0, 2.0, 1.0))
