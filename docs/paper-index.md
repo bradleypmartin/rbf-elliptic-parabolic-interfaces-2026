@@ -19,12 +19,12 @@ companion wave-equation work; only what this repo needs is listed.
 | 90–99 | §5.1 problem statement (eq. 77, continuity of u and n·(alpha grad u)); §5.2 standard weights; **§5.3 weights across interfaces** (continuity via time derivatives of u and normal flux, curvature via a local interface expansion, matrix cos/sin, Fig. 5-1 warped RBF at p. 98) | E2.2, E2.3, E2.4 |
 | 99–105 | §5.4 setup (GA eps = 0.4/d, 42/deg 5 interior, 30/deg 4 across interfaces and near boundaries, backslash, BD4 with dt ∝ h); **§5.4.1 case 1** (eq. 84–85; eq. 86 the time-dependent analytic solution; Fig. 5-5 parabolic and elliptic convergence; **Fig. 5-6 eigenvalues of the 4900-node operator vs the BD4 stability region, dt = 0.02**) | E2.5 |
 | 105–110 | **§5.4.2 case 2** (two mildly curved interfaces, alpha = 0.2 + 0.1 sin 2πx sin 2πy in the band; Fig. 5-9 FD4 / flat / curved convergence vs a 160,000-node reference; Fig. 5-10 warp-and-straddle ablation; Fig. 5-11 error vs wall-clock) | E2.6 |
-| 110–114 | **§5.4.3 case 3** (ring 0.349 ≤ r ≤ 0.35, alpha = 1/1500 + (1/3000) sin 2πx sin 2πy, inner Dirichlet circle r = 0.05; Fig. 5-14 FD4 / flat / curved); **§5.4.4 iterative solvers** (control problem, gmres, bicgstab, Fig. 5-15–5-18) | E2.7, E2.8 |
+| 110–118 | **§5.4.3 case 3** (PDF 110–113: ring 0.349 ≤ r ≤ 0.35, alpha = 1/1500 + (1/3000) sin 2πx sin 2πy, inner Dirichlet circle r = 0.05; Fig. 5-14 FD4 / flat / curved); **§5.4.4 iterative solvers** (PDF 114–118: 19 nodes / degree 3, the control problem, gmres, bicgstab; Fig. 5-15 the control solution at 115, **Fig. 5-16–5-18 error vs time at 116–118**, read off as `FIG2016` in `scripts/heat2d_iterative.py`; no tolerances, iteration counts or node counts are stated) | E2.7, E2.8 |
 | 118–122 | **§5.4.5 the cornered interface** (circular-segment approximations refined with the node set, Fig. 5-19–5-22, second order) | E2.10 (stretch) |
 | 123–124 | Ch. 6 Conclusions (open questions: corners, higher-order RBF correction, nonlinear problems) | Manuscript §7 |
 | 125–128 | Bibliography | Citations |
 | 129–139 | Appendix A: the Geophysics 2015 paper | — |
-| 140–145 | **Appendix B: the preconditioner of §5.4.4** (diagonal dominance ratio; restore it by adding multiples of neighbouring stencil rows, eq. 92–94 onward) | E2.8 |
+| 140–145 | **Appendix B: the preconditioner of §5.4.4** (eq. 93 the diagonal dominance ratio and the 1-D worked example's `D_Loc`, eq. 94–97 the cancellations, eq. 98 `P_m`, eq. 99 `P A u = P f`; the 2-D recipe at PDF 143–144: 37 neighbours, sweeps out, in, out; Fig. B-1 histograms at 145). The worked example is transcribed in `tests/heat2d/test_precondition.py` and reproduced to ±0.01 | E2.8 |
 
 ## Martin & Fornberg 2017, EABE (`martin-fornberg-2017-rbf-fd-heat-equilibrium-eabe-submitted.pdf`, 49 pp.)
 

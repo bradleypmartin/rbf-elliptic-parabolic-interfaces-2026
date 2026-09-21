@@ -52,7 +52,8 @@ src/heat_interfaces/   library (filled in by the epics; module names are the pla
                        straddling node sets), neighbors, rbf (GA + polynomials,
                        warped GA), interface (scalar continuity matrices with
                        curvature, multi-interface translation), operators, solve
-                       (direct, gmres/bicgstab, preconditioners), march (BD4),
+                       (direct; the reduced interior system, gmres/bicgstab,
+                       spilu), precondition (DDR, Appendix B's P), march (BD4),
                        exact, fd4 (Cartesian Dx A Dx + Dy A Dy), resample (fine →
                        coarse through the fine stencils; cached references),
                        seeds, treatments
