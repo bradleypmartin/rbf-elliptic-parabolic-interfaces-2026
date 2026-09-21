@@ -3,7 +3,12 @@ import pytest
 from numpy.polynomial import Polynomial
 
 from heat_interfaces.fd_weights import fornberg_weights
-from heat_interfaces.heat1d.domain import dissertation_alpha, eabe_alpha
+from heat_interfaces.heat1d.domain import (
+    PiecewiseAlpha,
+    Sinusoid,
+    dissertation_alpha,
+    eabe_alpha,
+)
 from heat_interfaces.heat1d.interface import (
     Jump,
     coefficient_dx,
@@ -172,6 +177,63 @@ def test_translated_basis_keeps_u_flux_and_their_time_derivatives_continuous(
         for lhs, rhs in pairs:
             # The layer's k = 2 rows cancel terms near 1e3 (a_3 ~ 10 at x = 0.5).
             assert lhs(0.0) == pytest.approx(rhs(0.0), abs=1e-9)
+
+
+def _interface_values(alpha_derivatives, p: Polynomial, t: float) -> list[float]:
+    """``u, alpha u_x, D u, alpha (D u)_x, D^2 u`` at ``t`` (eq. 54-55 through k = 2).
+
+    Written out from ``D u = alpha' u' + alpha u''`` with alpha's derivatives
+    supplied directly, so nothing here shares code with ``interface.py``.
+    """
+    a0, a1, a2, a3 = alpha_derivatives
+    d = [p.deriv(k)(t) if k else p(t) for k in range(5)]
+    du = a1 * d[1] + a0 * d[2]
+    du_x = a2 * d[1] + 2 * a1 * d[2] + a0 * d[3]
+    du_xx = a3 * d[1] + 3 * a2 * d[2] + 3 * a1 * d[3] + a0 * d[4]
+    return [d[0], a0 * d[1], du, a0 * du_x, a1 * du_x + a0 * du_xx]
+
+
+@pytest.mark.parametrize("anchor", [0, 1, 2])
+def test_two_jump_basis_is_continuous_at_both_interfaces_with_varying_alpha(anchor):
+    # alpha varies on all three regions, so the re-centring and the second
+    # translation both carry non-trivial information (a piecewise-constant
+    # alpha would let a wrong shift pass, since its solution is piecewise
+    # linear whatever the basis).
+    m = PiecewiseAlpha(
+        (0.0, 0.3),
+        (
+            Sinusoid(2.0, 0.5, 3.0),
+            Sinusoid(0.5, 0.1, 2 * np.pi),
+            Sinusoid(1.5, -0.3, 4.0, phase=0.7),
+        ),
+    )
+    jumps = [
+        Jump(xi, m.taylor(k, "left", 4), m.taylor(k, "right", 4))
+        for k, xi in enumerate(m.interfaces)
+    ]
+    regions = translated_basis(jumps, anchor)
+    assert len(regions) == 3
+    np.testing.assert_array_equal(regions[anchor].coefficients, np.eye(5))
+    assert sum(np.allclose(r.coefficients, np.eye(5)) for r in regions) == 1
+    for k, xi in enumerate(m.interfaces):
+        values = {}
+        for side, region, piece in (
+            ("left", regions[k], m.pieces[k]),
+            ("right", regions[k + 1], m.pieces[k + 1]),
+        ):
+            derivatives = piece.taylor(xi, 3) * np.array([1, 1, 2, 6])
+            t = xi - jumps[region.jump].position
+            values[side] = np.array(
+                [
+                    _interface_values(
+                        derivatives, Polynomial(region.coefficients[:, j]), t
+                    )
+                    for j in range(5)
+                ]
+            )
+        np.testing.assert_allclose(
+            values["left"], values["right"], rtol=1e-10, atol=1e-9
+        )
 
 
 def test_shift_matrix_recentres_without_changing_the_polynomial():

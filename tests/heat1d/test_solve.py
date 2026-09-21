@@ -150,3 +150,23 @@ def test_a_two_cell_layer_between_constants_is_solved_exactly(n):
     m = PiecewiseAlpha((0.0, 2 * g.h), (Constant(1.0), Constant(0.1), Constant(1.0)))
     u = solve_equilibrium(jump_aware_operator(g, m), 1.0, 0.0)
     assert normalized_l2(u, equilibrium_exact(m, 1.0, 0.0, g.x)) < 1e-12
+
+
+@pytest.mark.parametrize(
+    ("degree", "counts", "low", "high"),
+    [(2, (101, 201, 401, 801), 1.9, 2.1), (6, (101, 201, 401), 5.3, 6.5)],
+)
+def test_other_degrees_converge_at_their_own_order(degree, counts, low, high):
+    # Degree 6 needs about 100 nodes before its seven-node stencils are
+    # asymptotic here: u' = B / alpha and alpha is 0.1 at both interfaces, so
+    # the solution's derivatives inside the layer grow like (alpha' / alpha)^k
+    # and the interface rows' truncation error is O(1) on coarser grids.
+    m = dissertation_alpha()
+    errs = []
+    for n in counts:
+        g = equispaced_grid(n)
+        op = jump_aware_operator(g, m, degree=degree)
+        u = solve_equilibrium(op, *DISSERTATION_BC)
+        errs.append(normalized_l2(u, equilibrium_exact(m, *DISSERTATION_BC, g.x)))
+    rates = np.log2(np.array(errs[:-1]) / np.array(errs[1:]))
+    assert np.all((rates > low) & (rates < high)), (errs, rates)
