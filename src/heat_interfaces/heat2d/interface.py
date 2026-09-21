@@ -42,7 +42,10 @@ to first order where the translated polynomials uphold them to order ``p``.
 ``Warp`` is the piecewise-linear stretch of one stencil, ``build_warp``
 walks it outward from the anchor region across each interface, and
 ``stencil_weights(..., warp=False)`` is the plain-Gaussian ablation of EABE
-Fig. 11.
+Fig. 11. ``interface_stencil`` holds one crossing stencil's translated basis
+and Gaussian coordinates so that ``stencil_weights`` (the operator at the
+centre) and ``interpolation_weights`` (the identity at points off the nodes,
+E2.6's interface-aware resampling) solve the same system.
 
 Frames are built from each curve's ``normal`` alone, since ``Circle`` and
 the graphs orient their tangents differently.
@@ -530,6 +533,163 @@ def stencil_weights(
     the global frame. The stencil must reach more than one region of
     ``band``; the weights come back in physical units.
     """
+    st = interface_stencil(xy, band, degree, shape, curvature, warp)
+    x0, y0 = st.xy[0]
+    piece = band.region_piece(st.anchor)
+    a0 = float(piece.alpha(st.xy[:1, 0], st.xy[:1, 1])[0])
+    gx, gy = (
+        float(g[0]) * st.scale for g in piece.gradient(st.xy[:1, 0], st.xy[:1, 1])
+    )
+    frame = st.frame
+    xi0, eta0 = frame.local(x0, y0)
+    v = polynomial_block(xi0, eta0, degree)
+    ddx, ddy = coefficient_dx(degree), coefficient_dy(degree)
+    c = st.regions[st.anchor].coefficients
+    g_xi, g_eta = frame.rotate_in(gx, gy)
+    b_poly = a0 * (v @ (ddx @ ddx + ddy @ ddy) @ c) + g_xi * (v @ ddx @ c)
+    b_poly = b_poly + g_eta * (v @ ddy @ c)
+
+    if st.warp is not None:
+        gx, gy = g_xi, g_eta
+    b_rbf = (
+        a0 * gaussian_derivative(st.xi, st.eta, st.eps, "lap")
+        + gx * gaussian_derivative(st.xi, st.eta, st.eps, "dx")
+        + gy * gaussian_derivative(st.xi, st.eta, st.eps, "dy")
+    )
+    w = augmented_solve(
+        st.gaussian_block()[None],
+        st.polynomial_block()[None],
+        b_rbf[None, :, None],
+        b_poly[None, :, None],
+    )
+    return w[0, :, 0] / st.scale**2
+
+
+@dataclass(frozen=True)
+class InterfaceStencil:
+    """One crossing stencil: its regions, translated basis and Gaussian coordinates.
+
+    Built by ``interface_stencil`` for the ``k`` nodes ``xy`` (the centre
+    first) of a stencil that reaches more than one region of ``band``.
+    ``regions`` is the translated basis of ``translated_basis`` anchored on
+    the centre's region and ``interfaces`` the local interfaces it was built
+    from; ``xi, eta`` are the coordinates the Gaussian block is written in,
+    offsets from the centre in units of ``scale``, the stencil radius: the
+    anchor frame's with the normal coordinate stretched by ``warp`` (EABE
+    §2.2.4), or the global ones when ``warp`` is ``None``; ``eps`` is the
+    shape parameter in those units. ``stencil_weights`` puts the operator on
+    the right-hand side of the system, ``interpolation_weights`` the identity
+    at points off the nodes (E2.6's resampling).
+    """
+
+    xy: np.ndarray
+    band: Band
+    degree: int
+    region: np.ndarray
+    scale: float
+    eps: float
+    interfaces: Mapping[int, LocalInterface]
+    regions: Mapping[int, Region]
+    warp: Warp | None
+    xi: np.ndarray
+    eta: np.ndarray
+
+    @property
+    def anchor(self) -> int:
+        return int(self.region[0])
+
+    @property
+    def frame(self) -> Frame:
+        """The anchor frame: that of the interface next to the centre's region."""
+        return self.interfaces[self.regions[self.anchor].frame].frame
+
+    def reach(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """The region of each point, refused where the stencil has no basis.
+
+        Both ``basis`` and ``gaussian_coordinates`` go through here, so an
+        out-of-reach point is a ``ValueError`` whichever is called first; the
+        warp's slope table would otherwise be indexed past its end (or, with
+        the warp off, the point read as if the stencil covered it).
+        """
+        region = self.band.region_index(x, y)
+        if region.size == 0:
+            raise ValueError("no points to read")
+        if region.min() < min(self.regions) or region.max() > max(self.regions):
+            raise ValueError("a point lies in a region the stencil does not reach")
+        return region
+
+    def basis(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """``(len(x), q)``: the translated basis at points, in each point's frame."""
+        x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        region = self.reach(x, y)
+        out = np.empty((x.size, polynomial_count(self.degree)))
+        for index, reg in self.regions.items():
+            mask = region == index
+            if mask.any():
+                xi, eta = self.interfaces[reg.frame].frame.local(x[mask], y[mask])
+                out[mask] = polynomial_block(xi, eta, self.degree) @ reg.coefficients
+        return out
+
+    def gaussian_coordinates(
+        self, x: np.ndarray, y: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """``(xi, eta)`` of points in the Gaussian block's coordinates (see ``xi``)."""
+        x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        region = self.reach(x, y)
+        return _gaussian_coordinates(
+            x, y, region, self.xy[0], self.anchor, self.scale, self.frame, self.warp
+        )
+
+    def polynomial_block(self) -> np.ndarray:
+        """``(k, q)``: the translated basis at the nodes, the ``P`` of eq. 2."""
+        return self.basis(self.xy[:, 0], self.xy[:, 1])
+
+    def gaussian_block(self) -> np.ndarray:
+        """``(k, k)``: ``φ(|x̃_i − x̃_j|)`` in the (warped) coordinates."""
+        return gaussian(
+            self.xi[:, None] - self.xi[None, :],
+            self.eta[:, None] - self.eta[None, :],
+            self.eps,
+        )
+
+
+def _gaussian_coordinates(
+    x: np.ndarray,
+    y: np.ndarray,
+    region: np.ndarray,
+    centre: np.ndarray,
+    anchor: int,
+    scale: float,
+    frame: Frame,
+    warp: Warp | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Offsets from ``centre`` in the Gaussian block's coordinates."""
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    if warp is None:
+        return periodic_dx(x - centre[0]) / scale, (y - centre[1]) / scale
+    xi, eta = frame.local(x, y)
+    eta = warp.apply(eta, region)
+    xi0, eta0 = frame.local(centre[0], centre[1])
+    eta0 = warp.apply(eta0, anchor)
+    return xi - xi0, eta - eta0
+
+
+def interface_stencil(
+    xy: np.ndarray,
+    band: Band,
+    degree: int,
+    shape: float = GA_SHAPE,
+    curvature: bool = True,
+    warp: bool = True,
+) -> InterfaceStencil:
+    """The ``InterfaceStencil`` of the nodes ``xy``, centred on ``xy[0]``.
+
+    Frames, expansions and α tables at each interface the stencil reaches
+    (``local_interface``; ``curvature=False`` is the flat variant), the
+    translated basis anchored on the centre's region, and the Gaussian
+    coordinates, warped by ``build_warp`` unless ``warp`` is off. The stencil
+    must reach more than one region of ``band``.
+    """
     xy = np.asarray(xy, dtype=float)
     if xy.ndim != 2 or xy.shape[1] != 2 or len(xy) < polynomial_count(degree):
         raise ValueError("xy must be (k, 2) with k at least the monomial count")
@@ -542,8 +702,7 @@ def stencil_weights(
     r = np.hypot(dx, dy)
     scale = float(r.max())
     nearest = float(r[1:].min())
-    xi_g, eta_g = dx / scale, dy / scale
-    check_coincidence(xi_g, eta_g)
+    check_coincidence(dx / scale, dy / scale)
 
     anchor = int(region[0])
     locals_ = {
@@ -551,39 +710,55 @@ def stencil_weights(
         for j in range(lowest, highest)
     }
     regions = translated_basis(locals_, anchor, lowest, highest)
-    q = polynomial_count(degree)
-    p_block = np.empty((len(xy), q))
-    for index, reg in regions.items():
-        mask = region == index
-        if mask.any():
-            xi, eta = locals_[reg.frame].frame.local(x[mask], y[mask])
-            p_block[mask] = polynomial_block(xi, eta, degree) @ reg.coefficients
-
-    piece = band.region_piece(anchor)
-    a0 = float(piece.alpha(x[:1], y[:1])[0])
-    gx, gy = (float(g[0]) * scale for g in piece.gradient(x[:1], y[:1]))
+    stretch = build_warp(locals_, anchor, lowest, highest) if warp else None
     frame = locals_[regions[anchor].frame].frame
-    xi0, eta0 = frame.local(x[0], y[0])
-    v = polynomial_block(xi0, eta0, degree)
-    ddx, ddy = coefficient_dx(degree), coefficient_dy(degree)
-    c = regions[anchor].coefficients
-    g_xi, g_eta = frame.rotate_in(gx, gy)
-    b_poly = a0 * (v @ (ddx @ ddx + ddy @ ddy) @ c) + g_xi * (v @ ddx @ c)
-    b_poly = b_poly + g_eta * (v @ ddy @ c)
+    xi, eta = _gaussian_coordinates(x, y, region, xy[0], anchor, scale, frame, stretch)
+    return InterfaceStencil(
+        xy,
+        band,
+        degree,
+        region,
+        scale,
+        shape * scale / nearest,
+        locals_,
+        regions,
+        stretch,
+        xi,
+        eta,
+    )
 
-    if warp:
-        xi_w, eta_w = frame.local(x, y)
-        eta_w = build_warp(locals_, anchor, lowest, highest).apply(eta_w, region)
-        xi_g, eta_g = xi_w - xi_w[0], eta_w - eta_w[0]
-        gx, gy = g_xi, g_eta
-    eps = shape * scale / nearest
-    a = gaussian(xi_g[:, None] - xi_g[None, :], eta_g[:, None] - eta_g[None, :], eps)
-    b_rbf = (
-        a0 * gaussian_derivative(xi_g, eta_g, eps, "lap")
-        + gx * gaussian_derivative(xi_g, eta_g, eps, "dx")
-        + gy * gaussian_derivative(xi_g, eta_g, eps, "dy")
+
+def interpolation_weights(
+    xy: np.ndarray,
+    band: Band,
+    degree: int,
+    points: tuple[np.ndarray, np.ndarray],
+    shape: float = GA_SHAPE,
+    curvature: bool = True,
+    warp: bool = True,
+) -> np.ndarray:
+    """``(len(points), k)`` weights reading ``u`` at ``points`` from a crossing stencil.
+
+    The system of ``stencil_weights`` with the identity for the operator: the
+    right-hand side is each (warped) Gaussian and each translated basis
+    function at the point, in the region the point lies in, so the
+    interpolant upholds the interface conditions to the order of the basis
+    (E2.6, ``heat2d.resample``). ``points`` is ``(x, y)`` of arrays; a point in
+    a region the stencil does not reach is refused.
+    """
+    st = interface_stencil(xy, band, degree, shape, curvature, warp)
+    px, py = (np.atleast_1d(np.asarray(p, dtype=float)) for p in points)
+    if px.shape != py.shape or px.ndim != 1:
+        raise ValueError("points must be a pair of matching 1-D arrays")
+    b_poly = st.basis(px, py).T
+    xe, ye = st.gaussian_coordinates(px, py)
+    b_rbf = gaussian(
+        xe[:, None] - st.xi[None, :], ye[:, None] - st.eta[None, :], st.eps
     )
     w = augmented_solve(
-        a[None], p_block[None], b_rbf[None, :, None], b_poly[None, :, None]
+        st.gaussian_block()[None],
+        st.polynomial_block()[None],
+        b_rbf.T[None],
+        b_poly[None],
     )
-    return w[0, :, 0] / scale**2
+    return w[0].T

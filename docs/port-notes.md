@@ -910,5 +910,259 @@ eigenvalue problems at 4900; `--counts 1250 2500 5000 10000 20000 40000`
 adds the two rows, 40 s; `--spectrum-n 1250` shows the naive operator's
 growing mode).
 
+### 2.6 Case 2: curved interfaces, FD4 / flat / curved convergence, the ablation, and wall-clock (E2.6)
+
+**The reference** (`heat2d.resample.Reference`, `reference_solution`; plan
+D4). Case 2 has no analytic solution, so, as in EABE §3.2, the errors are
+measured against a 160,000-node run of the paper's own method: the
+interface-aware operator with curvature, warped Gaussians and the straddling
+rows on the seed-0 node set, `h = 1/380 = 0.00263`, an interface group of
+4599 stencils. Node set 8.0 s, stencils and operator 30.3 s, SuperLU solve
+28.6 s, 67 s in all on the M4 Pro (2026-09-21); `max |u| = 1 + 6e-10`, the
+discrete maximum principle. It is cached as
+`outputs/heat2d_case2_reference_n160000_seed0.npz` (3.6 MB: nodes, kinds,
+Dirichlet indices, `u`) with a JSON sidecar (count, seed, iterations,
+settings, the three times), and the driver reuses it whenever the count,
+seed and iteration count match.
+
+**The resampling** (`heat2d.resample.resample`). The reference and the
+coarse solutions live on different node sets, so one has to be read at the
+other's nodes, and `u` has a kink along each interface: any polynomial or
+RBF interpolant whose stencil crosses a curve is first order there. The
+E2.4 breadcrumb on #20 asked for an interface-aware resampling, and this is
+it: each point is read through the stencil of the nearest *fine* node, the
+fine set's own `build_stencils(..., interface=BOUNDARY)` groups deciding
+what that means. Off the interfaces the RBF-FD system of eq. 2 is solved
+with the identity in place of the operator and the evaluation point off the
+centre (`rbf.rbf_interpolation_weights`, batched like the derivative
+weights: the right-hand side is every Gaussian and every monomial at the
+point, exact on polynomials through the stencil's degree and the unit
+vector when the point is a node). Where the fine stencil crosses an
+interface, the same system is solved with the translated basis of §2.3 and
+the warped Gaussians of §2.4 (`interface.interpolation_weights`): the
+right-hand side is each basis function at the point in the region the
+point lies in, so the interpolant upholds the interface conditions to the
+basis's order. To share the system, `stencil_weights` was refactored around
+`interface.interface_stencil` (one crossing stencil's regions, translated
+basis and Gaussian coordinates) with the operator on its right-hand side;
+the four operator variants (curved / flat × warped / plain) on a 1250-node
+case-2 set are bit-identical before and after, and §2.3–2.5's tests run
+unchanged. A stencil built without the interface group reads every point
+blind, which is the comparison below.
+
+The driver measures what the resampling itself contributes by reading the
+analytic solution of case 1, sampled on a 160,000-node case-1 set (`h`
+0.00263, 8.4 s to build with both stencil sets), back at the coarse case-1
+node sets and at the FD4 grid points (RMS and largest error against the
+analytic values, aware then blind; `--check-n`):
+
+```
+     n       h |  nodes aware        max   time |  nodes blind        max |   grid aware        max |   grid blind        max
+  1250  0.0294 |     1.78e-12   2.71e-11   0.1s |     1.78e-12   2.71e-11 |     2.92e-12   3.52e-11 |     1.38e-04   1.08e-03
+  2500  0.0208 |     1.45e-12   3.00e-11   0.1s |     1.45e-12   3.00e-11 |     2.24e-12   3.53e-11 |     1.16e-04   1.08e-03
+  5000  0.0149 |     1.25e-12   2.81e-11   0.2s |     3.09e-07   1.50e-05 |     2.26e-12   4.43e-11 |     9.84e-05   1.08e-03
+ 10000  0.0105 |     6.27e-13   1.27e-11   0.9s |     1.22e-06   1.98e-05 |     1.71e-12   4.52e-11 |     8.27e-05   1.08e-03
+ 20000  0.0075 |     1.39e-12   4.85e-11   1.5s |     1.11e-06   1.44e-05 |     1.58e-12   6.36e-11 |     3.41e-06   4.09e-05
+ 40000  0.0053 |     2.00e-12   5.04e-11   3.3s |     1.17e-05   1.66e-04 |     1.80e-12   5.25e-11 |     5.85e-05   1.08e-03
+ 80000  0.0037 |     3.14e-12   1.63e-10   5.8s |     9.45e-06   1.55e-04 |     3.20e-12   1.56e-10 |     1.02e-05   1.81e-04
+```
+
+- The interface-aware reading is good to 1–3e-12 RMS (largest 1.6e-10) at
+  every count and on every grid: four orders below the finest curved point
+  of the tables below (7.5e-9), so the resampling is invisible in them.
+- The blind reading is 3e-7 to 1.2e-5 RMS at the coarse nodes from 5000
+  nodes on and 1e-4 on every grid, i.e. it would have set the floor of every
+  curve. At 1250 and 2500 nodes it coincides with the aware one because the
+  coarse straddling rows keep every coarse node at least `0.5 h_c ≥ 0.010`
+  from the curves, beyond the fine 42-node stencil radius (about `3.8 h_f
+  = 0.010`), so no crossing fine stencil is ever asked; grid points land
+  anywhere, which is why the grid column is bad at every count.
+- Reading 80,000 points costs 5.8 s, of which the per-stencil Python loop
+  over the 2300 crossing stencils is most. Points that share a fine centre
+  share one system (its second commit, after review): that leaves the
+  80,000-node read at 5.8 s, since coarse nodes rarely share a centre, and
+  cuts the 640,800-point grid read of the FD4 table below from 48.5 s to
+  29.5 s.
+
+**The reference's own error** (the E1 breadcrumb on #20). If the curved
+error falls as `N⁻²`, the measured difference at `N` is `m(N) = e(N)(1 −
+q)` with `q = (N/160,000)²`, and the reference's own error is
+`e(R) = q m/(1 − q)`: from the 80,000-node point (7.52e-9 measured) about
+**3e-9**, a third of that point, to one figure only: the order per halving
+in the table below swings between 2 and 6, so the exponent is the assumed
+one and not a fitted one (fitting the last three points gives 4.4 and
+2e-9). At 40,000 nodes `q = 1/16` and the reference moves the plotted value
+by 6 %. So the fourth-order line has to bend once `N` passes about 10⁵, the
+80,000-node marker sits where the bend begins (its true error is nearer
+1e-8 than 7.5e-9), and the 40,000-node one is inside the trustworthy range. EABE Fig. 10 and 11 plotted the same
+seven counts against the same 160,000-node reference, so their last marker
+carries the same caveat.
+
+**FD4** (`heat2d.fd4`). The Cartesian baseline is the MATLAB `FDheat1.m`'s
+form, dissertation eq. 76 in 2-D (plan D3): `m` columns at `x = i/m`
+(periodic, so every row of `Dx` is the centred five-point stencil) and
+`m + 1` levels at `y = j/m` with the one-sided five-point rows of the 1-D
+port within two of `y = 0` and `y = 1`, assembled as `Dx A Dx + Dy A Dy`
+with `α` sampled at the grid points, the top and bottom levels the
+Dirichlet rows. The grid is a `NodeSet`, so `solve_equilibrium` and
+`resample` apply to it unchanged; `m (m + 1)` is chosen nearest the
+requested count (1260 for 1250, 640,800 for 640,000). On the control it is
+fifth order at these counts and on case 1 first (`tests/heat2d/test_fd4.py`).
+
+**Fig. 10 / Fig. 5-9: FD4, flat and curved** (`scripts/heat2d_case2.py
+--reference-n 160000 --counts 1250 … 80000 --fd4-counts 1250 … 640000`,
+seed 0, 2026-09-21, 8.5 min in all; RMS error at the coarse nodes against
+the resampled reference, order per halving of `h`; "group" is the
+interface group with the rows / without; the times are the curved
+operator's node set with stencils, operator, solve and the reading of the
+reference; the last columns are EABE Fig. 10 and 11 read off the rendered
+page, seven markers per line, about ±15 %):
+
+```
+     n       h  group(rows/none) |       flat  order |     curved  order  nodes  build  solve  read |       none  order |  Fig. 10 flat   curved  Fig. 11 none
+  1250  0.0294     422 /   469 |   6.97e-04      - |   3.06e-05      -   0.1s   0.6s   0.0s   0.1s |   2.90e-04      - |   5.2e-04  2.6e-05   1.7e-04
+  2500  0.0208     594 /   666 |   3.89e-04   1.69 |   1.25e-05   2.60   0.1s   0.9s   0.0s   0.1s |   6.79e-05   4.21 |   3.4e-04  8.5e-06   4.8e-05
+  5000  0.0149     812 /   967 |   2.62e-04   1.19 |   6.24e-06   2.07   0.4s   1.3s   0.1s   0.2s |   3.93e-05   1.63 |   2.4e-04  1.4e-06   2.0e-05
+ 10000  0.0105    1148 /  1351 |   1.77e-04   1.12 |   6.99e-07   6.27   0.8s   2.2s   0.5s   0.9s |   4.20e-06   6.41 |   1.5e-04  3.9e-07   8.4e-06
+ 20000  0.0075    1612 /  1916 |   1.22e-04   1.09 |   1.75e-07   4.03   1.3s   3.8s   1.4s   1.5s |   7.64e-07   4.95 |   1.1e-04  9.3e-08   6.0e-06
+ 40000  0.0053    2297 /  2693 |   8.18e-05   1.14 |   4.87e-08   3.66   2.2s   7.0s   3.7s   3.3s |   1.59e-07   4.49 |   7.5e-05  3.1e-08   1.9e-07
+ 80000  0.0037    3245 /  3830 |   5.74e-05   1.02 |   7.52e-09   5.38   4.3s  14.3s  12.1s   5.9s |   2.77e-08   5.03 |   5.0e-05  9.3e-09   3.1e-08
+```
+
+```
+     n       h |        fd4  order  build  solve  read |  Fig. 10 FD4
+  1260  0.0286 |   7.80e-03      -   0.0s   0.0s   0.1s |   6.0e-03 (at 1250)
+  2550  0.0200 |   6.41e-03   0.55   0.0s   0.0s   0.2s |   5.5e-03 (at 2500)
+  4970  0.0143 |   3.10e-03   2.16   0.0s   0.1s   0.4s |   2.5e-03 (at 5000)
+ 10100  0.0100 |   2.57e-03   0.52   0.0s   0.2s   0.8s |   2.2e-03 (at 10000)
+ 20022  0.0071 |   1.17e-03   2.29   0.0s   0.4s   1.5s |   1.2e-03 (at 20000)
+ 40200  0.0050 |   1.03e-03   0.36   0.0s   1.4s   3.0s |   8.5e-04 (at 40000)
+ 79806  0.0035 |   4.03e-04   2.73   0.0s   3.5s   6.0s |   3.3e-04 (at 80000)
+160400  0.0025 |   4.03e-04  -0.00   0.0s  13.2s  12.1s |
+319790  0.0018 |   1.65e-04   2.58   0.1s  35.4s  24.2s |
+640800  0.0013 |   1.56e-04   0.16   0.2s 107.6s  48.5s |
+```
+
+![case-2 convergence](figures/heat2d_case2_convergence.png)
+
+- *The flat line is first order and lands on 2016's.* 1.3, 1.1, 1.1, 1.2,
+  1.2, 1.1, 1.1× the Fig. 10 markers at 1250–80,000 nodes, a fit of 1.18
+  against the markers' 1.13: the local linear approximation's `O(ξ²)` jump
+  in `u` and `O(ξ)` jump in flux along the curve (§2.3's continuity table)
+  is what the operator converges to.
+- *The curved line is fourth order.* Fit 4.11 over 1250–80,000 nodes
+  (the markers fit at 3.91), 1.2, 1.5, 4.5, 1.8, 1.9, 1.6 and 0.8× the
+  markers. The 5000-node point is high for the seed-0 node set alone:
+  seeds 1 and 2 give 2.94e-6 and 2.84e-6 there (2.0–2.1× the marker),
+  1.09e-5 and 1.67e-5 at 2500 and 5.07e-7 and 6.94e-7 at 10,000, the same
+  node-set scatter as case 1's `plain,none` line in §2.4. The last point,
+  7.52e-9 against the marker's 9.3e-9, is the one the reference's own
+  error (above) reaches.
+- *FD4 is first order with 2016's own wobble.* 1.3, 1.2, 1.2, 1.2, 1.0,
+  1.2, 1.2× the markers at the seven shared counts, a fit of 1.34 over
+  1260–640,800 grid points (the markers' 1.37); the order alternates
+  between about 0.4 and 2.5 per halving exactly as the rendered figure's
+  markers do. The alternation follows the grid: `m = 35, 50, 70, 100, 200,
+  400, 800` put a level exactly on `y = 0.6` and `y = 0.8`, the mean lines
+  of the interfaces, and `141, 282, 565` do not; the error stalls from each
+  of the latter to the next. Doubling the count four more times, to
+  640,800 grid points and 108 s, brings FD4 to 1.56e-4, where the curved
+  RBF-FD operator is at 3.1e-5 with 1250 nodes in 0.7 s; the figure's
+  extrapolation ("about 10¹¹ nodes to reach 10⁻⁸") stands.
+
+**Fig. 11 / Fig. 5-10: the warp-and-straddle ablation.** The `none`
+column above is the curved operator with plain Gaussians on node sets built
+without the rows, the paper's "no warp; no straddling"; the `curved` column
+is its "with warp and straddling".
+
+![case-2 ablation](figures/heat2d_case2_ablation.png)
+
+- Both lines are fourth order (fits 4.55 and 4.11); the warp and the rows
+  together buy 9.5, 5.4, 6.3, 6.0, 4.4, 3.3 and 3.7× at 1250–80,000
+  nodes. The 2016 figure's gaps are 6.5, 5.6, 14, 21, 65, 6.1 and 3.3×: the
+  same at the ends, and its 10,000- and 20,000-node "no warp" markers
+  (8.4e-6 and 6.0e-6, the second 0.1× ours) sit an order of magnitude above
+  their own line's trend, a bump this port does not have and whose cause the
+  unpreserved 2016 code cannot tell. The E2.4 breadcrumb's two candidates
+  for a narrower gap (the flat stretch of the warp on a curved interface,
+  the interface zone) were not needed.
+- On this curved case the gap is 3–10× where on flat case 1 (§2.4) it was
+  2.7–8×: the message of Fig. 11, that the two together matter, holds and
+  is not much stronger with curvature.
+
+**Fig. 5-11: error against wall-clock** (node set with stencils, operator
+and solve on this machine, an Apple M4 Pro, Python 3.13, NumPy and SciPy's
+SuperLU; the resampling is not counted, being the measurement's cost and
+not the method's):
+
+```
+  RBF-FD curved:      n   nodes  build  solve  total |  error
+                   1250    0.1    0.6    0.0    0.7 |  3.06e-05
+                   2500    0.1    0.9    0.0    1.1 |  1.25e-05
+                   5000    0.4    1.3    0.1    1.8 |  6.24e-06
+                  10000    0.8    2.2    0.5    3.5 |  6.99e-07
+                  20000    1.3    3.8    1.4    6.4 |  1.75e-07
+                  40000    2.2    7.0    3.7   13.0 |  4.87e-08
+                  80000    4.3   14.3   12.1   30.6 |  7.52e-09
+  FD4:                n   grid+op  solve  total |  error
+                   1260     0.00    0.0    0.0 |  7.80e-03
+                  10100     0.00    0.2    0.2 |  2.57e-03
+                  79806     0.02    3.5    3.5 |  4.03e-04
+                 160400     0.04   13.2   13.3 |  4.03e-04
+                 319790     0.08   35.4   35.5 |  1.65e-04
+                 640800     0.17  107.6  107.8 |  1.56e-04
+```
+
+![case-2 performance](figures/heat2d_case2_performance.png)
+
+- The FD4 curve lies on the 2016 one to reading accuracy over the four
+  decades they share (0.01–50 s): the grid and operator cost nothing and
+  both are one sparse direct factorisation, MATLAB's backslash on a 2.7 GHz
+  Core i7 in 2016 and SuperLU here. The 2016 line flattens at 4–5e-4 from
+  about 1 s; ours keeps falling slowly to 1.6e-4 at 108 s.
+- The RBF-FD curve sits 2.5–3× to the left of the 2016 "RBF only" one at
+  the same error (0.7 s against 1.8 s at 1250 nodes, 31 s against about
+  100 s at 80,000): a decade of hardware against a Python operator build
+  whose crossing stencils are a per-stencil loop (1.5 ms each, §2.3). The
+  build is half the total at every count and the solve grows fastest
+  (0.0 → 12.1 s, `N^1.3` from 20,000 on).
+- The 2016 "RBF only" line has an eighth point at 1.5e-9 and 200 s that a
+  160,000-node reference cannot produce for a 160,000-node solve; it is
+  quoted as read and not explained. The "RBF/FD4 hybrid" line, a node set
+  that turns Cartesian away from the interface, is not ported.
+
+**Decisions (E2.6).**
+
+- FD4 in 2-D is a Cartesian grid (`heat2d/fd4.py`, a module the plan's list
+  did not name; `treatments` is E4's), not the scattered-node
+  `Dx A Dx + Dy A Dy` of §2.2, which stays the naive RBF-FD baseline: the
+  performance plot needs FD4's cost, and the MATLAB comparison was a grid.
+  Its node count is `m (m + 1)` and the points are plotted at that count.
+- The reference is read at the coarse nodes (fine → coarse), never the
+  coarse solution at the fine nodes: the fine stencils interpolate to
+  `O(h_f^{p+1})`, the coarse ones would add an error of the solution's own
+  order. The fine set's stencil groups decide aware / blind; the RMS runs
+  over all coarse nodes, the Dirichlet rows included, as in every table so
+  far.
+- `interface.stencil_weights` is now a thin wrapper over
+  `interface_stencil`; `interpolation_weights` shares the system. The
+  refactor was checked bit for bit on the four variants.
+- The reference cache is `npz` plus JSON, without the row tuples (a loaded
+  `NodeSet` serves `build_stencils` and `resample`, not another solve), and
+  is reused only when count, seed and iterations match.
+- The 2016 markers of Fig. 10, 11 and 5-11 are read off the rendered pages
+  (±15 %) and kept in the driver as `FIG10`, `FIG11_NONE`, `FIG511`.
+- The driver's default is a 40,000-node reference and counts to 10,000, so
+  it runs in about a minute; the tables and figures above are the
+  160,000-node run.
+
+Regenerate with `uv run python scripts/heat2d_case2.py` (53 s at the
+defaults; the reference is cached under `outputs/` on the first run) and
+`uv run python scripts/heat2d_case2.py --reference-n 160000 --counts 1250
+2500 5000 10000 20000 40000 80000 --fd4-counts 1250 2500 5000 10000 20000
+40000 80000 160000 320000 640000` for the tables above (8.5 min with the
+reference cached, 1.1 min more without; the resampling check is 54 s of
+it).
+
 Later tickets add their subsections here; E2.11 (#25) closes the section
 with the decisions and the regeneration commands.

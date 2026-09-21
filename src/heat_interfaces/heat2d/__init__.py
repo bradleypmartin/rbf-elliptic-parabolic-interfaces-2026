@@ -16,8 +16,12 @@ solutions of the control and of case 1 (EABE eq. 34), with the warped
 Gaussians of EABE §2.2.4 (``interface.Warp``) on by default; ``march``:
 ``march_parabolic``, BD4 on the node set (the 1-D marcher behind the
 Dirichlet mask, dissertation §5.4), the analytic-history start of a
-verification run and the interior spectrum of Fig. 5-6. The case drivers
-follow in E2.6 onward.
+verification run and the interior spectrum of Fig. 5-6; ``fd4``: the
+Cartesian FD4 baseline ``Dx A Dx + Dy A Dy`` of EABE Fig. 10 and 14 on a grid
+that is itself a ``NodeSet``; ``resample``: reading a fine solution at other
+points through the fine set's own stencils, the translated basis where they
+cross an interface, and the cached ``Reference`` runs of the cases without
+an analytic solution (E2.6).
 """
 
 from .domain import (
@@ -52,8 +56,10 @@ from .domain import (
     straddle_count,
 )
 from .exact import LayeredExact, case1_exact, control_exact
+from .fd4 import cartesian_grid, fd4_dx, fd4_dy, fd4_operator, grid_size
 from .interface import (
     Frame,
+    InterfaceStencil,
     LocalInterface,
     Region,
     Warp,
@@ -66,6 +72,8 @@ from .interface import (
     frame_at,
     frame_change,
     interface_expansion,
+    interface_stencil,
+    interpolation_weights,
     local_interface,
     local_taylor,
     multiplication_matrix,
@@ -129,7 +137,9 @@ from .rbf import (
     polynomial_exponents,
     polynomial_rhs,
     rbf_fd_weights,
+    rbf_interpolation_weights,
 )
+from .resample import Reference, reference_solution, resample
 from .solve import normalized_l2, rms_error, solve_equilibrium
 
 __all__ = [
@@ -236,4 +246,16 @@ __all__ = [
     "translation_matrix",
     "vector_to_table",
     "wrap_x",
+    "InterfaceStencil",
+    "Reference",
+    "cartesian_grid",
+    "fd4_dx",
+    "fd4_dy",
+    "fd4_operator",
+    "grid_size",
+    "interface_stencil",
+    "interpolation_weights",
+    "rbf_interpolation_weights",
+    "reference_solution",
+    "resample",
 ]

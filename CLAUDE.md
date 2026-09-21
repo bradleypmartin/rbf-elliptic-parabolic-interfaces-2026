@@ -53,7 +53,9 @@ src/heat_interfaces/   library (filled in by the epics; module names are the pla
                        warped GA), interface (scalar continuity matrices with
                        curvature, multi-interface translation), operators, solve
                        (direct, gmres/bicgstab, preconditioners), march (BD4),
-                       exact, seeds, treatments, resample
+                       exact, fd4 (Cartesian Dx A Dx + Dy A Dy), resample (fine →
+                       coarse through the fine stencils; cached references),
+                       seeds, treatments
 scripts/               drivers writing to outputs/; publish_issues.py;
                        paper_figures.py and paper_numbers.py (E5.3)
 tests/                 pytest; every numerical routine has one
