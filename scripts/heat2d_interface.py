@@ -14,7 +14,8 @@ table adds the size of the interface group, how many of its stencils
 cross, the order per halving of ``h`` and the times to build the operator
 and to solve. Case 1's interfaces are flat, so the flat and
 curvature-included variants give the same matrix; the table prints their
-largest difference.
+largest difference. The Gaussians are the plain ones (``warp=False``), the
+setting of port notes §2.3; E2.4's ``heat2d_warp.py`` adds the warp.
 
 The continuity table evaluates the translated basis (degree 4) along the
 sine interface of case 2 and along the outer circle of case 3's ring at arc
@@ -117,14 +118,14 @@ def sweep(
         row["crossing"] = int(
             interface_crossings(nodes, domain.material, group.index).sum()
         )
-        op = interface_aware_operator(nodes, domain.material, stencils)
+        op = interface_aware_operator(nodes, domain.material, stencils, warp=False)
         row["build-seconds"] = time.perf_counter() - t0
         t0 = time.perf_counter()
         u = solve_equilibrium(op, nodes, [0.0, top])
         row["aware"] = rms_error(u, reference)
         row["solve-seconds"] = time.perf_counter() - t0
         flat = interface_aware_operator(
-            nodes, domain.material, stencils, curvature=False
+            nodes, domain.material, stencils, curvature=False, warp=False
         )
         row["flat-diff"] = float(abs(op - flat).max())
         rows.append(row)

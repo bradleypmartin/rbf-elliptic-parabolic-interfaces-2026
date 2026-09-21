@@ -12,8 +12,9 @@ Dirichlet rows; ``interface``: the translated polynomial bases across
 interfaces with curvature and the multi-interface chain (dissertation §5.3,
 EABE §2.2.3) and ``operators.interface_aware_operator``; ``solve``: the
 SuperLU equilibrium solve; ``exact``: the separable piecewise-exponential
-solutions of the control and of case 1 (EABE eq. 34). Warped RBFs, BD4 and
-the case drivers follow in E2.4 onward.
+solutions of the control and of case 1 (EABE eq. 34), with the warped
+Gaussians of EABE §2.2.4 (``interface.Warp``) on by default. BD4 and the
+case drivers follow in E2.5 onward.
 """
 
 from .domain import (
@@ -52,6 +53,8 @@ from .interface import (
     Frame,
     LocalInterface,
     Region,
+    Warp,
+    build_warp,
     coefficient_dx,
     coefficient_dy,
     coefficient_operator,
@@ -152,6 +155,7 @@ __all__ = [
     "NodeSet",
     "Piece2D",
     "Region",
+    "Warp",
     "Row",
     "SineGraph",
     "SineProduct",
@@ -210,6 +214,7 @@ __all__ = [
     "straddle_count",
     "substitution_matrix",
     "table_to_vector",
+    "build_warp",
     "translated_basis",
     "translation_matrix",
     "vector_to_table",

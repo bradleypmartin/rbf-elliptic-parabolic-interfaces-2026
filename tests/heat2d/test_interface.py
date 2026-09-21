@@ -20,6 +20,7 @@ from heat_interfaces.heat2d.domain import (
 from heat_interfaces.heat2d.interface import (
     Frame,
     LocalInterface,
+    build_warp,
     coefficient_dx,
     coefficient_dy,
     coefficient_operator,
@@ -40,7 +41,7 @@ from heat_interfaces.heat2d.interface import (
     vector_to_table,
 )
 from heat_interfaces.heat2d.neighbors import knn
-from heat_interfaces.heat2d.rbf import polynomial_block, polynomial_exponents
+from heat_interfaces.heat2d.rbf import gaussian, polynomial_block, polynomial_exponents
 
 P = 4
 Q = len(polynomial_exponents(P))
@@ -447,12 +448,19 @@ def test_stencil_weights_annihilate_the_piecewise_linear_equilibrium():
     assert len(cross) > 300
     u = piecewise_linear_case1(nodes.y)
     for curvature in (True, False):
-        residual = [
-            stencil_weights(nodes.xy[idx[i]], domain.material, P, curvature=curvature)
-            @ u[idx[i]]
-            for i in cross[::5]
-        ]
-        assert np.abs(residual).max() < 1e-9
+        for warp in (True, False):
+            residual = [
+                stencil_weights(
+                    nodes.xy[idx[i]],
+                    domain.material,
+                    P,
+                    curvature=curvature,
+                    warp=warp,
+                )
+                @ u[idx[i]]
+                for i in cross[::5]
+            ]
+            assert np.abs(residual).max() < 1e-9
     # A stencil in one region is refused.
     inside = int(np.flatnonzero(np.ptp(region[idx], axis=1) == 0)[0])
     with pytest.raises(ValueError, match="one region"):
@@ -461,13 +469,15 @@ def test_stencil_weights_annihilate_the_piecewise_linear_equilibrium():
         stencil_weights(nodes.xy[idx[cross[0], :10]], domain.material, P)
 
 
-def test_stencil_weights_are_exact_on_a_matched_quadratic_across_a_circle():
+@pytest.mark.parametrize("warp", [True, False])
+def test_stencil_weights_are_exact_on_a_matched_quadratic_across_a_circle(warp):
     # alpha 1 inside r = 0.35, 5 outside (the band's region 1 reaches r = 0.9):
     # u = r² inside and (r² - R²) / 5 + R² outside is continuous with
     # continuous alpha u_r, and div(alpha grad u) = 4 on both sides. Both
     # pieces are quadratics that satisfy the interface conditions along the
     # whole circle, so the curved basis reproduces the pair to rounding of the
-    # fitted expansion; the flat assumption is off by O(1).
+    # fitted expansion; the flat assumption is off by O(1). The warp only
+    # touches the Gaussian block, so it must keep the polynomial exactness.
     band = Band(Circle(0.35), Circle(0.9), Constant2D(5.0), Constant2D(1.0))
     domain = Domain(band, (Circle(0.35),), STRIP)
     nodes = build_node_set(domain, 2500, iterations=10)
@@ -481,7 +491,9 @@ def test_stencil_weights_are_exact_on_a_matched_quadratic_across_a_circle():
     residual = {
         curvature: np.array(
             [
-                stencil_weights(nodes.xy[idx[i]], band, P, curvature=curvature)
+                stencil_weights(
+                    nodes.xy[idx[i]], band, P, curvature=curvature, warp=warp
+                )
                 @ u[idx[i]]
                 - 4.0
                 for i in cross
@@ -519,10 +531,12 @@ def matched_radial_quadratic(r):
     return np.where(r < 0.30, r**2, np.where(r <= 0.35, 0.25 * r**2 + b1, r**2 + b2))
 
 
-def test_stencil_weights_chain_across_two_curved_interfaces_end_to_end():
+@pytest.mark.parametrize("warp", [True, False])
+def test_stencil_weights_chain_across_two_curved_interfaces_end_to_end(warp):
     # Real 30-node stencils of a node set straddling the ring's midline reach
     # all three regions: the foot points, both frames, the curvature and the
-    # frame change are all exercised by stencil_weights itself.
+    # frame change are all exercised by stencil_weights itself, and with the
+    # warp the three-region stretch of build_warp too.
     band = concentric_band()
     domain = Domain(band, (Circle(0.325),), STRIP)
     nodes = build_node_set(domain, 2500, iterations=10)
@@ -536,7 +550,9 @@ def test_stencil_weights_chain_across_two_curved_interfaces_end_to_end():
     residual = {
         curvature: np.array(
             [
-                stencil_weights(nodes.xy[idx[i]], band, P, curvature=curvature)
+                stencil_weights(
+                    nodes.xy[idx[i]], band, P, curvature=curvature, warp=warp
+                )
                 @ u[idx[i]]
                 - 4.0
                 for i in triple[::3]
@@ -589,6 +605,120 @@ def test_chain_through_two_curved_sine_interfaces_is_continuous_at_both():
         ratio = jumps[:-1] / jumps[1:]
         np.testing.assert_allclose(ratio[:, 0], 2 ** (P + 1), rtol=0.1)
         np.testing.assert_allclose(ratio[:, 1], 2**P, rtol=0.1)
+
+
+# --- warped RBFs (EABE §2.2.4) ---------------------------------------------------
+
+
+def thin_flat_band():
+    """alpha 1 below y = 0.6, 0.2 on the 0.03-wide band, 1 above: three flat regions."""
+    return Band(FlatLine(0.6), FlatLine(0.63), Constant2D(0.2), Constant2D(1.0))
+
+
+def test_warp_is_the_identity_at_the_anchor_and_balances_alpha_across_each_interface():
+    band = thin_flat_band()
+    x, y, scale = 0.3, 0.615, 0.05
+    locals_ = {j: local_interface(band, j, x, y, scale, P) for j in (0, 1)}
+    alpha = np.array([1.0, 0.2, 1.0])
+    for anchor in (0, 1, 2):
+        w = build_warp(locals_, anchor, 0, 2)
+        assert w.frame == (anchor if anchor < 2 else 1) and w.lowest == 0
+        assert w.slope[anchor] == 1.0 and w.intercept[anchor] == 0.0
+        # alpha * slope is one number over the three regions: alpha d/d_eta of
+        # any smooth function of eta_tilde balances at both interfaces.
+        np.testing.assert_allclose(alpha * w.slope, alpha[anchor], rtol=1e-14)
+        # eta_tilde is continuous at each interface's eta in the anchor frame
+        # (0 for its own, ±0.03 / scale for the other of this parallel pair).
+        base = locals_[w.frame].frame
+        for j in (0, 1):
+            other = locals_[j].frame
+            eta_j = 0.0 if j == w.frame else float(base.local(other.x0, other.y0)[1])
+            expected = 0.0 if j == w.frame else (1.0 if j > w.frame else -1.0) * 0.6
+            assert eta_j == pytest.approx(expected, abs=1e-12)
+            assert w.apply(eta_j, j) == pytest.approx(w.apply(eta_j, j + 1), abs=1e-14)
+    with pytest.raises(ValueError, match="anchor"):
+        build_warp(locals_, 3, 0, 2)
+
+
+def test_warp_balances_the_foot_point_alphas_along_the_sine_pair_of_case2():
+    # Variable alpha in the band: the balance holds at each interface with
+    # that interface's own foot-point values, so the slope above the band is
+    # the product of two ratios that only cancel where alpha is the same at
+    # both foot points.
+    band = case2_band()
+    x, y = 0.13, 0.7
+    locals_ = {j: local_interface(band, j, x, y, 0.05, P) for j in (0, 1)}
+    w = build_warp(locals_, 1, 0, 2)
+    for j in (0, 1):
+        it = locals_[j]
+        assert it.minus[0, 0] * w.slope[j] == pytest.approx(
+            it.plus[0, 0] * w.slope[j + 1], rel=1e-14
+        )
+    assert w.slope[0] != pytest.approx(w.slope[2])
+
+
+def test_warped_gaussian_has_continuous_value_and_alpha_normal_flux_on_the_interface():
+    # EABE Fig. 6 / dissertation Fig. 5-1: alpha 1 below a flat interface, 1/2
+    # above, one Gaussian centred below. As a function of the stretched
+    # coordinates its value and its alpha d/dn are continuous at every point
+    # of the interface, to rounding by the chain rule; the chain rule itself
+    # is checked against one-sided differences on each side, and the plain
+    # Gaussian is shown to fail the flux balance by the factor 2.
+    band = Band(FlatLine(0.6), FlatLine(0.9), Constant2D(0.5), Constant2D(1.0))
+    x, y, scale = 0.4, 0.585, 0.05
+    li = local_interface(band, 0, x, y, scale, P)
+    w = build_warp({0: li}, 0, 0, 1)
+    assert w.slope[1] == pytest.approx(2.0)
+    eps = 0.4 * scale / 0.012
+    xi_c, eta_c = li.frame.local(x, y)
+    eta_c = w.apply(eta_c, 0)
+
+    def phi(px, py, side, warped=True):
+        xi, eta = li.frame.local(px, py)
+        et = w.apply(eta, side) if warped else eta
+        return gaussian(xi - xi_c, et - eta_c, eps)
+
+    def d_normal(px, py, side):
+        # d/dn = (slope / scale) d/d_eta_tilde, in physical units.
+        xi, eta = li.frame.local(px, py)
+        et = w.apply(eta, side)
+        g = gaussian(xi - xi_c, et - eta_c, eps)
+        return w.slope[side] / scale * (-2.0 * eps**2 * (et - eta_c) * g)
+
+    alpha = np.array([1.0, 0.5])
+    px = np.linspace(0.3, 0.5, 9)
+    py = np.full_like(px, 0.6)
+    np.testing.assert_array_equal(phi(px, py, 0), phi(px, py, 1))
+    flux = [alpha[side] * d_normal(px, py, side) for side in (0, 1)]
+    np.testing.assert_allclose(flux[0], flux[1], rtol=1e-13)
+    assert np.abs(flux[0]).max() > 1.0
+    delta = 1e-7
+    below = (phi(px, py, 0) - phi(px, py - delta, 0)) / delta
+    above = (phi(px, py + delta, 1) - phi(px, py, 1)) / delta
+    np.testing.assert_allclose(below, d_normal(px, py, 0), rtol=1e-4)
+    np.testing.assert_allclose(above, d_normal(px, py, 1), rtol=1e-4)
+    plain_below = (phi(px, py, 0, False) - phi(px, py - delta, 0, False)) / delta
+    plain_above = (phi(px, py + delta, 1, False) - phi(px, py, 1, False)) / delta
+    np.testing.assert_allclose(
+        alpha[0] * plain_below, 2 * alpha[1] * plain_above, rtol=1e-4
+    )
+
+
+def test_warp_is_the_identity_when_alpha_matches_and_moves_the_weights_otherwise():
+    domain = case1()
+    nodes = build_node_set(domain, 1250)
+    idx, _ = knn(nodes.xy, 30)
+    region = domain.material.region_index(nodes.x, nodes.y)
+    i = int(np.flatnonzero(np.ptp(region[idx], axis=1) > 0)[5])
+    xy = nodes.xy[idx[i]]
+    same = Band(FlatLine(0.6), FlatLine(0.8), Constant2D(1.0), Constant2D(1.0))
+    plain = stencil_weights(xy, same, P, warp=False)
+    warped = stencil_weights(xy, same, P, warp=True)
+    # Only the rotation of the Gaussian offsets into the frame separates them.
+    np.testing.assert_allclose(warped, plain, atol=1e-10 * np.abs(plain).max())
+    plain = stencil_weights(xy, domain.material, P, warp=False)
+    warped = stencil_weights(xy, domain.material, P, warp=True)
+    assert np.abs(warped - plain).max() > 1e-3 * np.abs(plain).max()
 
 
 def test_stencil_weights_scale_as_the_inverse_square_of_the_spacing():

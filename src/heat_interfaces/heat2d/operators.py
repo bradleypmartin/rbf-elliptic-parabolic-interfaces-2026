@@ -228,6 +228,7 @@ def interface_aware_operator(
     material,
     stencils: Stencils,
     curvature: bool = True,
+    warp: bool = True,
     shape: float = GA_SHAPE,
 ) -> sp.csr_array:
     """The §5.3 operator: direct rows, translated-basis rows across interfaces.
@@ -238,7 +239,9 @@ def interface_aware_operator(
     interfaces when they reach three regions), the rest are the direct
     operator's. ``curvature=False`` is the flat-interface variant EABE
     Fig. 10 and 14 compare against; on flat interfaces the two coincide.
-    A material without interfaces gives the direct operator back.
+    ``warp=False`` replaces the warped Gaussians of EABE §2.2.4, the papers'
+    default, by plain ones (the "no warp" line of Fig. 11). A material
+    without interfaces gives the direct operator back.
     """
     op = direct_operator(nodes, material, stencils, shape)
     if not hasattr(material, "region_index"):
@@ -250,7 +253,12 @@ def interface_aware_operator(
         cross = interface_crossings(nodes, material, g.index)
         for row, idx in zip(g.rows[cross], g.index[cross], strict=True):
             w = stencil_weights(
-                nodes.xy[idx], material, g.spec.degree, shape, curvature
+                nodes.xy[idx],
+                material,
+                g.spec.degree,
+                shape,
+                curvature=curvature,
+                warp=warp,
             )
             op[row, :] = 0.0
             op[row, idx] = w
