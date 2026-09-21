@@ -20,6 +20,7 @@ from heat_interfaces.heat2d.domain import (
     build_node_set,
     case1,
     case3,
+    ring_radii,
 )
 from heat_interfaces.heat2d.interface import (
     Frame,
@@ -608,6 +609,90 @@ def test_stencil_weights_are_exact_through_the_ring_at_its_1500_contrast(warp):
         relative[curvature] = worst
     assert relative[True] < 1e-9, relative
     assert relative[False] > 1e-7, relative
+
+
+@pytest.mark.parametrize("s, bound", [(1e6, 1e-9), (1e9, 1e-6), (1e11, 1e-4)])
+def test_stencil_weights_lose_digits_like_s_through_a_thin_ring(s, bound):
+    # E2.9: the matched quadratic through EABE eq. 40's ring, 1/s wide at
+    # α = 1/(1.5 s), on the case-3 layout at s (u climbs by 1.05 across it at
+    # every s). Each crossing stencil's far side carries curvature-coupled
+    # basis coefficients of order s (port notes §2.9), so the relative residual
+    # grows like s ε, about 1e-17 s; the bounds leave two orders' room.
+    inner, outer = ring_radii(s)
+    band = Band(
+        Circle(inner), Circle(outer), Constant2D(1 / (1.5 * s)), Constant2D(1.0)
+    )
+    domain = replace(case3(s), material=band)
+    nodes = build_node_set(domain, 2500, iterations=10)
+    r = np.hypot(nodes.x - 0.5, nodes.y - 0.5)
+    jump = (outer - inner) * (inner + outer) * (1.5 * s - 1.0)
+    assert jump == pytest.approx(1.05, rel=1e-3)
+    u = np.where(r < inner, r**2, r**2 + jump)
+    region = band.region_index(nodes.x, nodes.y)
+    assert (region == 1).sum() == 0
+    idx, _ = knn(nodes.xy, 30)
+    lo, hi = region[idx].min(axis=1), region[idx].max(axis=1)
+    triple = np.flatnonzero((lo == 0) & (hi == 2))
+    assert len(triple) > 200, len(triple)
+    worst = 0.0
+    for i in triple[::5]:
+        w = stencil_weights(nodes.xy[idx[i]], band, P)
+        residual = abs(w @ u[idx[i]] - 4.0)
+        worst = max(worst, residual / (np.abs(w) @ np.abs(u[idx[i]])))
+    assert worst < bound, worst
+
+
+def test_far_side_basis_grows_like_s_with_curvature_only():
+    # E2.9's mechanism, the measurable part: across the ring from the centre
+    # the translated basis carries coefficients of order s with curvature on
+    # (the ring polynomial's O(s²) normal terms couple through the curvature
+    # and the frame shift between the circles) and none of it with the flat
+    # frames; port notes §2.9. Medians over a few crossing stencils.
+    far = {}
+    for s in (1e6, 1e9):
+        inner, outer = ring_radii(s)
+        band = Band(
+            Circle(inner), Circle(outer), Constant2D(1 / (1.5 * s)), Constant2D(1.0)
+        )
+        nodes = build_node_set(replace(case3(s), material=band), 1250, iterations=10)
+        region = band.region_index(nodes.x, nodes.y)
+        idx, _ = knn(nodes.xy, 30)
+        lo, hi = region[idx].min(axis=1), region[idx].max(axis=1)
+        triple = np.flatnonzero((lo == 0) & (hi == 2))[::25]
+        for curvature in (True, False):
+            values = []
+            for i in triple:
+                st = interface_stencil(nodes.xy[idx[i]], band, P, curvature=curvature)
+                other = [k for k in st.regions if k not in (1, st.anchor)][0]
+                values.append(np.abs(st.regions[other].coefficients).max())
+            far[s, curvature] = float(np.median(values))
+    assert 300 < far[1e9, True] / far[1e6, True] < 3000, far
+    assert far[1e6, True] > 1e3 and far[1e9, True] > 1e6, far
+    assert far[1e6, False] < 1e3 and far[1e9, False] < 1e3, far
+    assert far[1e9, False] == pytest.approx(far[1e6, False], rel=0.05)
+
+
+def test_interface_stencil_basis_takes_the_band_anchoring():
+    # The band-anchored basis (the MATLAB's) spans the centre-anchored one's
+    # space; the polynomial block is much worse conditioned that way (E2.9).
+    band = Band(Circle(0.349), Circle(0.35), Constant2D(1 / 1500), Constant2D(1.0))
+    domain = replace(case3(), material=band)
+    nodes = build_node_set(domain, 1250, iterations=10)
+    region = band.region_index(nodes.x, nodes.y)
+    idx, _ = knn(nodes.xy, 30)
+    i = np.flatnonzero((region[idx].min(axis=1) == 0) & (region[idx].max(axis=1) == 2))[
+        0
+    ]
+    st = interface_stencil(nodes.xy[idx[i]], band, P)
+    centre = st.polynomial_block()
+    np.testing.assert_array_equal(centre, st.polynomial_block(st.regions))
+    band_anchored = st.polynomial_block(translated_basis(st.interfaces, 1, 0, 2))
+    mixing, *_ = np.linalg.lstsq(centre, band_anchored, rcond=None)
+    assert (
+        np.abs(centre @ mixing - band_anchored).max()
+        < 1e-6 * np.abs(band_anchored).max()
+    )
+    assert np.linalg.cond(band_anchored) > 1e3 * np.linalg.cond(centre)
 
 
 def test_chain_through_two_curved_sine_interfaces_is_continuous_at_both():

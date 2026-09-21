@@ -16,6 +16,7 @@ from heat_interfaces.heat2d.domain import (
     case1,
     case2,
     case3,
+    ring_radii,
     row_count,
     step_delta,
     straddle_count,
@@ -202,6 +203,43 @@ def test_case3_domain_cuts_out_the_cooling_unit():
     assert d.straddle[0].radius == pytest.approx(0.3495)
     assert d.dirichlet[2].radius == 0.05 and d.holes == (d.dirichlet[2],)
     assert case1().contains(np.array([0.5]), np.array([0.5]))[0]
+
+
+def test_case3_at_s_is_eq_40_and_recovers_case_3_at_1000():
+    # E2.9: EABE eq. 40's ring 0.35 − 1/s ≤ r ≤ 0.35 at
+    # α = 1/(1.5 s) + (1/(3 s)) sin sin, rows on its midline; s = 1000 is case 3
+    # bit for bit.
+    assert ring_radii() == (0.349, 0.35) and ring_radii(1000.0) == (0.349, 0.35)
+    d = case3(1000.0)
+    assert d.material == case3().material and d.straddle == case3().straddle
+    e = case3(1e8)
+    assert e.material.lower.radius == 0.35 - 1e-8 and e.material.upper.radius == 0.35
+    assert e.straddle[0].radius == 0.35 - 0.5e-8
+    assert e.dirichlet == d.dirichlet and e.holes == d.holes
+    m = e.material
+    x = 0.5 + np.array([0.35 - 0.5e-8, 0.35 - 2e-8, 0.35 + 1e-8])
+    y = np.full(3, 0.5)
+    np.testing.assert_array_equal(m.region_index(x, y), [1, 0, 2])
+    assert m.inside.offset == pytest.approx(1 / 1.5e8)
+    assert m.inside.amplitude == pytest.approx(1 / 3e8)
+    np.testing.assert_array_equal(m.alpha(x, y)[1:], 1.0)
+    with pytest.raises(ValueError, match="positive"):
+        ring_radii(0.0)
+    with pytest.raises(ValueError, match="cooling circle"):
+        ring_radii(3.0)  # 0.35 - 1/3 < 0.05
+    assert ring_radii(4.0) == (0.35 - 0.25, 0.35)
+
+
+def test_case3_rows_straddle_a_ring_a_billionth_wide():
+    d = case3(1e9)
+    ns = build_node_set(d, 1250, iterations=10)
+    r = np.hypot(ns.x - 0.5, ns.y - 0.5)
+    assert (d.material.region_index(ns.x, ns.y) == 1).sum() == 0
+    lo, hi = ns.rows_of(0, 0.5)
+    assert np.all(r[lo.index] < 0.35 - 1e-9) and np.all(r[hi.index] > 0.35)
+    np.testing.assert_allclose(
+        (r[lo.index] + r[hi.index]) / 2, 0.35 - 0.5e-9, rtol=1e-12
+    )
 
 
 # --- node sets --------------------------------------------------------------

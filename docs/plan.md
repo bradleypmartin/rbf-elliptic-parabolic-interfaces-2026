@@ -533,6 +533,10 @@ Labels: enhancement
 Size: M
 Depends on: E2.6
 
+**Closed as won't do, 2026-09-21.** The elliptic and parabolic ports and the
+stiff-edge study are enough for this repo; corners will be explored in a
+separate repo later. The manuscript's limitations section covers them.
+
 Dissertation §5.4.5: the band of case 2 with corners at y ≈ 0.6, smoothed by
 circular segments whose radius shrinks with h; FD4 vs RBF-FD at second
 order (Fig. 5-22). Off the critical path; the manuscript's limitations

@@ -618,12 +618,24 @@ class InterfaceStencil:
             raise ValueError("a point lies in a region the stencil does not reach")
         return region
 
-    def basis(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
-        """``(len(x), q)``: the translated basis at points, in each point's frame."""
+    def basis(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        regions: Mapping[int, Region] | None = None,
+    ) -> np.ndarray:
+        """``(len(x), q)``: the translated basis at points, in each point's frame.
+
+        ``regions`` is another basis of the same span on the same interfaces,
+        such as ``translated_basis(self.interfaces, 1, ...)`` anchored on the
+        band the way the MATLAB anchored (E2.9's conditioning comparison);
+        the stencil's own by default.
+        """
         x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
         region = self.reach(x, y)
+        regions = self.regions if regions is None else regions
         out = np.empty((x.size, polynomial_count(self.degree)))
-        for index, reg in self.regions.items():
+        for index, reg in regions.items():
             mask = region == index
             if mask.any():
                 xi, eta = self.interfaces[reg.frame].frame.local(x[mask], y[mask])
@@ -640,9 +652,11 @@ class InterfaceStencil:
             x, y, region, self.xy[0], self.anchor, self.scale, self.frame, self.warp
         )
 
-    def polynomial_block(self) -> np.ndarray:
+    def polynomial_block(
+        self, regions: Mapping[int, Region] | None = None
+    ) -> np.ndarray:
         """``(k, q)``: the translated basis at the nodes, the ``P`` of eq. 2."""
-        return self.basis(self.xy[:, 0], self.xy[:, 1])
+        return self.basis(self.xy[:, 0], self.xy[:, 1], regions)
 
     def gaussian_block(self) -> np.ndarray:
         """``(k, k)``: ``φ(|x̃_i − x̃_j|)`` in the (warped) coordinates."""

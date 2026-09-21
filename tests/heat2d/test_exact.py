@@ -100,17 +100,34 @@ def test_layered_exact_refuses_malformed_layers():
 
 
 def test_ring_mode_is_continuous_with_its_flux_and_harmonic_on_every_ring():
-    for u in (ring_exact(), ring_exact(3), RingMode((0.2, 0.3), (2.0, 0.5, 1.0), 1)):
-        for r in u.radii:
-            below, above = r - 1e-13, r + 1e-13
-            assert u.radial(below) == pytest.approx(u.radial(above), abs=1e-9)
-            assert u.flux(below) == pytest.approx(u.flux(above), rel=1e-9)
+    # The last is a four-ring chain with a thin insulating ring in the middle
+    # (1e-6 wide at α = 1e-6 / 1.5, resistance 1.5): the increment walk's
+    # multi-hop path, which no case needs.
+    chain = RingMode((0.15, 0.3, 0.3 + 1e-6, 0.45), (1.0, 3.0, 1e-6 / 1.5, 1.0, 0.5))
+    for u in (
+        ring_exact(),
+        ring_exact(3),
+        RingMode((0.2, 0.3), (2.0, 0.5, 1.0), 1),
+        chain,
+    ):
+        # At each radius the ring above owns the point; the ring below is
+        # evaluated from its own pair (a probe at r − 1e-13 would already see
+        # the thin ring's climb, 4.5e5 per unit radius).
+        m = u.mode
+        for k, r in enumerate(u.radii):
+            a, b = u._coefficients[k]
+            assert a * r**m + b * r**-m == pytest.approx(u.radial(r), abs=1e-9)
+            flux_below = u.alphas[k] * m * (a * r ** (m - 1) - b * r ** (-m - 1))
+            assert flux_below == pytest.approx(u.flux(r), rel=1e-9)
         assert u.radial(u.scale_radius) == pytest.approx(1.0)
         # Harmonic: the five-point Laplacian vanishes to its own truncation.
         for x, y in ((0.55, 0.62), (0.3, 0.3), (0.72, 0.31), (0.1, 0.9)):
             s = 2e-4
             lap = u(x + s, y) + u(x - s, y) + u(x, y + s) + u(x, y - s) - 4 * u(x, y)
             assert abs(lap / s**2) < 3e-5, (x, y, lap / s**2)
+    # Across the chain's thin ring the climb is the resistance times the flux.
+    climb = chain.radial(0.3 + 1e-6 + 1e-13) - chain.radial(0.3 - 1e-13)
+    assert climb == pytest.approx(1.5 * chain.flux(0.3 - 1e-13), rel=1e-4)
     u = ring_exact()
     # Inside it is the harmonic polynomial Re (x + iy)²; across the ring R
     # climbs by about m (α_out / α_ring) (width) r: 1.05 against 0.12 inside.
@@ -120,6 +137,37 @@ def test_ring_mode_is_continuous_with_its_flux_and_harmonic_on_every_ring():
     assert 0.6 < u.radial(0.35) - u.radial(0.349) < 0.7
     assert u.radial(0.349) == pytest.approx(0.0775, abs=1e-3)
     assert u.ring(np.array([0.1, 0.349, 0.3495, 0.35, 0.4])).tolist() == [0, 1, 1, 2, 2]
+
+
+def test_ring_mode_walk_is_stable_across_a_ring_a_billionth_wide():
+    # E2.9: on EABE eq. 40's ring, 1/s wide at α = 1/(1.5 s), the pair (a, b) is
+    # O(s) and evaluating a r^m + b r^-m at the outer radius cancels to an O(1)
+    # climb; the walk forms the climb from expm1 increments instead, so the
+    # outside coefficients keep their digits and tend to the thin-layer limit,
+    # where the climb is the resistance 1.5 times the flux.
+    old = ring_exact()
+    np.testing.assert_allclose(
+        old._coefficients,
+        [
+            [6.36305165e-01, 0.0],
+            [4.77547026e02, -7.07520118],
+            [3.34804304, 4.07473100e-02],
+        ],
+        rtol=1e-8,
+    )
+    outer = {}
+    for s in (1e6, 1e9, 1e11):
+        u = ring_exact(s=s)
+        r1, r2 = u.radii
+        assert u.radii == pytest.approx((0.35 - 1 / s, 0.35)) and u.alphas[1] == 1 / (
+            1.5 * s
+        )
+        climb = u.radial(r2) - u._coefficients[0, 0] * r1**2
+        # O(1/s) from the ring's thickness, plus the stored width's rounding (8e-8).
+        assert climb == pytest.approx(1.5 * u.flux(r2), rel=3.0 / s + 2e-7)
+        assert u.radial(u.scale_radius) == pytest.approx(1.0)
+        outer[s] = u._coefficients[2]
+    np.testing.assert_allclose(outer[1e11], outer[1e9], rtol=1e-6)
 
 
 def test_ring_mode_refuses_malformed_rings():

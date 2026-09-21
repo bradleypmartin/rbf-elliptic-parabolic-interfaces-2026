@@ -28,6 +28,7 @@ interior system, ``gmres`` / ``bicgstab`` and ``spilu`` (E2.8).
 """
 
 from .domain import (
+    CASE3_S,
     CASES,
     COOLING_RADIUS,
     DIRICHLET,
@@ -54,6 +55,7 @@ from .domain import (
     case1,
     case2,
     case3,
+    ring_radii,
     row_count,
     step_delta,
     straddle_count,
@@ -173,6 +175,7 @@ __all__ = [
     "BOUNDARY",
     "BOUNDARY_KIND",
     "BOUNDARY_ZONE",
+    "CASE3_S",
     "CASES",
     "COOLING_RADIUS",
     "DIRICHLET",
@@ -262,6 +265,7 @@ __all__ = [
     "rbf_fd_weights",
     "restriction_matrix",
     "ring_exact",
+    "ring_radii",
     "rms_error",
     "row_count",
     "solve_equilibrium",

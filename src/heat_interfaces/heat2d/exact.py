@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .domain import RING, TWO_PI
+from .domain import CASE3_S, TWO_PI, ring_radii
 
 
 @dataclass(frozen=True)
@@ -175,14 +175,26 @@ class RingMode:
 
     def _solve(self) -> np.ndarray:
         # Walk outward: R and α (a r^m − b r^-m), the flux times r/m, are
-        # continuous, and the next ring's pair follows from them.
+        # continuous, and the next ring's pair follows from them. Both are
+        # carried across each ring as increments of r^m and r^-m formed with
+        # expm1 / log1p: on a ring 1/s thick at α ~ 1/s (EABE eq. 40) the
+        # pair (a, b) is O(s) and evaluating a r^m + b r^-m at the outer
+        # radius would cancel two O(s) terms to an O(1) climb, losing
+        # log10(s) digits; the increments are O(1) each.
         m = self.mode
         coef = np.zeros((len(self.alphas), 2))
         coef[0] = [1.0, 0.0]
+        first = self.radii[0]
+        value, scaled_flux = first**m, self.alphas[0] * first**m
         for k, r in enumerate(self.radii):
             a, b = coef[k]
-            value = a * r**m + b * r**-m
-            scaled_flux = self.alphas[k] * (a * r**m - b * r**-m)
+            if k > 0:
+                below = self.radii[k - 1]
+                step = m * np.log1p((r - below) / below)
+                rise = a * below**m * np.expm1(step)
+                fall = b * below**-m * np.expm1(-step)
+                value = value + rise + fall
+                scaled_flux = scaled_flux + self.alphas[k] * (rise - fall)
             up = scaled_flux / self.alphas[k + 1]
             coef[k + 1] = [(value + up) / (2 * r**m), (value - up) / (2 * r**-m)]
         last = coef[-1]
@@ -214,10 +226,13 @@ class RingMode:
         return self.radial(np.hypot(dx, dy)) * np.cos(self.mode * np.arctan2(dy, dx))
 
 
-def ring_exact(mode: int = 2) -> RingMode:
-    """Case 3's ring at its constant part: ``α = 1/1500`` on ``0.349 <= r <= 0.35``.
+def ring_exact(mode: int = 2, s: float = CASE3_S) -> RingMode:
+    """Case 3's ring at its constant part: ``1/(1.5 s)`` on ``0.35 − 1/s ≤ r ≤ 0.35``.
 
-    ``u = r^m cos mθ`` scaled inside, 1 at ``(0.5, θ = 0)``; nearly all of the
-    change is across the ring, as in case 3 itself.
+    ``1/1500`` on ``0.349 ≤ r ≤ 0.35`` at the default ``s``; EABE eq. 40's
+    ring at any other. ``u = r^m cos mθ`` scaled inside, 1 at ``(0.5, θ = 0)``;
+    nearly all of the change is across the ring, as in case 3 itself, and
+    the climb tends to ``1.5 × α R'`` as ``s`` grows (the ring's resistance
+    ``(1/s) / (1/(1.5 s))`` is 1.5 at every ``s``).
     """
-    return RingMode(RING, (1.0, 1.0 / 1500.0, 1.0), mode)
+    return RingMode(ring_radii(s), (1.0, 1.0 / (1.5 * s), 1.0), mode)
