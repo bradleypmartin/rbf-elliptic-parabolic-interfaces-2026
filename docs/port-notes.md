@@ -105,8 +105,11 @@ Deviations with their reasons:
   on this problem at every count, and `1 / 0.641 = 1.56`. With the RMS both
   lines land on the figure at all six points. (`max |u| = 1` here, so
   normalizing by the maximum gives the same numbers; normalizing by `‖u‖₂`
-  does not.) Found in E1.2, applied here; `normalized_l2` is kept for the
-  parabolic tables (§1.4), which have no 2016 twin.
+  does not.) The 1-D equilibrium MATLAB is not preserved, but the 2-D
+  display script of the same era computes exactly this norm
+  (`heatEq2DMatlab/ResultsDisplayHeatError.m`: `sum(error.^2/N).^0.5`).
+  Found in E1.2, applied here; `normalized_l2` is kept for the parabolic
+  tables (§1.4), which have no 2016 twin.
 - **Six points, not five.** The figure's last point is at 3200, one factor of
   two past its last axis label; earlier tickets swept to 1601.
 - **Reference.** Quadrature (§1.1). The 2016 reference's own error, 2e-10
@@ -230,7 +233,9 @@ uv run python scripts/heat1d_parabolic.py        # 3 s: parabolic convergence, s
 ```
 
 Both print the tables above. The copies under `docs/figures/` were taken
-from `outputs/` on 2026-09-20.
+from `outputs/` on 2026-09-20. The equilibrium driver refuses node counts
+that move either interface off a node (`(n − 1) % 4 == 0` is required), so
+its figures always carry the placement of §1.1.
 
 ## 2. The 2-D heat port (E2, dissertation ch. 5 and EABE 2017)
 

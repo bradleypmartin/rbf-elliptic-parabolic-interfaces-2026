@@ -16,7 +16,9 @@ against the node count, 101 to 3201 with both interfaces on nodes, with
 first- and fourth-order guides. The figure's "normalized ℓ2 error" is the
 RMS, not ``||e||_2 / ||u||_2``; ``docs/port-notes.md`` §1.3 has the evidence.
 The report also prints the relative error and the direct ``(alpha u_x)_x``
-stencil's error, which does not converge.
+stencil's error, which does not converge. Node counts that move either
+interface off a node are refused (``(n - 1) % 4 == 0`` is required), since
+the figure's placement is part of what is being reproduced.
 
     uv run python scripts/heat1d_convergence.py                      # < 1 s
     uv run python scripts/heat1d_convergence.py --counts 101 201 401 801 1601 3201 6401
@@ -42,6 +44,7 @@ from heat_interfaces.heat1d import (  # noqa: E402
     equispaced_grid,
     jump_aware_operator,
     naive_operator,
+    node_counts,
     normalized_l2,
     rms_error,
     solve_equilibrium,
@@ -59,6 +62,22 @@ REPORTED = {**{k: op for k, (op, _) in LINES.items()}, "direct": direct_operator
 
 DEFAULT_COUNTS = (101, 201, 401, 801, 1601, 3201)
 """Fig. 4-7's six abscissae (labelled 100 to 3200) with both interfaces on nodes."""
+
+
+def require_interfaces_on_nodes(parser, counts, medium):
+    """Refuse counts whose grid puts an interface anywhere but on a node."""
+    bad = [
+        n
+        for n in counts
+        if any(equispaced_grid(n).placement(xi) != "node" for xi in medium.interfaces)
+    ]
+    if bad:
+        lo, hi = min(bad) // 2, 2 * max(bad)
+        parser.error(
+            f"node counts {bad} put an interface of {medium.interfaces} off a node; "
+            f"admissible counts in [{lo}, {hi}]: "
+            f"{node_counts(medium.interfaces, 'node', lo, hi)}"
+        )
 
 
 def solutions(n, medium):
@@ -194,10 +213,11 @@ def main(argv=None):
     parser.add_argument("--counts", type=int, nargs="+", default=list(DEFAULT_COUNTS))
     parser.add_argument("--outputs", type=Path, default=Path("outputs"))
     args = parser.parse_args(argv)
+    medium = dissertation_alpha()
+    require_interfaces_on_nodes(parser, [args.n, *args.counts], medium)
     args.outputs.mkdir(parents=True, exist_ok=True)
 
     t0 = time.perf_counter()
-    medium = dissertation_alpha()
     grid, ref, us = solutions(args.n, medium)
     report_solutions(grid, ref, us)
     plot_solutions(grid, ref, us, medium, args.outputs / "heat1d_solutions.png")

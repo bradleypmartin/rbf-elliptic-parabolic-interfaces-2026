@@ -27,3 +27,12 @@ def test_main_writes_the_three_figures(tmp_path, capsys):
         assert (tmp_path / f"{name}.png").stat().st_size > 0
     out = capsys.readouterr().out
     assert "101-node solutions" in out and "RMS rates" in out
+
+
+@pytest.mark.parametrize("argv", [["--n", "100"], ["--counts", "101", "200"]])
+def test_main_refuses_counts_that_move_an_interface_off_a_node(tmp_path, argv):
+    # 100 nodes put x = 0 mid-cell and x = 0.5 on neither a node nor a
+    # midpoint; the figure's placement is part of what is reproduced.
+    with pytest.raises(SystemExit):
+        main([*argv, "--outputs", str(tmp_path)])
+    assert not list(tmp_path.iterdir())
