@@ -1,9 +1,10 @@
-"""The E4 driver: E4.2's separable references through the smooth flat band, and
-E4.3's naive baseline with its straddling-row diagnostics."""
+"""The E4 driver: E4.2's separable references through the smooth flat band,
+E4.3's naive baseline with its straddling-row diagnostics, and E4.6's δ sweep."""
 
 import json
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -26,12 +27,18 @@ from heat2d_stiff import (  # noqa: E402
     pair_fluxes,
     row_profile,
     save_knee_cache,
+    seed_label,
+    seed_operators,
 )
+from heat_interfaces.heat1d.domain import TANH_REACH  # noqa: E402
 from heat_interfaces.heat2d import (  # noqa: E402
+    BOUNDARY,
     SmoothBand,
     build_node_set,
+    build_stencils,
     case1,
     case1_reference,
+    seed_operator,
 )
 
 _nodes = {}
@@ -241,3 +248,128 @@ def test_the_stencil_study_at_1250_nodes(capsys):
         assert np.all((scaled > monomial / 3) & (scaled < 3 * monomial))
     for r in tables["timing"]:
         assert r["median_ms"] < 30.0
+
+
+def test_seed_label_carries_the_warp_and_a_non_default_reach():
+    assert seed_label(True) == "seeds" and seed_label(False) == "seeds-plain"
+    assert seed_label(True, 5.0) == "seeds-r5"
+    assert seed_label(False, 5.0) == "seeds-plain-r5"
+
+
+def test_seed_operators_build_both_warps_from_one_march():
+    # E4.6's ablation is a second weight solve on the marched basis, so the
+    # two operators must be ``seed_operator``'s own, row for row.
+    nodes = build_node_set(case1(), 900)
+    medium = SmoothBand(case1().material, 0.005)
+    domain = replace(case1(), material=medium)
+    stencils = build_stencils(nodes, domain, interface=BOUNDARY, reach=TANH_REACH)
+    ops, seeded = seed_operators(nodes, medium, stencils, (True, False))
+    assert 0 < seeded < nodes.n
+    for warp in (True, False):
+        one = seed_operator(nodes, medium, stencils, warp=warp)
+        difference = abs(ops[warp] - one).max()
+        assert difference <= 1e-9 * abs(one).max()
+
+
+def test_the_seed_sweep_at_the_two_smallest_counts(tmp_path, capsys):
+    # E4.6 (#37), stiff note §4.5: H4, H7 and H8 at 900 and 1250 nodes; the
+    # documented sweep runs the same lines to 40,000.
+    argv = [
+        "--mode",
+        "seeds",
+        "--counts",
+        "900",
+        "1250",
+        "--deltas",
+        "0",
+        "0.04",
+        "0.005",
+        "--outputs",
+        str(tmp_path),
+    ]
+    tables = main(argv)
+    out = capsys.readouterr().out
+    assert "H8, the resolved-edge penalty" in out and "H4 at δ = 0" in out
+    assert (tmp_path / "heat2d_stiff_seeds.png").exists()
+    results = tables["sweep"]
+    for problem, lines in results.items():
+        # H4: at δ = 0 the seed rows are E2.3's, so the line is the
+        # construction's — port notes §2.4–2.5's, 1.598e-5 at 1250 nodes.
+        for r in lines[0.0]:
+            assert r["seeds/rms"] == pytest.approx(r["construction/rms"], rel=1e-7)
+        assert [r["seeds/rms"] for r in lines[0.0]] == pytest.approx(
+            [4.937e-5, 1.598e-5] if problem == "elliptic" else [5.329e-5, 1.764e-5],
+            rel=1e-3,
+        )
+        for delta, rows in lines.items():
+            for i, r in enumerate(rows):
+                # Flat in δ: the seeds are within a factor 2 of their δ = 0
+                # value at every width, where naive and construction move by
+                # orders (the comparators' own knee, E4.3).
+                assert 0.5 < r["seeds/rms"] / lines[0.0][i]["seeds/rms"] < 2.0
+                # H7: the warp is worth a factor, and never costs one.
+                assert r["seeds-plain/rms"] > 0.95 * r["seeds/rms"]
+                # The rule: every row at δ = 0.04 (20 δ covers the strip),
+                # the crossing rows at δ = 0, in between elsewhere.
+                if delta == 0.04:
+                    assert r["seeds/rows"] == r["n"]
+                else:
+                    assert 0 < r["seeds/rows"] < r["n"]
+    for problem in results:
+        # H8: every row seeded at δ = 0.04 and still ahead of the direct
+        # operator, which is the resolved edge's own method.
+        resolved = tables[f"resolved/{problem}"]
+        assert resolved and all(r["delta"] == 0.04 for r in resolved)
+        for r in resolved:
+            assert r["fraction"] == 1.0 and r["over/direct"] < 1.2
+            # The control with the seeds' own stencils: 30 / 4 on every row
+            # here, so it isolates the seed rows from the smaller stencil.
+            assert r["direct-reach/rms"] > 0.0
+        ratios = {(r["delta"], r["n"]): r for r in tables[f"ratios/{problem}"]}
+        # The rule needs no δ: the seeds beat the naive operator at every
+        # unresolved width and the construction at every resolved one.
+        for (delta, _), r in ratios.items():
+            assert r["over/construction"] <= 1.0 + 1e-6
+            if delta in (0.0, 0.005):
+                assert r["over/naive"] < 0.1
+        assert ratios[(0.0, 1250)]["fraction"] < 0.4
+
+    # Everything is cached: the second run builds nothing and agrees.
+    t0 = time.perf_counter()
+    again = main(argv)
+    assert time.perf_counter() - t0 < 15
+    assert again["sweep"] == results
+
+
+def test_the_seed_sweep_needs_its_own_line():
+    with pytest.raises(SystemExit):
+        main(["--mode", "seeds", "--operators", "naive", "construction"])
+
+
+def test_the_delta_zero_regression_run(tmp_path, capsys):
+    # The H4 regression the notes send E4.7 to (`--deltas 0`, no ablation):
+    # no positive width and no `seeds-plain` line, so the figure keeps only
+    # the panels with something in them and the run still finishes.
+    tables = main(
+        [
+            "--mode",
+            "seeds",
+            "--deltas",
+            "0",
+            "--operators",
+            "naive",
+            "construction",
+            "seeds",
+            "--counts",
+            "900",
+            "--outputs",
+            str(tmp_path),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "H4 at δ = 0" in out and "seed sweep" in out
+    assert (tmp_path / "heat2d_stiff_seeds.png").exists()
+    for lines in tables["sweep"].values():
+        (row,) = lines[0.0]
+        assert row["seeds/rms"] == pytest.approx(row["construction/rms"], rel=1e-7)
+        assert "seeds-plain/rms" not in row

@@ -71,6 +71,23 @@ the monomial and translated blocks' (H3). Last, ``seed_basis``'s cost over
 every crossing stencil per δ, with E2.3's for scale (#35's acceptance
 line). About 20 s.
 
+``--mode seeds`` (E4.6, #37; stiff note §3.7 H4, H7 and H8, §4.5 records) is
+the flat δ sweep: the seed operator against E4.3's two lines and the *direct*
+operator (the blind smooth stencil, the one to beat where the grid resolves
+the edge) at every (n, δ), elliptic and parabolic, against the same separable
+references. ``--operators`` picks the lines (E4.3's two are reread from
+``heat2d_stiff_knee.json``, not re-solved), ``--seed-reach`` the rule's reach,
+which rides in the cache label with the warp so that E4.3's entries survive.
+The tables: each line's RMS error per δ with its order per halving of h and
+its own fit; the seeds over every other line at each (δ, n) with the seeded
+rows, their share of N and the march per row; H8's penalty where ``h ≤ δ``
+(the seeds against the direct operator, no threshold anywhere in the rule);
+H7's warp as two lines of the sweep (``seeds-plain`` is the same march with
+plain Gaussians, built from the same ``seed_basis`` so the ablation costs
+weight solves and not marches); and H4's δ = 0 regression, where the seed
+rows *are* E2.3's and the line must be port notes §2.4–2.5's.
+Figure: ``heat2d_stiff_seeds.png``.
+
     uv run python scripts/heat2d_stiff.py              # 2.5 min cold, 21 s cached
     uv run python scripts/heat2d_stiff.py --mode naive \
         --counts 1250 2500 5000 10000 20000 40000 80000 160000   # 58 min once
@@ -78,6 +95,11 @@ line). About 20 s.
         --counts 1250 2500 5000 10000 20000 --spectrum-counts   # the scatter
     uv run python scripts/heat2d_stiff.py --mode references --deltas 0 0.001 0.0005
     uv run python scripts/heat2d_stiff.py --mode stencils       # 21 s
+    uv run python scripts/heat2d_stiff.py --mode seeds \
+        --counts 1250 2500 5000 10000 20000 40000               # 32 min once
+    uv run python scripts/heat2d_stiff.py --mode seeds --deltas 0 \
+        --operators naive construction seeds \
+        --counts 1250 2500 5000 10000 20000 40000 80000 160000  # H4 to the end
 """
 
 from __future__ import annotations
@@ -85,7 +107,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from math import comb
 from pathlib import Path
@@ -95,14 +117,17 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import scipy.sparse as sp  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from scipy.linalg import subspace_angles  # noqa: E402
 
 from heat_interfaces.fd_weights import fornberg_weights  # noqa: E402
+from heat_interfaces.heat1d.domain import TANH_REACH  # noqa: E402
 from heat_interfaces.heat1d.march import bd4_amplification  # noqa: E402
 from heat_interfaces.heat1d.stiff import seed_profiles as seed_profiles_1d  # noqa: E402
 from heat_interfaces.heat2d import (  # noqa: E402
     BOUNDARY,
+    GA_SHAPE,
     INTERFACE_KIND,
     PRODUCT_ORDERING,
     REFERENCE_MAX_WIDTH,
@@ -115,6 +140,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     Row,
     SeedBasis,
     SmoothBand,
+    Stencils,
     augmented_solve,
     block_condition,
     build_node_set,
@@ -123,6 +149,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     case1_exact,
     case1_reference,
     control_exact,
+    direct_operator,
     gaussian_derivative,
     interface_aware_operator,
     interface_crossings,
@@ -137,10 +164,12 @@ from heat_interfaces.heat2d import (  # noqa: E402
     rms_error,
     seed_basis,
     seed_profiles,
+    seeded_rows,
     solve_equilibrium,
     stencil_weights,
+    weights_of,
 )
-from heat_interfaces.plotting import CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
+from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
 
 STUDY_DELTAS = (0.0, 0.04, 0.01, 0.005, 0.0025)
 """The jump and E4.3's four edge widths (#34)."""
@@ -158,7 +187,8 @@ MIDLINE = 0.7
 """The band's midline, where a wide edge keeps α furthest from the plateau."""
 
 KNEE_COUNTS = (1250, 2500, 5000, 10000)
-"""The default counts; the documented sweep adds 20,000, 40,000 and 80,000."""
+"""The default counts of both sweeps; E4.3's documented run adds 20,000, 40,000
+and 80,000, E4.6's 20,000 and 40,000."""
 
 T_END = 0.1
 """Where E2.5 (and dissertation Fig. 5-5) reads the parabolic error."""
@@ -168,6 +198,38 @@ PROBLEMS = {"elliptic": 0.0, "parabolic": 1.0}
 
 OPERATORS = ("naive", "construction")
 """The two lines of the knee table; ``uniform`` is the α ≡ 1 run beside them."""
+
+SWEEP_LABELS = (
+    "naive",
+    "construction",
+    "direct",
+    "direct-reach",
+    "seeds",
+    "seeds-plain",
+)
+"""E4.6's six lines, in the order the tables print them: E4.3's two, the blind
+smooth operator H8 measures the seeds against, that operator on the *seeds' own*
+stencil groups (30 / 4 wherever the rule seeds, 42 / 5 elsewhere: the same
+matrix as the seeds with the marched rows taken out, which is what separates
+the seed rows from their smaller stencil), and the seeds with the warp on and
+off (H7). ``naive`` and ``construction`` are E4.3's cached entries, reread."""
+
+SEEDS_PLAIN = "#7fb3d5"
+"""The seeds' ablation: the same blue as the seeds, lighter (``plotting``'s key,
+and ``heat2d_stiff_eigenvalues.py``'s)."""
+
+DIRECT_REACH = "#bcbcbc"
+"""The direct operator on the seeds' stencils: the same grey, lighter."""
+
+STYLE = {
+    "naive": (NAIVE, "o"),
+    "construction": (CONSTRUCTION, "s"),
+    "direct": (REFERENCE, "d"),
+    "direct-reach": (DIRECT_REACH, "*"),
+    "seeds": (AWARE, "^"),
+    "seeds-plain": (SEEDS_PLAIN, "v"),
+}
+"""Colour and marker per line, E4.5's driver's."""
 
 QUANTITIES = ("rms", "max", "profile", "flux", "jump")
 """What ``edge_diagnostics`` returns, in the order the tables print it."""
@@ -410,6 +472,133 @@ def _solve(problem, op, nodes, ref, t_end, permc_spec=None) -> tuple[np.ndarray,
     return u, t_end
 
 
+def seed_label(warp: bool = True, reach: float = TANH_REACH) -> str:
+    """The cache label of one seed line: the warp, and the reach when it is not 20 δ.
+
+    Everything the seed rows depend on beyond (problem, δ, n, seed,
+    iterations) rides in the label, so that ``KNEE_CACHE_META`` — and with
+    it E4.3's naive and construction entries to 160,000 nodes — survives
+    (§3.8's cache trap, and §4.4's "a flag that moves the numbers and not
+    the key gives the earlier run's answer back in silence").
+    """
+    name = "seeds" if warp else "seeds-plain"
+    return name if reach == TANH_REACH else f"{name}-r{reach:g}"
+
+
+def seed_operators(
+    nodes: NodeSet,
+    medium: SmoothBand,
+    stencils: Stencils,
+    warps: Sequence[bool],
+    reach: float = TANH_REACH,
+    shape: float = GA_SHAPE,
+) -> tuple[dict[bool, sp.csr_array], int]:
+    """``({warp: L}, the seeded rows)``: ``seed_operator``'s loop, one march per row.
+
+    ``operators.seed_operator`` marches a row and solves for its weights; H7
+    wants the same rows with plain Gaussians, and the march — 2.4–8.3 ms a
+    row, everything the operator costs — does not depend on the warp. So the
+    ablation is built here from one ``seed_basis`` per row and one
+    ``weights_of`` per warp, which halves the sweep's marches. With a single
+    warp it is ``seed_operator`` exactly (a test pins that).
+    """
+    # Unlike ``seed_operator`` this takes no ``region_index`` shortcut for a
+    # material without interfaces: the sweep only ever passes a ``SmoothBand``.
+    ops = {w: direct_operator(nodes, medium, stencils, shape).tolil() for w in warps}
+    seeded = 0
+    for g in stencils.groups:
+        if g.kind != INTERFACE_KIND:
+            continue
+        seen = seeded_rows(nodes, medium, g.index, reach)
+        for row, idx in zip(g.rows[seen], g.index[seen], strict=True):
+            sb = seed_basis(nodes.xy[idx], medium, g.spec.degree)
+            seeded += 1
+            for warp, op in ops.items():
+                op[row, :] = 0.0
+                op[row, idx] = weights_of(sb, shape, warp)
+    return {w: op.tocsr() for w, op in ops.items()}, seeded
+
+
+def sweep_operators(
+    labels: Sequence[str],
+    nodes: NodeSet,
+    medium: SmoothBand,
+    groups: dict[str, Stencils],
+    reach: float = TANH_REACH,
+) -> dict[str, tuple[sp.csr_array, str | None, dict[str, float]]]:
+    """``{label: (L, SuperLU's ordering, the readings of the build)}``, built once.
+
+    One operator per (n, δ) for both problems: the elliptic solve and the
+    parabolic march see the same matrix, and at δ = 0.04 a 40,000-node seed
+    operator is three minutes of marches (§4.4), so building it per problem
+    would double the sweep. ``groups`` carries the plain and crossing
+    stencils of this node set; the reach group depends on δ and is built
+    here. The readings are the rows the method recomputes and the seconds
+    the build took, which the tables quote.
+    """
+    warps = [w for w in (True, False) if seed_label(w, reach) in labels]
+    built: dict[str, tuple[sp.csr_array, str | None, dict[str, float]]] = {}
+    seed_group: list[Stencils] = []
+
+    def stencils_of_the_rule() -> Stencils:
+        """The reach group of this δ, built once: what the seed operator wants."""
+        if not seed_group:
+            domain = replace(case1(), material=medium)
+            seed_group.append(
+                build_stencils(nodes, domain, interface=BOUNDARY, reach=reach)
+            )
+        return seed_group[0]
+
+    def seeded_count(stencils: Stencils) -> int:
+        return int(
+            sum(
+                seeded_rows(nodes, medium, g.index, reach).sum()
+                for g in stencils.groups
+                if g.kind == INTERFACE_KIND
+            )
+        )
+
+    for label in labels:
+        if label in {seed_label(w, reach) for w in (True, False)}:
+            continue
+        t0 = time.perf_counter()
+        rows, permc = 0, None
+        if label == "naive":
+            op = naive_operator(nodes, medium, groups["plain"])
+            permc = PRODUCT_ORDERING
+        elif label == "direct":
+            op = direct_operator(nodes, medium, groups["plain"])
+        elif label == "direct-reach":
+            stencils = stencils_of_the_rule()
+            op = direct_operator(nodes, medium, stencils)
+            rows = seeded_count(stencils)
+        elif label == "construction":
+            op = interface_aware_operator(nodes, medium, groups["crossing"])
+            rows = int(
+                sum(
+                    interface_crossings(nodes, medium, g.index).sum()
+                    for g in groups["crossing"].groups
+                    if g.kind == INTERFACE_KIND
+                )
+            )
+        else:
+            raise ValueError(f"unknown line {label!r}; one of {SWEEP_LABELS}")
+        built[label] = (op, permc, {"rows": rows, "seconds": time.perf_counter() - t0})
+    if warps:
+        t0 = time.perf_counter()
+        ops, seeded = seed_operators(
+            nodes, medium, stencils_of_the_rule(), warps, reach
+        )
+        seconds = (time.perf_counter() - t0) / len(warps)
+        for warp in warps:
+            built[seed_label(warp, reach)] = (
+                ops[warp],
+                None,
+                {"rows": seeded, "seconds": seconds},
+            )
+    return built
+
+
 def knee_sweep(
     counts: Sequence[int],
     deltas: Sequence[float],
@@ -418,17 +607,24 @@ def knee_sweep(
     iterations: int = 100,
     t_end: float = T_END,
     problems: Sequence[str] = tuple(PROBLEMS),
+    labels: Sequence[str] = OPERATORS,
+    reach: float = TANH_REACH,
+    save: Callable[[], None] | None = None,
 ) -> dict[str, dict[float, list[dict]]]:
-    """``results[problem][δ]``: one row per count, the two lines, floor and uniform.
+    """``results[problem][δ]``: one row per count, the ``labels``, floor and uniform.
 
     A row holds ``n``, ``h``, ``h_over_delta``, ``floor`` (the RMS of the δ and
     δ = 0 references' difference at the nodes), ``uniform`` (the naive α ≡ 1
-    run's RMS error against ``control_exact``) and, per operator in
-    ``OPERATORS``, the ``edge_diagnostics`` under ``"<operator>/<quantity>"``,
-    and, when δ = 0 is swept, ``naive/vs_jump``: the naive RMS error over the
-    jump's on the same node set.
-    What ``cache`` lacks is computed and added (the caller saves it); a
-    count whose every entry is cached builds no node set.
+    run's RMS error against ``control_exact``) and, per line in ``labels``,
+    the ``edge_diagnostics`` under ``"<label>/<quantity>"`` beside the
+    build's ``rows`` and ``seconds``, and, when δ = 0 is swept and the naive
+    line is on, ``naive/vs_jump``: the naive RMS error over the jump's on the
+    same node set.
+    What ``cache`` lacks is computed and added; a count whose every entry is
+    cached builds no node set, and an operator is built once per (n, δ) for
+    both problems. ``save`` is called after each count that computed
+    something, so that a sweep interrupted at 40,000 nodes keeps the hours
+    below it.
     """
     domain = case1()
     results: dict[str, dict[float, list[dict]]] = {
@@ -443,47 +639,57 @@ def knee_sweep(
             key(p, d, label)
             for p in problems
             for d in deltas
-            for label in ("floor", *OPERATORS)
+            for label in ("floor", *labels)
         ]
         if any(k not in cache for k in needed):
             t0 = time.perf_counter()
             nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
-            plain = build_stencils(nodes, domain)
-            crossing = build_stencils(nodes, domain, interface=BOUNDARY)
+            groups = {
+                "plain": build_stencils(nodes, domain),
+                "crossing": build_stencils(nodes, domain, interface=BOUNDARY),
+            }
             for problem in problems:
-                c = PROBLEMS[problem]
                 k = key(problem, None, "uniform")
                 if k not in cache:
-                    op = naive_operator(nodes, Constant2D(1.0), plain)
-                    ref = control_exact(c)
+                    op = naive_operator(nodes, Constant2D(1.0), groups["plain"])
+                    ref = control_exact(PROBLEMS[problem])
                     u, t = _solve(problem, op, nodes, ref, t_end, PRODUCT_ORDERING)
                     cache[k] = {"rms": rms_error(u, ref(nodes.x, nodes.y, t))}
-                base = case1_reference(0.0, c)
-                for delta in deltas:
-                    medium = SmoothBand(domain.material, delta)
-                    ref = case1_reference(delta, c)
-                    t = t_end if c else 0.0
+            for delta in deltas:
+                medium = SmoothBand(domain.material, delta)
+                refs = {p: case1_reference(delta, PROBLEMS[p]) for p in problems}
+                for problem in problems:
                     k = key(problem, delta, "floor")
                     if k not in cache:
+                        c = PROBLEMS[problem]
+                        t = t_end if c else 0.0
+                        base = case1_reference(0.0, c)
                         cache[k] = {
                             "h": nodes.h,
                             "floor": rms_error(
-                                base(nodes.x, nodes.y, t), ref(nodes.x, nodes.y, t)
+                                base(nodes.x, nodes.y, t),
+                                refs[problem](nodes.x, nodes.y, t),
                             ),
                         }
-                    for label in OPERATORS:
-                        k = key(problem, delta, label)
-                        if k in cache:
-                            continue
-                        if label == "naive":
-                            op = naive_operator(nodes, medium, plain)
-                            permc = PRODUCT_ORDERING
-                        else:
-                            op = interface_aware_operator(nodes, medium, crossing)
-                            permc = None
-                        u, t = _solve(problem, op, nodes, ref, t_end, permc)
-                        cache[k] = edge_diagnostics(nodes, medium, ref, u, t)
+                pending = {
+                    label: [p for p in problems if key(p, delta, label) not in cache]
+                    for label in labels
+                }
+                pending = {label: p for label, p in pending.items() if p}
+                if not pending:
+                    continue
+                built = sweep_operators(list(pending), nodes, medium, groups, reach)
+                for label, left in pending.items():
+                    op, permc, readings = built[label]
+                    for problem in left:
+                        u, t = _solve(problem, op, nodes, refs[problem], t_end, permc)
+                        cache[key(problem, delta, label)] = {
+                            **edge_diagnostics(nodes, medium, refs[problem], u, t),
+                            **readings,
+                        }
             print(f"  (n = {n}: {time.perf_counter() - t0:.1f} s)", flush=True)
+            if save is not None:
+                save()
         for problem in problems:
             uniform = cache[key(problem, None, "uniform")]["rms"]
             for delta in deltas:
@@ -495,10 +701,10 @@ def knee_sweep(
                     "floor": floor["floor"],
                     "uniform": uniform,
                 }
-                for label in OPERATORS:
+                for label in labels:
                     for q, value in cache[key(problem, delta, label)].items():
                         row[f"{label}/{q}"] = value
-                if 0.0 in deltas:
+                if 0.0 in deltas and "naive" in labels:
                     jump = cache[key(problem, 0.0, "naive")]["rms"]
                     row["naive/vs_jump"] = row["naive/rms"] / jump
                 results[problem][delta].append(row)
@@ -790,7 +996,13 @@ def run_naive(args) -> dict:
     t0 = time.perf_counter()
     cache = load_knee_cache(args.outputs)
     results = knee_sweep(
-        args.counts, args.deltas, cache, args.seed, args.iterations, args.t_end
+        args.counts,
+        args.deltas,
+        cache,
+        args.seed,
+        args.iterations,
+        args.t_end,
+        save=lambda: save_knee_cache(args.outputs, cache),
     )
     save_knee_cache(args.outputs, cache)
     tables: dict = {"knee": results}
@@ -1150,10 +1362,454 @@ def run_stencils(args) -> dict:
     return {"stencils": tables}
 
 
+# --- E4.6: the flat δ sweep ---------------------------------------------------------
+
+
+def _fit(rows: list[dict], name: str) -> float:
+    """The least-squares order of ``name`` against ``h`` over a line's counts.
+
+    The rate columns are per halving of h between neighbours; the fit is the
+    line's own slope, which is what §2 quotes ("fit 4.77") and what a
+    pre-asymptotic first count cannot hide.
+    """
+    usable = [r for r in rows if r.get(name, 0.0) > 0.0]
+    if len(usable) < 2:
+        return float("nan")
+    h = np.log([r["h"] for r in usable])
+    e = np.log([r[name] for r in usable])
+    return float(np.polyfit(h, e, 1)[0])
+
+
+def print_sweep(
+    results: dict[float, list[dict]], labels: Sequence[str], title: str
+) -> None:
+    """Per δ: every line's RMS error (order per halving of h), and the line's fit."""
+    print(f"\n{title}")
+    header = "     n       h |" + "".join(f" {label:<16} |" for label in labels)
+    for delta, rows in results.items():
+        name = "δ = 0 (jump)" if delta == 0.0 else f"δ = {delta:g}"
+        span = (
+            ""
+            if delta == 0.0
+            else f"   h/δ {rows[0]['h_over_delta']:.2f}"
+            f" … {rows[-1]['h_over_delta']:.2f}"
+        )
+        print(f"  {name}{span}")
+        print(f"  {header}")
+        columns = {label: _with_rates(rows, f"{label}/rms") for label in labels}
+        for i, row in enumerate(rows):
+            line = f"  {row['n']:6d}  {row['h']:.4f} |"
+            for label in labels:
+                line += f" {columns[label][i]:<16} |"
+            print(line)
+        line = "     fit          |"
+        for label in labels:
+            line += f" {_fit(rows, f'{label}/rms'):16.2f} |"
+        print(line)
+
+
+def sweep_ratios(
+    results: dict[float, list[dict]], labels: Sequence[str], seeds: str
+) -> list[dict]:
+    """Per (δ, n): the seeds' RMS over every other line's, and what the rows cost."""
+    rows = []
+    for delta, lines in results.items():
+        for r in lines:
+            row = {
+                "delta": delta,
+                "n": r["n"],
+                "h_over_delta": r["h_over_delta"],
+                "rows": r.get(f"{seeds}/rows", float("nan")),
+                "seconds": r.get(f"{seeds}/seconds", float("nan")),
+            }
+            row["fraction"] = row["rows"] / r["n"]
+            row["ms"] = 1e3 * row["seconds"] / max(row["rows"], 1)
+            for label in labels:
+                if label != seeds and f"{label}/rms" in r:
+                    row[f"over/{label}"] = r[f"{seeds}/rms"] / r[f"{label}/rms"]
+            rows.append(row)
+    return rows
+
+
+def print_ratios(rows: list[dict], labels: Sequence[str], title: str) -> None:
+    """The seeds against the comparators at every (δ, n), with the rows they cost."""
+    print(f"\n{title}")
+    header = "      δ       n    h/δ |"
+    for label in labels:
+        header += f" ÷ {label:<14} |"
+    print(header + "  seeded rows    of N   ms a row")
+    for r in rows:
+        ratio = "   jump" if r["delta"] == 0.0 else f"{r['h_over_delta']:7.2f}"
+        line = f"  {r['delta']:6.4f}  {r['n']:6d} {ratio} |"
+        for label in labels:
+            value = r.get(f"over/{label}")
+            line += "                 |" if value is None else f" {value:16.3g} |"
+        print(line + f"  {r['rows']:11.0f}  {r['fraction']:6.3f}  {r['ms']:9.1f}")
+
+
+def print_seed_diagnostics(
+    results: dict[float, list[dict]], seeds: str, title: str
+) -> None:
+    """The seeded solution on the straddling rows, E4.3's readings, naive beside.
+
+    E4.3 found the naive flux on the innermost pair a function of ``h/δ``
+    alone while the edge is unresolved (0.31–0.86 of it, never converging);
+    the seeds' column is where that plateau is supposed to be absent.
+    """
+    print(f"\n{title}")
+    print(
+        "      δ       n    h/δ |  seeds: RMS       max   profile      flux"
+        "      jump |  naive: flux      jump"
+    )
+    for delta, rows in results.items():
+        for r in rows:
+            ratio = "   jump" if delta == 0.0 else f"{r['h_over_delta']:7.2f}"
+            line = f"  {delta:6.4f}  {r['n']:6d} {ratio} |"
+            line += "".join(f"  {r[f'{seeds}/{q}']:8.2e}" for q in QUANTITIES)
+            if "naive/flux" in r:
+                line += f" |  {r['naive/flux']:10.2e}  {r['naive/jump']:8.2e}"
+            print(line)
+
+
+def print_resolved(rows: list[dict], seeds: str, title: str) -> None:
+    """H8: where the grid resolves the edge (h ≤ δ), the seeds against the two ends.
+
+    ``direct-reach`` is the control that matters: the same stencil groups as
+    the seed operator — 30 / 4 wherever the rule seeds, 42 / 5 elsewhere —
+    with the marched rows replaced by plain direct ones. The gap to
+    ``direct`` is the smaller stencil's (the bulk runs 42 / 5 at degree 5,
+    the seeded rows 30 / 4 at degree 4); the gap to ``direct-reach`` is the
+    seeds' own.
+    """
+    print(f"\n{title}")
+    control = "direct-reach/rms" in rows[0]
+    print(
+        "      δ       n    δ/h |  seeds     direct     same stencils      naive |"
+        "  ÷ direct  ÷ same stencils   ÷ naive |  seeded rows of N"
+    )
+    for r in rows:
+        same = r.get("direct-reach/rms", float("nan"))
+        ratio = r[f"{seeds}/rms"] / same if control else float("nan")
+        print(
+            f"  {r['delta']:6.4f}  {r['n']:6d} {1.0 / r['h_over_delta']:6.2f} |"
+            f" {r[f'{seeds}/rms']:9.2e} {r['direct/rms']:9.2e} {same:17.2e}"
+            f" {r['naive/rms']:10.2e} |"
+            f" {r['over/direct']:9.3f} {ratio:16.3f} {r['over/naive']:9.3f} |"
+            f" {r['fraction']:17.3f}"
+        )
+
+
+def resolved_rows(
+    results: dict[float, list[dict]], ratios: list[dict], seeds: str
+) -> list[dict]:
+    """The (δ, n) of ``results`` whose spacing resolves the edge: ``h ≤ δ``, δ > 0."""
+    by = {(r["delta"], r["n"]): r for r in ratios}
+    rows = []
+    for delta, lines in results.items():
+        for r in lines:
+            if delta == 0.0 or r["h_over_delta"] > 1.0:
+                continue
+            if "direct/rms" not in r or "naive/rms" not in r:
+                continue
+            rows.append({**r, "delta": delta, **by[(delta, r["n"])]})
+    return rows
+
+
+def print_warp(
+    results: dict[float, list[dict]], seeds: str, plain: str, title: str
+) -> None:
+    """H7 as two lines of the sweep: the plain rows' RMS over the warped rows'."""
+    print(f"\n{title}")
+    counts = [r["n"] for r in next(iter(results.values()))]
+    print("      δ |" + "".join(f" {n:>10d} |" for n in counts))
+    for delta, rows in results.items():
+        line = f"  {delta:6.4f} |"
+        for r in rows:
+            line += f" {r[f'{plain}/rms'] / r[f'{seeds}/rms']:10.2f} |"
+        print(line)
+
+
+def print_regression(results: dict[float, list[dict]], seeds: str, title: str) -> None:
+    """H4's δ = 0 half: the seed line against the construction's, which is E2.4's."""
+    rows = results[0.0]
+    print(f"\n{title}")
+    print("     n       h |  seeds          construction   |  relative distance")
+    for r in rows:
+        built = r["construction/rms"]
+        distance = abs(r[f"{seeds}/rms"] - built) / built
+        print(
+            f"  {r['n']:6d}  {r['h']:.4f} |  {r[f'{seeds}/rms']:.4e}  "
+            f"{r['construction/rms']:.4e}  |  {distance:17.2e}"
+        )
+    print(
+        f"     fit          |  {_fit(rows, f'{seeds}/rms'):12.2f}  "
+        f"{_fit(rows, 'construction/rms'):12.2f}  |"
+    )
+
+
+def _marker(delta: float, positive: Sequence[float]) -> str:
+    """One marker per δ > 0, in the sweep's order; the jump line carries none."""
+    return "" if delta == 0.0 else MARKERS[list(positive).index(delta) % len(MARKERS)]
+
+
+def _counts_axis(ax, n: np.ndarray) -> None:
+    """The counts themselves as the x ticks (``plot_knee``'s: the decades collide)."""
+    ax.set_xticks(n, [f"{int(k)}" for k in n], fontsize=7, rotation=45)
+    ax.set_xticks([], minor=True)
+
+
+def _style(label: str) -> tuple[str, str]:
+    """``STYLE``'s colour and marker for a line, its ``--seed-reach`` suffix aside."""
+    if label.startswith("seeds-plain"):
+        return STYLE["seeds-plain"]
+    return STYLE["seeds"] if label.startswith("seeds") else STYLE[label]
+
+
+def plot_seeds(
+    results: dict[str, dict[float, list[dict]]],
+    labels: Sequence[str],
+    seeds: str,
+    plain: str,
+    path: Path,
+) -> None:
+    """Top: the lines at three widths; bottom: the seeds, the rule, and the warp.
+
+    Blue is the seeds (light blue the plain-Gaussian ablation), orange naive,
+    purple the δ = 0 construction, grey the direct operator. The top row is
+    the elliptic error against N at the narrowest, a middle and the widest δ,
+    the bottom row the seeds' own lines at every δ (elliptic solid, parabolic
+    dashed, with an ``h⁴`` guide), the seeds over the naive and direct lines
+    against ``h/δ`` (the rule: no threshold, and the resolved-edge penalty),
+    and the warp's factor against N.
+    """
+    elliptic = results["elliptic"]
+    positive = [d for d in elliptic if d > 0]
+    widths = sorted(positive)
+    shown = (
+        list(dict.fromkeys([widths[0], widths[len(widths) // 2], widths[-1]]))
+        if widths
+        else []
+    )
+    fig = plt.figure(figsize=(11.0, 8.0))
+    axes = fig.subplots(2, 3)
+    for ax in axes[0][len(shown) :]:
+        ax.set_visible(False)
+    for ax, delta in zip(axes[0], shown, strict=False):
+        rows = elliptic[delta]
+        n = np.array([r["n"] for r in rows], dtype=float)
+        for label in labels:
+            colour, marker = _style(label)
+            ax.loglog(
+                n,
+                [r[f"{label}/rms"] for r in rows],
+                color=colour,
+                marker=marker,
+                ms=5,
+                lw=0.9,
+                label=label,
+            )
+        ax.loglog(n, [r["floor"] for r in rows], ":", color=CONSTRUCTION, lw=0.8)
+        _counts_axis(ax, n)
+        ax.set_title(f"equilibrium, δ = {delta:g} (marker per line)", fontsize=10)
+        ax.set_xlabel("nodes N")
+        ax.grid(True, which="both", alpha=0.25)
+    axes[0][0].set_ylabel("RMS error in u")
+    ax = axes[1][0]
+    for delta in elliptic:
+        marker = _marker(delta, positive)
+        for problem, style in (("elliptic", "-"), ("parabolic", "--")):
+            rows = results[problem][delta]
+            ax.loglog(
+                [r["n"] for r in rows],
+                [r[f"{seeds}/rms"] for r in rows],
+                style,
+                color=AWARE,
+                marker=marker,
+                ms=4,
+                lw=0.9 if marker else 0.7,
+            )
+    rows = elliptic[0.0 if 0.0 in elliptic else positive[0]]
+    n = np.array([r["n"] for r in rows], dtype=float)
+    guide = rows[0][f"{seeds}/rms"] * (n / n[0]) ** -2.0
+    ax.loglog(n, guide, color=REFERENCE, lw=0.7, ls="-.")
+    _counts_axis(ax, n)
+    ax.set_title("the seeds at every δ (marker per δ; dashed: parabolic)", fontsize=9)
+    ax.set_xlabel("nodes N")
+    ax.set_ylabel("RMS error in u")
+    ax.grid(True, which="both", alpha=0.25)
+    ax = axes[1][1]
+    for delta in positive:
+        rows = elliptic[delta]
+        marker = _marker(delta, positive)
+        for label, colour in (("naive", NAIVE), ("direct", REFERENCE)):
+            if f"{label}/rms" not in rows[0]:
+                continue
+            ax.loglog(
+                [r["h_over_delta"] for r in rows],
+                [r[f"{seeds}/rms"] / r[f"{label}/rms"] for r in rows],
+                color=colour,
+                marker=marker,
+                ms=4,
+                lw=0.8,
+            )
+    ax.axhline(1.0, color="k", lw=0.6)
+    ax.axvline(1.0, color=REFERENCE, lw=0.6, ls="--")
+    ax.set_title("seeds ÷ naive (orange) and ÷ direct (grey)", fontsize=9)
+    ax.set_xlabel("h / δ")
+    ax.grid(True, which="both", alpha=0.25)
+    ax.set_visible(bool(positive))
+    ax = axes[1][2]
+    drawn = False
+    for delta in elliptic:
+        rows = elliptic[delta]
+        if f"{plain}/rms" not in rows[0]:
+            continue
+        ax.semilogx(
+            [r["n"] for r in rows],
+            [r[f"{plain}/rms"] / r[f"{seeds}/rms"] for r in rows],
+            color=SEEDS_PLAIN,
+            marker=_marker(delta, positive),
+            ms=4,
+            lw=0.9,
+        )
+        drawn = True
+    # The counts come off whichever δ was swept: the δ = 0 regression run
+    # (``--deltas 0 --operators … seeds``) has no positive width and no
+    # ablation, and its figure keeps the panels that have something in them.
+    _counts_axis(ax, np.array([r["n"] for r in next(iter(elliptic.values()))]))
+    ax.axhline(1.0, color="k", lw=0.6)
+    ax.set_title("the warp: plain ÷ warped seed rows", fontsize=9)
+    ax.set_xlabel("nodes N")
+    ax.grid(True, which="both", alpha=0.25)
+    ax.set_visible(drawn)
+    handles = [
+        Line2D(
+            [],
+            [],
+            color=_style(label)[0],
+            marker=_style(label)[1],
+            ms=5,
+            label=label,
+        )
+        for label in labels
+    ]
+    handles += [
+        Line2D([], [], color=CONSTRUCTION, ls=":", label="floor: ref. δ − ref. 0"),
+        Line2D([], [], color=REFERENCE, ls="-.", lw=0.7, label="h⁴ guide"),
+    ]
+    for delta in elliptic:
+        name = "δ = 0 (jump, thin)" if delta == 0.0 else f"δ = {delta:g}"
+        handles.append(
+            Line2D(
+                [],
+                [],
+                color="k",
+                marker=_marker(delta, positive),
+                ls="",
+                ms=5,
+                label=name,
+            )
+        )
+    fig.legend(handles=handles, loc="lower center", ncol=6, fontsize=8)
+    fig.tight_layout(rect=(0, 0.075, 1, 1))
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def run_seeds(args) -> dict:
+    """E4.6's tables and figure: the seeds against E4.3's lines at every (n, δ)."""
+    t0 = time.perf_counter()
+    reach = args.seed_reach
+    labels = [
+        seed_label(label == "seeds", reach) if label.startswith("seeds") else label
+        for label in args.operators
+    ]
+    seeds, plain = seed_label(True, reach), seed_label(False, reach)
+    if seeds not in labels:
+        raise ValueError(f"the sweep needs the {seeds!r} line; got {labels}")
+    cache = load_knee_cache(args.outputs)
+    results = knee_sweep(
+        args.counts,
+        args.deltas,
+        cache,
+        args.seed,
+        args.iterations,
+        args.t_end,
+        labels=labels,
+        reach=reach,
+        save=lambda: save_knee_cache(args.outputs, cache),
+    )
+    save_knee_cache(args.outputs, cache)
+    tables: dict = {"sweep": results}
+    for problem, lines in results.items():
+        what = (
+            "equilibrium"
+            if problem == "elliptic"
+            else f"parabolic, BD4 dt = h from the analytic history, t = {args.t_end:g}"
+        )
+        print_sweep(
+            lines,
+            labels,
+            f"the seeds against E4.3's lines through case 1's tanh edges, {what}:"
+            " RMS error (order per halving of h) against the separable reference,"
+            f" seed rows where the 30 nodes see the edge within {reach:g} δ",
+        )
+        ratios = sweep_ratios(lines, labels, seeds)
+        tables[f"ratios/{problem}"] = ratios
+        print_ratios(
+            ratios,
+            [label for label in labels if label != seeds],
+            f"the seeds over each line at every (δ, n), {what}; the seeded rows,"
+            " their share of N, and the march per row",
+        )
+        print_seed_diagnostics(
+            lines,
+            seeds,
+            f"what the seeded solution says on the straddling rows, {what}:"
+            " profile = |error of the row's sin 2πx coefficient| at ±h/2"
+            " (absolute); flux, jump = one-sided α ∂_y at ±h/2 and its jump"
+            " across the pair, error / |α v′ at the curve|",
+        )
+        resolved = resolved_rows(lines, ratios, seeds)
+        tables[f"resolved/{problem}"] = resolved
+        if resolved:
+            print_resolved(
+                resolved,
+                seeds,
+                f"H8, the resolved-edge penalty, {what}: where h ≤ δ the seed rows"
+                " tend to the standard ones, and the direct operator is the one"
+                " to beat",
+            )
+        if plain in labels:
+            print_warp(
+                lines,
+                seeds,
+                plain,
+                f"H7, the warp as two lines of the sweep, {what}: the plain-Gaussian"
+                " rows' RMS error over the warped rows'",
+            )
+        if 0.0 in lines and "construction/rms" in lines[0.0][0]:
+            print_regression(
+                lines,
+                seeds,
+                f"H4 at δ = 0, {what}: the seed operator is the construction there"
+                " (E2.3's rows), so the line is port notes §2.4–2.5's",
+            )
+    args.outputs.mkdir(parents=True, exist_ok=True)
+    plot_seeds(results, labels, seeds, plain, args.outputs / "heat2d_stiff_seeds.png")
+    print(
+        f"\nseed sweep {time.perf_counter() - t0:.1f} s; figure and {KNEE_CACHE}"
+        f" in {args.outputs}/"
+    )
+    return tables
+
+
 def main(argv: Sequence[str] | None = None) -> dict:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
-        "--mode", choices=("all", "references", "naive", "stencils"), default="all"
+        "--mode",
+        choices=("all", "references", "naive", "stencils", "seeds"),
+        default="all",
     )
     parser.add_argument("--deltas", type=float, nargs="+", default=list(STUDY_DELTAS))
     parser.add_argument("--growth", type=float, nargs="+", default=list(GROWTH))
@@ -1169,15 +1825,30 @@ def main(argv: Sequence[str] | None = None) -> dict:
         help="counts of the growing-mode check (none skips it)",
     )
     parser.add_argument("--stencil-n", type=int, default=STENCIL_N)
+    parser.add_argument(
+        "--operators",
+        nargs="+",
+        choices=SWEEP_LABELS,
+        default=list(SWEEP_LABELS),
+        help="the lines of the seed sweep; naive and construction are E4.3's cache",
+    )
+    parser.add_argument(
+        "--seed-reach",
+        type=float,
+        default=TANH_REACH,
+        help="how many δ a stencil sees the edge over (the seeded-row rule, §3.3)",
+    )
     parser.add_argument("--outputs", type=Path, default=Path("outputs"))
     args = parser.parse_args(argv)
-    if args.mode in ("all", "naive"):
+    if args.mode in ("all", "naive", "seeds"):
         if any(n < 300 for n in args.counts) or list(args.counts) != sorted(
             set(args.counts)
         ):
             parser.error("give increasing counts of 300 nodes or more")
         if 0.0 not in args.deltas:
             parser.error("the knee study needs δ = 0 (the jump line and the floors)")
+    if args.mode == "seeds" and "seeds" not in args.operators:
+        parser.error("the seed sweep needs the seeds line")
     args.outputs.mkdir(parents=True, exist_ok=True)
     tables: dict = {}
     if args.mode in ("all", "references"):
@@ -1187,6 +1858,8 @@ def main(argv: Sequence[str] | None = None) -> dict:
         tables.update(run_naive(args))
     if args.mode in ("all", "stencils"):
         tables.update(run_stencils(args))
+    if args.mode == "seeds":
+        tables.update(run_seeds(args))
     return tables
 
 

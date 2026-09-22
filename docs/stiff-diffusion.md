@@ -9,8 +9,9 @@ source of truth. §1 is the formulation (E3.1, #26); §2 holds the 1-D
 results (E3.2, #27, to E3.6, #31, which closes it in §2.5); §3 is the
 2-D design (E4.1, #32) and §4–5 hold the 2-D results, from the smooth
 flat band and its references (E4.2, #33, §4.1), the naive baseline
-through it (E4.3, #34, §4.2) and the scalar seeds on one stencil (E4.4,
-#35, §4.3) to E4.10 (#41). The port
+through it (E4.3, #34, §4.2), the scalar seeds on one stencil (E4.4,
+#35, §4.3) and in the matrix (E4.5, #36, §4.4) to the flat δ sweep
+(E4.6, #37, §4.5) and on to E4.10 (#41). The port
 of the 2016 methods this builds on is in
 `docs/port-notes.md`.
 
@@ -3336,3 +3337,323 @@ group, the operator against `interface_aware_operator` at δ = 0, the rows it
 replaces, and the dispatch. `tests/test_heat2d_stiff_eigenvalues.py` runs
 the driver at 1250 and 900 nodes and pins the δ = 0 identity, the ordering
 of the errors, the absence of breakdowns and the plain block's loop.
+
+### 4.5 The flat δ sweep: the seeds against the baselines (E4.6, #37)
+
+![the flat sweep](figures/heat2d_stiff_seeds.png)
+
+`scripts/heat2d_stiff.py --mode seeds` puts the seed operator on §4.2's
+sweep: the same node sets (case 1, seed 0, 100 repulsion steps), the same
+media `SmoothBand(case1().material, δ)` at δ ∈ {0, 0.04, 0.01, 0.005,
+0.0025}, the same references `case1_reference(δ, c)`, the same two problems
+(the equilibrium; E2.5's `e^t` mode by BD4 at `dt = h` from the analytic
+history to `t = 0.1`) and the same norm — the RMS over all nodes, Dirichlet
+rows included, orders per halving of `h = 1/round(0.95 √N)` (port notes
+§2.10). Six lines run at every (n, δ):
+
+| line | what it is |
+| --- | --- |
+| `naive` | `Dx A Dx + Dy A Dy` on 42 / 5 stencils with α at the nodes (§4.2) |
+| `construction` | `interface_aware_operator`, the edge read as a jump at its centre (§4.2) |
+| `direct` | `α ∇² + ∇α · ∇` on 42 / 5 stencils: the blind smooth operator, the method one reaches for once the grid resolves the edge |
+| `direct-reach` | the same operator on the *seeds' own* stencil groups (30 / 4 wherever the rule seeds, 42 / 5 elsewhere): the seed matrix with the marched rows taken out |
+| `seeds` | `seed_operator` (§4.4), warped, on the rows whose 30 nodes see an edge within 20 δ |
+| `seeds-plain` | the same rows with plain Gaussians (H7's ablation) |
+
+E4.3's `naive` and `construction` entries are reread from
+`outputs/heat2d_stiff_knee.json`, never re-solved. Times (2026-09-22): the
+default counts 1250–10,000 cost 5.7 min cold and under a second cached; the
+documented sweep `--counts 1250 2500 5000 10000 20000 40000` 28 min once, 16
+of them at 40,000, plus 1.4 min for the `direct-reach` line, which needs no
+marches; the δ = 0 column to 160,000 (`--deltas 0 --operators naive
+construction seeds`) a further 3 min.
+
+**Five decisions, none of them re-derivable from the tables.**
+
+- *The seed options ride in the cache label* — `seeds`, `seeds-plain`, and a
+  `-r<reach>` suffix when `--seed-reach` is not 20 δ — so `KNEE_CACHE_META`
+  is untouched and E4.3's 58 minutes to 160,000 nodes stand. §3.8's trap
+  asks for a key on δ, n, seed, mode, warp and reach: the first three and
+  the node set's repulsion `iterations` are `knee_key`'s, the rest are the
+  label's.
+- *One operator per (n, δ), for both problems.* The marches are the whole
+  cost (167 s at 40,000 nodes and δ = 0.04), so the sweep builds the matrix
+  once and both solves it and marches BD4 on it; E4.3's loop, which was
+  problem-first, would have paid twice.
+- *Both warps come off one march.* `seed_operators` calls `seed_basis` once
+  a row and `weights_of` once a warp, so H7's second line costs the weight
+  solves and not a second sweep; a test pins each of the two against
+  `seed_operator` with that warp.
+- *`direct-reach` is the control H8 needs.* The seeded rows are 30 / 4 and
+  the bulk is 42 / 5 (§3.8, decision 6), so a bare seeds-against-`direct`
+  ratio mixes the seeds with a stencil one degree smaller. `direct-reach`
+  has the seed operator's groups exactly, with plain direct rows where the
+  seeds are marched.
+- *The cache is written after every count*, so a sweep interrupted at 40,000
+  keeps the hours below it.
+
+**H4's δ = 0 half: the seed line is the construction's, to 160,000 nodes.**
+RMS error, and the distance between the two lines:
+
+| n | h | seeds (elliptic) | construction | distance | seeds (parabolic) | construction | distance |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1250 | 0.0294 | 1.5976e-05 | 1.5976e-05 | 1.7e-09 | 1.7639e-05 | 1.7639e-05 | 6.0e-11 |
+| 2500 | 0.0208 | 3.7950e-06 | 3.7950e-06 | 2.0e-10 | 3.9879e-06 | 3.9879e-06 | 1.6e-10 |
+| 5000 | 0.0149 | 6.1079e-07 | 6.1079e-07 | 2.1e-07 | 6.0071e-07 | 6.0071e-07 | 5.3e-10 |
+| 10000 | 0.0105 | 1.4528e-07 | 1.4528e-07 | 7.2e-08 | 1.5381e-07 | 1.5381e-07 | 2.4e-09 |
+| 20000 | 0.0075 | 1.9233e-08 | 1.9233e-08 | 1.4e-05 | 2.1255e-08 | 2.1255e-08 | 7.1e-10 |
+| 40000 | 0.0053 | 5.2757e-09 | 5.2757e-09 | 4.0e-06 | 5.5084e-09 | 5.5084e-09 | 1.6e-07 |
+| 80000 | 0.0037 | 1.1466e-09 | 1.1453e-09 | 1.1e-03 | 1.2242e-09 | 1.2242e-09 | 8.1e-09 |
+| 160000 | 0.0026 | 3.5830e-10 | 3.5753e-10 | 2.1e-03 | 4.1786e-10 | 4.1786e-10 | 5.9e-06 |
+| fit | | **4.54** | 4.54 | | **4.52** | 4.52 | |
+
+port notes §2.4–2.5's warped line is 1.598e-5 → 5.276e-9 over 1250–40,000
+with fit 4.77, and E4.3 added 1.145e-9 and 3.58e-10 at 80,000 and 160,000:
+the seed operator reproduces every one of them. (The fit over the eight
+counts is 4.54; over the six the earlier sections quote, 4.77.) The distance
+is the solve's, not the rows': §4.4 measured the two matrices 5.3e-13 apart
+and here the two *errors* differ by 7.7e-13 in absolute terms at 160,000,
+where the error itself is 3.6e-10 — the elliptic solve at that size
+amplifies the last digits, the parabolic march does not. **H4's δ = 0 half,
+ticked, and with it the regression check the E4.1 breadcrumb asked for
+first.**
+
+**H4's δ > 0 half: one line at every width, fourth order, δ-independent.**
+RMS error (order per halving of h), the fit over the six counts beneath:
+
+| n | h | δ = 0 (jump) | δ = 0.04 | δ = 0.01 | δ = 0.005 | δ = 0.0025 |
+| --- | --- | --- | --- | --- | --- | --- |
+| *equilibrium* | | | | | | |
+| 1250 | 0.0294 | 1.60e-05 | 1.37e-05 | 1.40e-05 | 1.44e-05 | 1.40e-05 |
+| 2500 | 0.0208 | 3.79e-06 (4.17) | 2.91e-06 (4.51) | 3.13e-06 (4.35) | 3.16e-06 (4.41) | 3.14e-06 (4.34) |
+| 5000 | 0.0149 | 6.11e-07 (5.48) | 6.85e-07 (4.33) | 7.95e-07 (4.11) | 4.91e-07 (5.58) | 5.06e-07 (5.47) |
+| 10000 | 0.0105 | 1.45e-07 (4.11) | 1.67e-07 (4.04) | 1.63e-07 (4.54) | 1.52e-07 (3.35) | 1.26e-07 (3.99) |
+| 20000 | 0.0075 | 1.92e-08 (5.88) | 4.18e-08 (4.03) | 3.82e-08 (4.22) | 4.58e-08 (3.49) | 1.99e-08 (5.36) |
+| 40000 | 0.0053 | 5.28e-09 (3.70) | 8.78e-09 (4.47) | 8.42e-09 (4.33) | 8.82e-09 (4.72) | 7.99e-09 (2.61) |
+| fit | | 4.77 | 4.23 | 4.31 | 4.23 | 4.48 |
+| *parabolic, t = 0.1* | | | | | | |
+| 1250 | 0.0294 | 1.76e-05 | 1.55e-05 | 1.58e-05 | 1.63e-05 | 1.57e-05 |
+| 2500 | 0.0208 | 3.99e-06 (4.31) | 3.21e-06 (4.58) | 3.35e-06 (4.49) | 3.34e-06 (4.60) | 3.33e-06 (4.49) |
+| 5000 | 0.0149 | 6.01e-07 (5.68) | 7.87e-07 (4.21) | 9.17e-07 (3.88) | 5.44e-07 (5.44) | 5.22e-07 (5.55) |
+| 10000 | 0.0105 | 1.54e-07 (3.90) | 1.90e-07 (4.07) | 1.90e-07 (4.51) | 1.75e-07 (3.25) | 1.32e-07 (3.95) |
+| 20000 | 0.0075 | 2.13e-08 (5.75) | 4.77e-08 (4.02) | 4.43e-08 (4.23) | 5.37e-08 (3.44) | 2.25e-08 (5.14) |
+| 40000 | 0.0053 | 5.51e-09 (3.87) | 1.01e-08 (4.46) | 9.80e-09 (4.32) | 1.03e-08 (4.74) | 9.37e-09 (2.51) |
+| fit | | 4.77 | 4.22 | 4.28 | 4.18 | 4.44 |
+
+- *One line.* Across the five widths the seeds span 1.17× at 1250 nodes
+  (1.37e-5 … 1.60e-5) and 1.66× at 40,000 (5.28e-9 … 8.78e-9), with the
+  jump the *lowest* of the five at the fine end and the widest edge the
+  highest — the opposite of every other method here, and the same picture
+  §2.3 drew in 1-D ("one line for every δ", 0.3 %, 1.5 %, 5 % there, a
+  little looser on scattered nodes).
+- *Fourth order, δ-independent constant*: fits 4.77, 4.23, 4.31, 4.23, 4.48
+  (elliptic) and 4.77, 4.22, 4.28, 4.18, 4.44 (parabolic). The per-halving
+  rates wander between 2.6 and 5.9 — the node sets are independent draws, so
+  a single pair of counts is not a rate — and the fit is what the line says.
+- *The two problems coincide*: parabolic over elliptic is 1.04–1.17 at
+  40,000 and 1.10–1.13 at 1250, so BD4 at `dt = h` adds nothing to the
+  operator's error, exactly as port notes §2.5's lines do, and a knee in
+  either is the operator's.
+- *The elliptic line is a real test* (plan §3.2, the E4.1 breadcrumb item
+  2): in 1-D the seeds are exact at equilibrium at any δ (§2.5 statement 4),
+  and here they are not — `sin 2πx v(y)` is outside the 1-D seed span, the
+  error is 1.6e-5 → 5.3e-9 and fourth order. The 2-D equilibrium therefore
+  ranks the methods, which is what E4.6 was for. **H4, ticked in both
+  halves.**
+
+**Every line's fit, per δ** (elliptic above, parabolic below; the naive
+line's 1250-node parabolic row carries E4.3's coarse-set growing mode, so
+its fit from 2500 up is in brackets):
+
+| δ | naive | construction | direct | direct-reach | seeds | seeds-plain |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 1.50 / 1.84 [1.61] | 4.77 / 4.77 | −0.01 / 0.01 | −0.01 / 0.01 | **4.77 / 4.77** | 4.09 / 4.07 |
+| 0.04 | 5.18 / 5.17 [5.10] | −0.88 / −0.88 | 4.24 / 4.27 | 3.85 / 3.83 | **4.23 / 4.22** | 4.71 / 4.71 |
+| 0.01 | 3.99 / 4.29 [4.23] | −0.18 / −0.17 | 3.31 / 3.31 | 3.58 / 3.60 | **4.31 / 4.28** | 5.21 / 5.24 |
+| 0.005 | 2.97 / 3.22 [3.11] | 0.08 / 0.08 | 2.55 / 2.57 | 2.77 / 2.78 | **4.23 / 4.18** | 5.88 / 5.91 |
+| 0.0025 | 2.22 / 2.63 [2.58] | 0.01 / 0.01 | 1.87 / 1.86 | 2.09 / 2.09 | **4.48 / 4.44** | 4.43 / 4.34 |
+
+The seeds are the only line whose order does not move with δ. The naive
+line walks H10's knee from 1.5 at the jump to 5.2 at δ = 0.04 (the 42 / 5
+stencils' own order, E4.3's fifth); the construction is flat at the small
+widths and *negative* at δ = 0.04, where its rebuilt rows enforce a kink the
+solution does not have (§2.5 statement 1's 2-D twin, and the reason it needs
+δ to be switched off); the blind direct operator is first to second order
+while the edge is unresolved and fourth once it is.
+
+**At 40,000 nodes** (`h = 0.0053`), every line, equilibrium:
+
+| δ | h/δ | naive | construction | direct | direct-reach | seeds | seeds-plain |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | jump | 3.44e-04 | 5.28e-09 | 3.63e-02 | 3.63e-02 | **5.28e-09** | 3.64e-08 |
+| 0.04 | 0.13 | 8.22e-09 | 1.90e-02 | 8.43e-08 | 1.02e-07 | **8.78e-09** | 4.88e-09 |
+| 0.01 | 0.53 | 2.45e-06 | 3.69e-03 | 1.48e-05 | 7.65e-06 | **8.42e-09** | 3.40e-09 |
+| 0.005 | 1.05 | 2.89e-05 | 1.07e-03 | 4.96e-04 | 4.02e-04 | **8.82e-09** | 3.89e-09 |
+| 0.0025 | 2.11 | 8.36e-05 | 6.18e-04 | 1.14e-03 | 6.47e-04 | **7.99e-09** | 1.03e-08 |
+
+Four orders below the naive product at δ = 0.0025, five below the
+construction, and level with the naive product only at δ = 0.04, where the
+grid resolves the edge seven times over.
+
+**H8, the resolved-edge penalty.** Where `h ≤ δ` the seed rows are supposed
+to tend to the standard ones and cost at most 1.2× the direct operator's
+error. At δ = 0.04 every row is seeded (`20 δ = 0.8` covers the strip), so
+this is the whole matrix marched:
+
+| δ | n | δ/h | seeds | direct | direct-reach | naive | ÷ direct | ÷ direct-reach | ÷ naive |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.04 | 1250 | 1.36 | 1.37e-05 | 1.05e-04 | 7.00e-05 | 6.66e-05 | 0.130 | 0.196 | 0.206 |
+| 0.04 | 2500 | 1.92 | 2.91e-06 | 2.65e-05 | 2.55e-05 | 7.20e-06 | 0.110 | 0.114 | 0.404 |
+| 0.04 | 5000 | 2.68 | 6.85e-07 | 3.41e-06 | 3.05e-06 | 2.77e-06 | 0.201 | 0.224 | 0.248 |
+| 0.04 | 10000 | 3.80 | 1.67e-07 | 7.73e-07 | 1.24e-06 | 4.22e-07 | 0.216 | 0.135 | 0.396 |
+| 0.04 | 20000 | 5.36 | 4.18e-08 | 2.57e-07 | 3.60e-07 | 4.27e-08 | 0.163 | 0.116 | 0.981 |
+| 0.04 | 40000 | 7.60 | 8.78e-09 | 8.43e-08 | 1.02e-07 | 8.22e-09 | 0.104 | 0.086 | **1.068** |
+
+- *There is no penalty against either direct operator*: the seeds are
+  0.10–0.22 of the blind operator's error and 0.086–0.22 of the
+  same-stencil control's at every count, so H8's ≤ 1.2× is met with a 5–10×
+  margin and the sign is the other way round. Marching a row whose edge the
+  grid resolves is not a waste: the seed row carries the profile of α
+  through the stencil, where the direct row carries α and ∇α at the anchor
+  and pays `h^k α^{(k)}` for the rest.
+- *The one line that catches them is the naive product*, and only at the
+  finest counts: 0.21 at 1250, 0.98 at 20,000, 1.07 at 40,000 (1.15 on the
+  parabolic problem). That is the stencil, not the seeds — `naive` runs
+  42 / 5 and fits 5.18 here against the seed rows' 30 / 4 and 4.23 — and it
+  costs at most 15 % at δ/h = 7.6. The parabolic column of the same table:
+  0.223, 0.414, 0.340, 0.437, 1.109, 1.145.
+- The other resolved column in the sweep, δ = 0.01 at 20,000 and 40,000
+  (δ/h 1.34 and 1.90, 62 % of the rows seeded), has the seeds at 4e-4 and
+  6e-4 of `direct` and 0.004 and 0.003 of `naive`: at a width the grid only
+  just resolves, the seeds are two and a half orders below the naive product
+  and three below the direct operator. **H8, ticked, with the
+  caveat that "≤ 1.2×" should be read against the 42 / 5 naive product and
+  not against the direct operator, which the seeds beat everywhere.**
+
+**The rule, restated for diffusion.** *Seed every row whose 30 nodes see an
+edge within 20 δ; there is no δ threshold and no crossover to manage.* The
+evidence is the ratio table at every (δ, n): the seeds are at or below the
+construction's error everywhere (equal at δ = 0, where they are its rows),
+and below the naive product's everywhere except δ = 0.04 at 20,000 and
+40,000, where they are 0.98 and 1.07 of it. The contrast is exactly 1-D's
+(§2.5 statements 1–2): the construction has to know δ — at δ = 0.04 its
+error *grows* with n, 4.70e-3 → 1.90e-2 — and the naive operator has to know
+nothing but is three to five orders behind until `h ≲ δ`, while the seeds
+need neither a threshold nor an estimate of δ beyond the one the medium
+already carries.
+
+**H7, the warp, as two lines of the sweep.** The plain-Gaussian rows' RMS
+error over the warped rows' (above 1: the warp wins):
+
+| δ | 1250 | 2500 | 5000 | 10000 | 20000 | 40000 |
+| --- | --- | --- | --- | --- | --- | --- |
+| *equilibrium* | | | | | | |
+| 0 | 2.32 | 2.77 | 3.76 | 3.56 | 6.93 | 6.90 |
+| 0.04 | 1.18 | 1.02 | 0.61 | 0.51 | 0.56 | 0.56 |
+| 0.01 | 2.20 | 1.01 | 0.55 | 0.48 | 0.49 | 0.40 |
+| 0.005 | 4.26 | 4.44 | 4.45 | 1.30 | 0.39 | 0.44 |
+| 0.0025 | 1.69 | 3.17 | 7.94 | 7.47 | 6.41 | 1.28 |
+| *parabolic, t = 0.1* | | | | | | |
+| 0 | 2.81 | 3.09 | 4.96 | 4.43 | 8.12 | 8.66 |
+| 0.04 | 1.17 | 1.00 | 0.60 | 0.49 | 0.55 | 0.54 |
+| 0.01 | 2.36 | 1.02 | 0.53 | 0.46 | 0.47 | 0.38 |
+| 0.005 | 4.48 | 4.69 | 4.63 | 1.27 | 0.38 | 0.41 |
+| 0.0025 | 1.59 | 3.09 | 8.43 | 8.16 | 6.61 | 1.32 |
+
+- *At δ = 0 the warp is worth E2.4's factor and it grows with n*: 2.3× at
+  1250 to 6.9× at 40,000 (2.8× to 8.7× parabolic), against E2.4's 2.3–6.9×
+  on the jump at 1250–20,000. The seeds pay for the warp exactly as the
+  translated basis does, which is H7's claim.
+- *At δ > 0 the factor turns with `h/δ`, and turns in a different place for
+  the widest edge.* The warp wins while the edge is unresolved — 1.7–7.9× at
+  δ = 0.0025 down to h/δ = 3, 4.3–4.5× at δ = 0.005 down to h/δ = 3, 2.2× at
+  δ = 0.01 at h/δ = 2.9 — and loses by up to 2.6× once the grid resolves it.
+  The crossing is at `h ≈ 2δ` for δ = 0.0025, 0.005 and 0.01 but at
+  `h ≈ δ/2` for δ = 0.04, where α varies over the whole stencil and not over
+  part of it, so the factor is not a function of `h/δ` alone. Read the sign
+  of these numbers rather than their size: they wander by 2–4× between
+  neighbouring counts (1.69, 3.17, 7.94 at δ = 0.0025), which is the node
+  sets' own scatter. E4.5's two-count preview ("1.4–2.0× better at δ ≥ h at
+  10,000 nodes") was the resolved side of the same turn.
+- *The seeds stay warped.* Where the warp loses, both rows are already at
+  1e-8 and the loss is at most 2.6×; where it wins, the problem is the one
+  the study is about, and at δ = 0 the plain rows bring back port notes
+  §2.5's complex loop in the spectrum (E4.5's H6: `h² max |Im|` 1.51
+  against 0.18). The ablation stays in the driver as a line of the sweep,
+  which is what E4.5 asked for.
+
+**What the seeded solution says on the straddling rows.** E4.3's readings on
+the innermost pair, the naive operator's beside (flux and jump relative to
+the reference's `α v′` at the curve):
+
+| δ | n | h/δ | seeds: flux | jump | profile | naive: flux | jump |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 1250 | jump | 3.03e-04 | 2.82e-04 | 1.41e-05 | 8.53e-01 | 8.78e-01 |
+| 0 | 40000 | jump | 1.49e-07 | 1.34e-07 | 1.15e-08 | 3.45e-01 | 5.54e-01 |
+| 0.0025 | 1250 | 11.76 | 2.34e-04 | 2.16e-04 | 7.54e-06 | 8.58e-01 | 8.64e-01 |
+| 0.0025 | 40000 | 2.11 | 3.48e-07 | 4.20e-07 | 3.27e-08 | 9.11e-02 | 5.72e-02 |
+| 0.005 | 40000 | 1.05 | 3.66e-07 | 4.32e-07 | 3.59e-08 | 4.33e-02 | 5.01e-02 |
+| 0.01 | 40000 | 0.53 | 2.53e-07 | 1.26e-07 | 3.29e-08 | 2.53e-03 | 3.04e-03 |
+| 0.04 | 40000 | 0.13 | 9.22e-08 | 3.95e-08 | 3.27e-08 | 3.77e-06 | 2.70e-06 |
+
+The plateau E4.3 found — the naive flux a function of `h/δ` alone, 0.31–0.86
+of the flux while `h ≥ 4δ`, never converging — is absent from every seed
+column: the flux error falls 2000× from 1250 to 40,000 nodes at δ = 0
+(order 4.4) and 670× at δ = 0.0025, and the flux *jump* across the pair,
+which the naive rows never get right, converges with it. This is the
+diagnostic E4.3 named as the sharpest separator of a resolved edge from an
+unresolved one, and the seeds do not see the difference.
+
+**What the rule costs.** Seeded rows, their share of N, the march per row
+and the operator's build (one march per row, both warps):
+
+| δ | 1250 | 2500 | 5000 | 10000 | 20000 | 40000 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 408 (33 %) | 576 (23 %) | 792 (16 %) | 1134 (11 %) | 1601 (8 %) | 2278 (6 %) |
+| 0.0025 | 566 (45 %) | 1036 (41 %) | 1821 (36 %) | 3050 (31 %) | 5578 (28 %) | 10166 (25 %) |
+| 0.005 | 716 (57 %) | 1237 (49 %) | 2367 (47 %) | 4540 (45 %) | 8808 (44 %) | 17090 (43 %) |
+| 0.01 | 839 (67 %) | 1627 (65 %) | 3192 (64 %) | 6300 (63 %) | 12444 (62 %) | 24595 (62 %) |
+| 0.04 | 1250 (100 %) | 2500 (100 %) | 5000 (100 %) | 10000 (100 %) | 20000 (100 %) | 40000 (100 %) |
+
+1.3–4.4 ms a row (the jump march is the cheap one; the cost per row grows
+slowly with n and hardly at all with δ), so the 40,000-node operators take
+7.3 s at δ = 0, 45 s at δ = 0.0025, 73 s at 0.005, 104 s at 0.01 and 167 s
+at δ = 0.04 — against 2.6 s for the naive product and 7.8 s for the
+construction on the same node set, whose own build is 2.8 s. At fixed
+δ > 0 the seeded share settles at a constant fraction of N (the strip within
+20 δ of a curve), so the operator is `O(N)` marches; only the jump's share
+falls, with its `O(√N)` crossing rows. The sweep's 28 minutes are almost
+entirely the δ = 0.04 and δ = 0.01 columns at 20,000 and 40,000.
+
+**What E4.7 (#38) inherits.**
+
+- *The flat numbers to compare the curved ones against, at equal δ*: the
+  seeds' table above (H9's "route (a) reproduces the flat numbers at
+  δ ≥ 0.005 for n ≥ 5000" is read against 4.91e-7, 1.52e-7, 4.58e-8 and
+  8.82e-9 at δ = 0.005, and the fits 4.23 / 4.18).
+- *The driver's shape*: `--mode seeds` with `--operators` and
+  `--seed-reach`; a curved run adds `--amplitude` and the product-grid
+  reference, and everything else — the cache label, the one-operator-per-
+  (n, δ) loop, the tables — carries over. The `direct-reach` control is
+  worth keeping on the curved sweep: on case 2 the seeds carry a tangential
+  α term the direct rows do not, and the stencil-degree difference is the
+  same.
+- *The δ = 0 regression is the first thing to run after any change to the
+  marcher* (`--deltas 0 --operators construction seeds`, 3 min to 160,000):
+  it is the one column with an independent answer, and §4.4's 5e-13 rows
+  turn into 2e-3 in the elliptic error at 160,000, so read the distance
+  against the error's own size and not as a relative tolerance.
+- *The warp's crossover at `h ≈ 2δ`* is a flat-geometry measurement. On a
+  curved feature the warp also carries the foot-point geometry, so H9's
+  ablation should be run again rather than inherited.
+- Resampling at δ > 0 (`interpolation_weights` with the seed block) is still
+  unbuilt, and E4.7's references need it (§4.4's last item).
+
+Tests: `tests/test_heat2d_stiff.py` adds the label rule, `seed_operators`
+against `seed_operator` at both warps on a 900-node set, and the sweep at
+900 and 1250 nodes with three widths — H4's δ = 0 identity (the seed line is
+the construction's to 1e-7 relative and port notes' 4.937e-5 / 1.598e-5),
+the δ-independence (every width within a factor 2 of the jump's error), the
+rule's row counts (every row at δ = 0.04, the crossing rows at δ = 0), H8's
+penalty (`÷ direct` below 1.2 with every row seeded), H7's sign, and the
+cache's round trip.
