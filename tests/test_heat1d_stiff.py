@@ -1,5 +1,5 @@
 """The E3 driver: E3.2's references, built, checked, cached, reused; E3.3's knee;
-E3.4's seed line, weights and spectra."""
+E3.4's seed line, weights and spectra; E3.5's comparator table."""
 
 import json
 import sys
@@ -13,10 +13,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from heat1d_stiff import (  # noqa: E402
     CHECK_MAX_WIDTH,
     CHECK_N_CHEB,
+    COMPARATORS,
     KNEE_CACHE,
     KNEE_CACHE_META,
     MAX_WIDTH,
     N_CHEB,
+    OPERATORS,
+    TREATMENTS,
+    WIDENINGS,
     check_references,
     elliptic_sweep,
     floor_constants,
@@ -29,6 +33,7 @@ from heat1d_stiff import (  # noqa: E402
     save_knee_cache,
     seed_spectra,
     weights_vs_jump,
+    widened_floors,
 )
 
 
@@ -41,26 +46,32 @@ def test_main_builds_checks_and_then_reuses_the_references(tmp_path, capsys):
     ]
     main(argv)
     out = capsys.readouterr().out
-    assert "within the 1e-10" in out and out.count("solved") == 2 + 4
+    # Two references, four knee rows, four comparator rows.
+    assert "within the 1e-10" in out and out.count("solved") == 2 + 4 + 4
     for delta in (0.0, 0.0025):
         for n, w in ((N_CHEB, MAX_WIDTH), (CHECK_N_CHEB, CHECK_MAX_WIDTH)):
             stem = reference_path(tmp_path, "matlab", delta, n, w)
             for suffix in (".npz", ".json"):
                 assert (tmp_path / (stem.name + suffix)).exists(), stem.name + suffix
     assert (tmp_path / "heat1d_stiff_knee.png").exists()
+    assert (tmp_path / "heat1d_stiff_treatments.png").exists()
     cache = json.loads((tmp_path / KNEE_CACHE).read_text())
     assert cache["meta"] == KNEE_CACHE_META
     errors = cache["errors"]
-    assert len(errors) == 2 * 2 * 3 and all(0 < v < 1 for v in errors.values())
+    # Two δ, two counts, the three knee lines and the six treatments (the
+    # naive and seed columns of the comparators share the knee's keys).
+    labels = set(OPERATORS) | set(TREATMENTS)
+    assert len(errors) == 2 * 2 * len(labels)
+    assert all(0 < v < 1 for v in errors.values())
     main(argv)
     out = capsys.readouterr().out
-    assert out.count("cached") == 2 + 4 and "solved" not in out
+    assert out.count("cached") == 2 + 4 + 4 and "solved" not in out
     # A cache from another problem is ignored and the knee runs are redone.
     cache["meta"]["t_end"] = 3.0
     (tmp_path / KNEE_CACHE).write_text(json.dumps(cache))
     main(argv)
     out = capsys.readouterr().out
-    assert out.count("cached") == 2 and out.count("solved") == 4
+    assert out.count("cached") == 2 and out.count("solved") == 4 + 4
     assert json.loads((tmp_path / KNEE_CACHE).read_text())["meta"] == KNEE_CACHE_META
 
 
@@ -230,3 +241,71 @@ def test_seed_spectra_are_stable_where_the_construction_is_not():
     for r in rows:
         assert r["max_real"] < -2 and r["imag"] == 0.0 and r["bd4"] < 1
         assert r["extreme"] == pytest.approx(-16 / 3, rel=0.01)
+
+
+# --- E3.5 (#30) --------------------------------------------------------------
+
+
+def test_the_comparator_table_has_every_treatment_at_every_delta(tmp_path):
+    # P10 on the MATLAB medium at a coarse reference: T1-FV second order with
+    # a δ-independent constant, the seeds fourth order, and the ranking
+    # seeds < T1-FV < T1 (two cells) < naive < T0 (m = 1) < T0 (m = 2) at
+    # δ = 0 and wherever the naive operator is not in its dip at h ≈ 2δ
+    # (§2.2), i.e. at h ≥ 4δ; T0 with m = 1 is the naive operator once h ≤ δ.
+    grids = knee_grids("matlab", [50, 100, 200])
+    cache = {}
+    tables = {}
+    for delta in (0.0, 0.01):
+        rows = parabolic_sweep(
+            "matlab", delta, grids, tmp_path, cache, (16, 0.25), COMPARATORS
+        )
+        assert all(set(COMPARATORS) <= set(r) for r in rows)
+        tables[delta] = rows
+    assert len(cache) == 2 * 3 * len(COMPARATORS)
+    for delta, rows in tables.items():
+        fv = _rates([r["T1-FV"] for r in rows])
+        assert np.all(np.abs(fv - 2) < 0.05), (delta, fv)
+        for r in rows:
+            assert r["seeds"] < r["T1-FV"] < r["T1 harmonic 2c"]
+            if delta == 0.0 or r["h"] >= 4 * delta:
+                assert r["T1 harmonic 2c"] < r["naive"] < r["T0 widened m=1"]
+            if delta == 0.0 or r["h"] >= 2 * delta:
+                assert r["T0 widened m=1"] < r["T0 widened m=2"]
+    np.testing.assert_allclose(
+        [r["T1-FV"] for r in tables[0.01]], [r["T1-FV"] for r in tables[0.0]], rtol=0.02
+    )
+    # With the edge mid-cell the one-cell means change nothing at δ = 0.
+    for r in tables[0.0]:
+        assert r["T1 harmonic 1c"] == pytest.approx(r["naive"], rel=1e-10)
+        assert r["T2 arithmetic 1c"] == pytest.approx(r["naive"], rel=1e-10)
+    # The elliptic table: T1-FV and the seeds exact, the rest not.
+    rows = elliptic_sweep("matlab", 0.01, grids, COMPARATORS)
+    for r in rows:
+        assert r["T1-FV"] < 1e-12 and r["seeds"] < 1e-12
+        assert min(r[t] for t in TREATMENTS if t != "T1-FV") > 1e-5
+
+
+def test_the_widened_edge_sits_on_its_own_floor_until_the_edge_is_resolved():
+    # T0's floor ‖u_{max(δ, m h)} − u_δ‖/‖u_δ‖ is about 0.7 (m h − δ) on the
+    # MATLAB medium (§2.2's 0.73–0.75 δ, drifting to 0.66 by a width of 0.08
+    # as the widened tails reach the boundary), and T0's error is that floor
+    # to 1 % while the naive operator resolves the widened edge (m = 2,
+    # h = width / 2); with m = 1 the operator sits at its own knee, at or
+    # above the floor, and is the naive operator itself once h ≤ δ.
+    delta = 0.01
+    grids = knee_grids("matlab", [50, 100, 200, 400])
+    floors = widened_floors("matlab", delta, grids)
+    errors = elliptic_sweep("matlab", delta, grids, COMPARATORS)
+    assert WIDENINGS == (1, 2)
+    for f, e in zip(floors, errors, strict=True):
+        for m in WIDENINGS:
+            width = max(delta, m * f["h"])
+            if width > delta:
+                assert 0.65 < f[m] / (width - delta) < 0.76, (f["n"], m)
+            else:
+                assert f[m] < 1e-13
+        assert e["T0 widened m=2"] == pytest.approx(f[2], rel=1e-2)
+        if f["h"] > delta:
+            assert e["T0 widened m=1"] >= 0.99 * f[1]
+        else:
+            assert e["T0 widened m=1"] == pytest.approx(e["naive"], rel=0.02)
