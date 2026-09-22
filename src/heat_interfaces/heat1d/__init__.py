@@ -8,8 +8,9 @@ solve); ``solve``: Dirichlet rows and the sparse solve; ``exact``: the
 quadrature reference ``u = A + B ∫ dξ/alpha`` and the piecewise Chebyshev
 reference for the parabolic problems, cached as ``ParabolicReference``;
 ``march``: BD4 and RK4 with time-dependent Dirichlet ends and the BD4
-stability region. ``SmoothEdges`` (E3.2) is the stiff-edge medium; seeds
-(E3.4) and treatments (E3.5) follow.
+stability region. ``SmoothEdges`` (E3.2) is the stiff-edge medium; ``stiff``
+(E3.4) marches the seeds through it and builds the seed operator, with
+``build_operator`` dispatching by name; treatments (E3.5) follow.
 """
 
 from .domain import (
@@ -82,13 +83,30 @@ from .operators import (
     straddling_windows,
 )
 from .solve import dirichlet_system, normalized_l2, rms_error, solve_equilibrium
+from .stiff import (
+    EDGE_STOP,
+    OPERATOR_MODES,
+    SEED_ATOL,
+    SEED_RTOL,
+    build_operator,
+    edge_width,
+    seed_basis,
+    seed_operator,
+    seed_profiles,
+    seed_weights,
+    seeded_windows,
+)
 
 __all__ = [
     "DISSERTATION_BC",
     "EDGE_CUTS",
+    "EDGE_STOP",
+    "OPERATOR_MODES",
     "PLACEMENT_TOL",
     "RADAU_ATOL",
     "RADAU_RTOL",
+    "SEED_ATOL",
+    "SEED_RTOL",
     "TANH_REACH",
     "ChebyshevPieces",
     "Constant",
@@ -105,6 +123,7 @@ __all__ = [
     "bd4_amplification",
     "bd4_march",
     "bd4_stability_boundary",
+    "build_operator",
     "chebyshev_equilibrium",
     "chebyshev_lobatto",
     "chebyshev_parabolic",
@@ -121,6 +140,7 @@ __all__ = [
     "dxx_matrix",
     "eabe_alpha",
     "edge_resistance_deficit",
+    "edge_width",
     "equilibrium_exact",
     "equilibrium_flux",
     "equispaced_grid",
@@ -140,6 +160,11 @@ __all__ = [
     "rk4_dt_limit",
     "rk4_march",
     "rms_error",
+    "seed_basis",
+    "seed_operator",
+    "seed_profiles",
+    "seed_weights",
+    "seeded_windows",
     "shift_matrix",
     "smooth_step",
     "solve_equilibrium",

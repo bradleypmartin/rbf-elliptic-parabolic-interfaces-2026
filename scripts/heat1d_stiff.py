@@ -1,4 +1,4 @@
-"""E3 (#5): the 1-D stiff-edge study. E3.2: the references; E3.3: the naive knee.
+"""E3 (#5): the 1-D stiff-edge study. E3.2: references; E3.3: the knee; E3.4: seeds.
 
 The media are ``SmoothEdges(matlab_alpha(), δ)``, the ``1/9 | 1`` jump at 0
 with a tanh edge of width δ, and the same for eq. 75's layer; the parabolic
@@ -25,11 +25,18 @@ at the nodes); the constant of that floor against its closed form
 (``edge_resistance_deficit``); and the δ = 0 rows' residual on the true-δ
 equilibrium at fixed h as δ/h shrinks. Figure: ``heat1d_stiff_knee.png``.
 The parabolic errors are cached in ``heat1d_stiff_knee.json`` so a sweep
-extended with ``--counts`` reruns only the new counts. The seeds (E3.4), the
-treatments (E3.5) and the manuscript figures (E3.6) are added by their
-tickets.
+extended with ``--counts`` reruns only the new counts.
 
-    uv run python scripts/heat1d_stiff.py     # 45 s cold, 4 s with everything cached
+E3.4 (#29; stiff note §1.9's P4–P9, §2.3 records) puts the seed operator
+(``seed_operator``, ``heat1d/stiff.py``) on the same sweep as a third line and
+adds: the seed weights against E1.2's as δ/h shrinks (P4) with the stencil
+solve's condition number at each δ/h (P5), the seed rows' residual on the
+true-δ equilibrium next to the δ = 0 rows' (P6), and the seed operator's
+interior spectrum at the study's counts and at the coarse eq. 75 counts the
+δ = 0 construction cannot run (P9). The treatments (E3.5) and the manuscript
+figures (E3.6) are added by their tickets.
+
+    uv run python scripts/heat1d_stiff.py     # 1 min cold, 4 s with everything cached
     uv run python scripts/heat1d_stiff.py --counts 50 100 200 400 800 1600 3200 6400
                                               # the two extra counts: + 3 min, once
     uv run python scripts/heat1d_stiff.py --deltas 0 0.0025 --media matlab
@@ -54,14 +61,17 @@ from heat_interfaces.heat1d import (  # noqa: E402
     RADAU_ATOL,
     RADAU_RTOL,
     Grid1D,
+    Jump,
     ParabolicReference,
     SmoothEdges,
+    bd4_amplification,
     bd4_march,
     chebyshev_equilibrium,
     dissertation_alpha,
     edge_resistance_deficit,
     equilibrium_exact,
     grid_for,
+    interior_operator,
     inverse_alpha_integral,
     jump_aware_operator,
     matlab_alpha,
@@ -69,11 +79,16 @@ from heat_interfaces.heat1d import (  # noqa: E402
     normalized_l2,
     parabolic_reference,
     ramp_boundary,
+    seed_basis,
+    seed_operator,
+    seed_weights,
+    seeded_windows,
     solve_equilibrium,
+    stencil_weights,
     straddling_windows,
 )
 from heat_interfaces.heat1d.domain import X_MAX, X_MIN  # noqa: E402
-from heat_interfaces.plotting import AWARE, NAIVE, REFERENCE  # noqa: E402
+from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
 
 STUDY_DELTAS = (0.0, 0.04, 0.01, 0.0025)
 """The edge widths of the study (E3.3, #28): the jump, and three sub-grid ones."""
@@ -137,14 +152,25 @@ notes §1.5 plot); the full matrix keeps two one-sided end rows in place of
 the boundary condition and its spectrum says nothing about the march.
 """
 
-OPERATORS = {"naive": naive_operator, "δ = 0 construction": jump_aware_operator}
-"""The two lines of the knee study.
+OPERATORS = {
+    "naive": naive_operator,
+    "δ = 0 construction": jump_aware_operator,
+    "seeds": seed_operator,
+}
+"""The three lines of the knee study.
 
 ``jump_aware_operator`` on a ``SmoothEdges`` medium is §1.7's δ = 0
 construction: E1.2's rows across the edge centre with the pieces' Taylor
 data, as if the edge were a jump, and the direct rows on the smooth alpha
-everywhere else.
+everywhere else. ``seed_operator`` (E3.4) marches the seeds through the true
+edge on every row within ``TANH_REACH`` δ of a centre.
 """
+
+COLOURS = {"naive": NAIVE, "δ = 0 construction": CONSTRUCTION, "seeds": AWARE}
+"""Orange, purple, blue (``plotting``); the floors are dotted in the construction's."""
+
+SPECTRUM_COUNTS = {"matlab": (50, 100, 400), "eq75": (49, 53, 101, 401)}
+"""Node counts of the spectrum check (P9); eq. 75's go below ``MIN_COUNT``."""
 
 RESIDUAL_RATIOS = (1.0, 0.5, 0.1, 0.01, 0.001)
 """δ/h at which the δ = 0 rows are tested at fixed h (§1.4's list for the weights)."""
@@ -415,7 +441,10 @@ def row_residuals(
     the rows are off at first order in δ/h, the residual twin of §1.4's
     weight comparison, which needs no seeds. ``naive`` is ``h · max |L_h
     u_δ|`` over the naive operator's interior rows, the O(1) scale of a row
-    that misses the slope jump outright.
+    that misses the slope jump outright. ``seeds`` (E3.4) is ``h² max |L_h
+    u_δ|`` over the seed operator's seeded rows on the true-δ equilibrium
+    itself: rounding on constant pieces (P6), the sinusoid's own truncation
+    on eq. 75, next to ``on_jump``.
     """
     (g,) = knee_grids(name, [n])
     u0 = equilibrium_exact(study_medium(name, 0.0), *BC, g.x)
@@ -429,6 +458,8 @@ def row_residuals(
         residual = float(np.max(np.abs((aware @ (u - u0))[straddle])))
         on_jump = float(np.max(np.abs((aware @ u0)[straddle])))
         naive = float(np.max(np.abs((naive_operator(g, medium) @ u)[2:-2])))
+        seeded = [i for i, _, _ in seeded_windows(g, medium)]
+        seeds = float(np.max(np.abs((seed_operator(g, medium) @ u)[seeded])))
         rows.append(
             {
                 "n": g.n,
@@ -439,8 +470,101 @@ def row_residuals(
                 "scaled": residual * g.h**2 / delta,
                 "on_jump": on_jump * g.h**2,
                 "naive": naive * g.h,
+                "seeds": seeds * g.h**2,
             }
         )
+    return rows
+
+
+def study_window(name: str, n: int) -> tuple[Grid1D, np.ndarray, float, list[Jump]]:
+    """The grid, the five nodes and the centre of P4's stencil, and E1.2's jumps.
+
+    The window across the first edge centre: for the MATLAB medium (mid-cell)
+    the row whose node is half a cell left of the centre, §1.4's layout; for
+    eq. 75 (on nodes) the row on the centre itself, whose seeds carry the
+    owner's ``alpha_e`` (§1.5).
+    """
+    (g,) = knee_grids(name, [n])
+    jump = MEDIA[name]()
+    x = g.snapped(jump.interfaces)
+    i = int(np.searchsorted(x, jump.interfaces[0], side="right")) - 1
+    jumps = [
+        Jump(xi, jump.taylor(k, "left", 4), jump.taylor(k, "right", 4))
+        for k, xi in enumerate(jump.interfaces)
+    ]
+    return g, x[i - 2 : i + 3], float(x[i]), jumps
+
+
+def weights_vs_jump(
+    name: str, n: int, ratios: Sequence[float] = (0.0, *RESIDUAL_RATIOS)
+) -> list[dict]:
+    """P4 and P5: the seed weights against E1.2's, and ``cond A``, per δ/h.
+
+    ``difference`` is ``max |w_seed − w_jump| / max |w_jump|`` on the window
+    of ``study_window``; first order in δ/h on constant pieces (§1.4's
+    84 % … 0.11 %), and on eq. 75 saturating at the O(h alpha'/alpha) floor at
+    which E1.2's degree-4-truncated smooth-piece operator and the exact chain
+    part company. ``cond`` is the stencil solve's condition number in the
+    stencil coordinate (23.5 at constant alpha for the centred window) and
+    ``cond_scaled`` the same with every row of A scaled to unit max norm: the
+    seeds carry a normalisation ``alpha_e^{⌈k/2⌉}`` (§1.2) that the weights
+    never see, and on a centre node alpha_e is the owner's value at δ = 0
+    and the blend's at δ > 0.
+    """
+    g, nodes, centre, jumps = study_window(name, n)
+    jump = MEDIA[name]()
+    seen = [k for k, xi in enumerate(jump.interfaces) if nodes[0] < xi < nodes[-1]]
+    w_jump = stencil_weights([jumps[k] for k in seen], nodes, centre)
+    rows = []
+    for ratio in ratios:
+        medium = SmoothEdges(jump, ratio * g.h)
+        w = seed_weights(nodes, centre, medium)
+        a, _ = seed_basis(nodes, centre, medium)
+        rows.append(
+            {
+                "n": g.n,
+                "h": g.h,
+                "ratio": ratio,
+                "difference": float(
+                    np.max(np.abs(w - w_jump)) / np.max(np.abs(w_jump))
+                ),
+                "cond": float(np.linalg.cond(a)),
+                "cond_scaled": float(
+                    np.linalg.cond(a / np.max(np.abs(a), axis=1, keepdims=True))
+                ),
+            }
+        )
+    return rows
+
+
+def seed_spectra(
+    name: str, counts: Sequence[int], deltas: Sequence[float]
+) -> list[dict]:
+    """P9: the seed operator's interior spectrum per count and δ.
+
+    ``max_real`` and the largest ``|Im λ| / |λ|``, the extreme ``min Re λ · h²``
+    (−16/3 for FD4's second derivative in the α = 1 material), and BD4's
+    largest amplification at ``dt = h``. The grids keep the medium's
+    placement but not ``MIN_COUNT``, so eq. 75's 49 and 53 nodes are
+    included: the counts at which the δ = 0 construction is unstable.
+    """
+    interfaces = MEDIA[name]().interfaces
+    rows = []
+    for n in counts:
+        g = grid_for(interfaces, PLACEMENT[name], n)
+        for delta in deltas:
+            op = seed_operator(g, study_medium(name, delta))
+            lam = np.linalg.eigvals(interior_operator(op).toarray())
+            rows.append(
+                {
+                    "n": g.n,
+                    "delta": delta,
+                    "max_real": float(np.max(lam.real)),
+                    "imag": float(np.max(np.abs(lam.imag)) / np.max(np.abs(lam))),
+                    "extreme": float(np.min(lam.real) * g.h**2),
+                    "bd4": float(np.max(bd4_amplification(g.h * lam))),
+                }
+            )
     return rows
 
 
@@ -494,16 +618,49 @@ def print_residuals(name: str, rows: list[dict]) -> None:
         f"\nδ = 0 rows on the true-δ equilibrium, {name}, {r0['n']} nodes"
         f" (h = {r0['h']:.4g}), δ = (δ/h) h: max |L_h (u_δ − u₀)| on the straddling"
         f" rows, and h² of it over δ (→ constant: first order in δ/h);"
-        f" h² |L_h u₀| there (rounding on constants); the naive rows' h |L_h u_δ|"
+        f" h² |L_h u₀| there (rounding on constants); the naive rows' h |L_h u_δ|;"
+        f" the seed rows' h² |L_h u_δ| (rounding on constants)"
     )
     print(
         f"    {'δ/h':>8s}{'residual':>12s}{'h² res / δ':>13s}{'h² |L_h u₀|':>14s}"
-        f"{'naive h |L_h u_δ|':>19s}"
+        f"{'naive h |L_h u_δ|':>19s}{'seeds h² |L_h u_δ|':>20s}"
     )
     for r in rows:
         print(
             f"    {r['ratio']:8g}{r['residual']:12.3e}{r['scaled']:13.4f}"
-            f"{r['on_jump']:14.2e}{r['naive']:19.3e}"
+            f"{r['on_jump']:14.2e}{r['naive']:19.3e}{r['seeds']:20.2e}"
+        )
+
+
+def print_weights(name: str, rows: list[dict]) -> None:
+    r0 = rows[0]
+    print(
+        f"\nseed weights against E1.2's, {name}, {r0['n']} nodes (h = {r0['h']:.4g}),"
+        f" the window across the first edge: max |w_seed − w_jump| / max |w_jump|,"
+        f" and cond A of the stencil solve in the stencil coordinate"
+    )
+    print(f"    {'δ/h':>8s}{'difference':>12s}{'cond A':>9s}{'rows scaled':>13s}")
+    for r in rows:
+        print(
+            f"    {r['ratio']:8g}{r['difference']:12.2e}{r['cond']:9.1f}"
+            f"{r['cond_scaled']:13.1f}"
+        )
+
+
+def print_spectra(name: str, rows: list[dict]) -> None:
+    print(
+        f"\nseed operator's interior spectrum, {name}: largest real part, largest"
+        f" |Im λ| / max |λ|, min Re λ · h² (FD4's −16/3 in the α = 1 material),"
+        f" BD4's largest amplification at dt = h"
+    )
+    print(
+        f"    {'n':>6s}{'δ':>8s}{'max Re λ':>11s}{'|Im|/|λ|':>10s}"
+        f"{'min Re λ h²':>13s}{'BD4':>8s}"
+    )
+    for r in rows:
+        print(
+            f"    {r['n']:6d}{r['delta']:8g}{r['max_real']:11.3g}{r['imag']:10.1e}"
+            f"{r['extreme']:13.4f}{r['bd4']:8.4f}"
         )
 
 
@@ -514,10 +671,10 @@ def plot_knee(
 ) -> None:
     """Error against node count, one row of panels per medium: equilibrium, ramp.
 
-    Orange is naive, blue the δ = 0 construction, as everywhere; the δ = 0
-    lines are thin and unmarked (E1's lines), each δ > 0 has its marker,
-    dotted blue is the floor of that δ, and the dashed verticals mark
-    ``h = δ``.
+    ``COLOURS``: orange naive, purple the δ = 0 construction, blue the seeds;
+    the δ = 0 lines are thin and unmarked (E1's lines), each δ > 0 has its
+    marker, dotted purple is the floor of that δ, and the dashed verticals
+    mark ``h = δ``.
     """
     names = list(elliptic)
     fig, axes = plt.subplots(
@@ -542,25 +699,24 @@ def plot_knee(
                         lw=1.0,
                     )
                     floor = [r["floor"] for r in rows]
-                    ax.loglog(n, floor, ":", color=AWARE, lw=0.8, alpha=0.6)
+                    ax.loglog(n, floor, ":", color=CONSTRUCTION, lw=0.8, alpha=0.6)
                     ax.axvline(
                         (X_MAX - X_MIN) / delta + 1, color=REFERENCE, lw=0.6, ls="--"
                     )
-                ax.loglog(n, [r["naive"] for r in rows], color=NAIVE, **style)
-                ax.loglog(
-                    n, [r["δ = 0 construction"] for r in rows], color=AWARE, **style
-                )
+                for label, colour in COLOURS.items():
+                    ax.loglog(n, [r[label] for r in rows], color=colour, **style)
             ax.set_title(f"{titles.get(name, name)}, {problem}", fontsize=10)
             ax.set_xlabel("nodes")
             ax.grid(True, which="both", alpha=0.3)
         axes[i, 0].set_ylabel("$\\|e\\|_2 / \\|u\\|_2$")
     handles = [
         Line2D([], [], color=NAIVE, label="naive $D_x A D_x$"),
-        Line2D([], [], color=AWARE, label="δ = 0 construction"),
+        Line2D([], [], color=CONSTRUCTION, label="δ = 0 construction"),
+        Line2D([], [], color=AWARE, label="seeds"),
         Line2D(
             [],
             [],
-            color=AWARE,
+            color=CONSTRUCTION,
             ls=":",
             label="floor $\\|u_0 - u_\\delta\\| / \\|u_\\delta\\|$",
         ),
@@ -580,8 +736,8 @@ def plot_knee(
             )
         )
     handles.append(Line2D([], [], color="k", lw=0.8, alpha=0.7, label="δ = 0 (jump)"))
-    fig.legend(handles=handles, loc="lower center", ncol=len(handles), fontsize=8)
-    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    fig.legend(handles=handles, loc="lower center", ncol=5, fontsize=8)
+    fig.tight_layout(rect=(0, 0.09, 1, 1))
     fig.savefig(path, dpi=150)
     plt.close(fig)
 
@@ -650,6 +806,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         if floors:
             print_floors(name, floors)
         print_residuals(name, row_residuals(name, args.residual_n))
+        print_weights(name, weights_vs_jump(name, args.residual_n))
+        deltas = sorted({0.0, *(d for d in args.deltas if d > 0)}, reverse=True)[-2:]
+        print_spectra(name, seed_spectra(name, SPECTRUM_COUNTS[name], deltas))
     plot_knee(elliptic, parabolic, args.outputs / "heat1d_stiff_knee.png")
     print(
         f"\nknee study {time.perf_counter() - t1:.1f} s; figure and"

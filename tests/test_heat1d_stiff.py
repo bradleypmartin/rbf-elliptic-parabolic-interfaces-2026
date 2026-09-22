@@ -1,4 +1,5 @@
-"""The E3 driver: E3.2's references, built, checked, cached, reused; E3.3's knee."""
+"""The E3 driver: E3.2's references, built, checked, cached, reused; E3.3's knee;
+E3.4's seed line, weights and spectra."""
 
 import json
 import sys
@@ -26,6 +27,8 @@ from heat1d_stiff import (  # noqa: E402
     reference_path,
     row_residuals,
     save_knee_cache,
+    seed_spectra,
+    weights_vs_jump,
 )
 
 
@@ -48,7 +51,7 @@ def test_main_builds_checks_and_then_reuses_the_references(tmp_path, capsys):
     cache = json.loads((tmp_path / KNEE_CACHE).read_text())
     assert cache["meta"] == KNEE_CACHE_META
     errors = cache["errors"]
-    assert len(errors) == 2 * 2 * 2 and all(0 < v < 1 for v in errors.values())
+    assert len(errors) == 2 * 2 * 3 and all(0 < v < 1 for v in errors.values())
     main(argv)
     out = capsys.readouterr().out
     assert out.count("cached") == 2 + 4 and "solved" not in out
@@ -144,7 +147,7 @@ def test_the_parabolic_knee_and_floor_on_the_matlab_medium(tmp_path):
     grids = knee_grids("matlab", [100, 200, 400, 800])
     cache = {}
     rows = parabolic_sweep("matlab", delta, grids, tmp_path, cache, (16, 0.25))
-    assert len(cache) == 8
+    assert len(cache) == 12
     naive = _rates([r["naive"] for r in rows])
     assert naive[0] < 1.5 and naive[1] > 4.0 and naive[2] > 3.8
     # The floor at t = 2 is O(δ) (about 0.28 δ); the construction is on it at
@@ -154,7 +157,7 @@ def test_the_parabolic_knee_and_floor_on_the_matlab_medium(tmp_path):
     assert rows[-1]["δ = 0 construction"] > 10 * rows[-1]["floor"]
     # The cache is read back: the second sweep computes nothing.
     again = parabolic_sweep("matlab", delta, grids, tmp_path, cache, (16, 0.25))
-    assert all("solved" not in r for r in again) and len(cache) == 8
+    assert all("solved" not in r for r in again) and len(cache) == 12
 
 
 def test_floor_constants_match_the_closed_form():
@@ -183,3 +186,47 @@ def test_the_delta_zero_rows_are_first_order_in_delta_over_h(name):
         assert np.all(on_jump < 1e-12)
     else:
         assert np.all(on_jump > 1e-8)
+
+
+# --- E3.4 (#29) --------------------------------------------------------------
+
+
+def test_the_seed_line_is_on_the_floor_of_the_reference_at_every_delta(tmp_path):
+    # P7 on the ramp problem: the δ = 0.01 and δ = 0 seed lines agree to 2 %
+    # and are fourth order (the study's reference resolution: the coarse one
+    # of the tests above floors the 400-node point at 3e-10); the construction
+    # is 1e4 above them at h = δ/8.
+    grids = knee_grids("matlab", [100, 200, 400])
+    cache = {}
+    res = (N_CHEB, MAX_WIDTH)
+    lines = {}
+    for d in (0.0, 0.01):
+        rows = parabolic_sweep("matlab", d, grids, tmp_path, cache, res)
+        lines[d] = [r["seeds"] for r in rows]
+    for line in lines.values():
+        assert np.all(_rates(line) > 3.8), line
+    np.testing.assert_allclose(lines[0.01], lines[0.0], rtol=2e-2)
+    rows = elliptic_sweep("matlab", 0.01, grids)
+    assert all(r["seeds"] < 1e-12 for r in rows)
+    assert rows[-1]["δ = 0 construction"] > 1e4 * rows[-1]["seeds"]
+
+
+def test_weights_vs_jump_reproduces_the_scratch_numbers_and_the_conditioning():
+    rows = weights_vs_jump("matlab", 200, (0.0, 1.0, 0.1, 0.01, 0.001))
+    assert rows[0]["difference"] < 1e-12
+    np.testing.assert_allclose(
+        [r["difference"] for r in rows[1:]], [0.843, 0.113, 0.0107, 0.00107], rtol=0.02
+    )
+    assert all(80 < r["cond"] < 150 for r in rows)
+    # On eq. 75 the δ = 0 difference is the O(h alpha'/alpha) floor, not zero.
+    rows = weights_vs_jump("eq75", 200, (0.0, 0.001))
+    assert rows[0]["difference"] > 0.1
+    assert rows[1]["difference"] == pytest.approx(rows[0]["difference"], rel=0.05)
+
+
+def test_seed_spectra_are_stable_where_the_construction_is_not():
+    rows = seed_spectra("eq75", (49, 101), (0.0, 0.0025))
+    assert [r["n"] for r in rows] == [49, 49, 101, 101]
+    for r in rows:
+        assert r["max_real"] < -2 and r["imag"] == 0.0 and r["bd4"] < 1
+        assert r["extreme"] == pytest.approx(-16 / 3, rel=0.01)

@@ -1,8 +1,10 @@
 """Figure style shared by the drivers and the manuscript.
 
 Blue is the interface-aware method (and, from E3 on, the seeds); orange is
-the naive baseline, as in the wave-equation companion. ``use_print_style``
-sets the manuscript's sizes; the drivers' defaults are for the screen.
+the naive baseline, as in the wave-equation companion; purple is the δ = 0
+construction of the stiff-edge study (E1.2's rows applied to a smooth edge,
+the baseline the seeds are measured against). ``use_print_style`` sets the
+manuscript's sizes; the drivers' defaults are for the screen.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import numpy as np
 
 AWARE = "#1f77b4"
 NAIVE = "#ff7f0e"
+CONSTRUCTION = "#9467bd"
 REFERENCE = "#7f7f7f"
 
 
