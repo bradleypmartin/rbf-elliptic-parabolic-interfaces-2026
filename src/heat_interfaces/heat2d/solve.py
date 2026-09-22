@@ -31,6 +31,7 @@ from .operators import BoundaryValue, dirichlet_system, dirichlet_values
 __all__ = [
     "ILU_ORDERING",
     "IterativeResult",
+    "PRODUCT_ORDERING",
     "ReducedSystem",
     "ilu_preconditioner",
     "normalized_l2",
@@ -49,14 +50,29 @@ def solve_equilibrium(
     nodes: NodeSet,
     values: Sequence[BoundaryValue],
     forcing: np.ndarray | None = None,
+    permc_spec: str | None = None,
 ) -> np.ndarray:
     """Solve ``L u = forcing`` off the Dirichlet rows with ``u = values`` on them.
 
     ``values`` follows the domain's ``dirichlet`` order (``dirichlet_values``).
+    ``permc_spec`` is SuperLU's column ordering (``None``: its default,
+    ``COLAMD``; ``PRODUCT_ORDERING`` for the naive operator).
     """
     g = dirichlet_values(nodes, values)
     a, b = dirichlet_system(operator, nodes.dirichlet, g, forcing)
-    return np.asarray(spsolve(a, b))
+    return np.asarray(spsolve(a, b, permc_spec=permc_spec))
+
+
+PRODUCT_ORDERING = "MMD_ATA"
+"""SuperLU's ordering for the naive ``Dx A Dx + Dy A Dy``: minimum degree on ``AᵀA``.
+
+The product reaches the neighbours of the neighbours, about 147 nonzeros per
+row against 41 for a stencil (port notes §2.2), and ``COLAMD``'s factor of it
+is slow: on case 1 at δ = 0.01 one factor and solve takes 11.6 s at 20,000
+nodes and 52 s at 40,000 with ``COLAMD``, 3.7 s and 10.4 s with this
+ordering, and the two solutions agree to 5e-12 (E4.3, stiff note §4.2).
+``MMD_AT_PLUS_A`` is no faster than ``COLAMD`` here (12 s and 72 s).
+"""
 
 
 @dataclass(frozen=True)

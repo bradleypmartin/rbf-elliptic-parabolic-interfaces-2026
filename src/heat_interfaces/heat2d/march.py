@@ -78,13 +78,16 @@ def march_parabolic(
     values: Sequence[TimeBoundaryValue],
     forcing: Forcing | None = None,
     solution: Solution | None = None,
+    permc_spec: str | None = None,
 ) -> np.ndarray:
     """BD4 from ``u0`` at ``t = 0`` to ``t_end`` on the node set, steps of about ``dt``.
 
     The Dirichlet rows carry ``values`` at every step. With ``solution``, the
     analytic solution of a verification run, the three starting values are
     its (``analytic_history``) and every step is BD4; without it the RK4
-    start-up of ``heat1d.march.bd4_march`` supplies them.
+    start-up of ``heat1d.march.bd4_march`` supplies them. ``permc_spec`` is
+    SuperLU's ordering for the step's LU (``solve.PRODUCT_ORDERING`` for the
+    naive operator; ``None`` keeps SuperLU's default).
     """
     history = None
     if solution is not None:
@@ -98,6 +101,7 @@ def march_parabolic(
         forcing,
         dirichlet=nodes.dirichlet,
         history=history,
+        permc_spec=permc_spec,
     )
 
 

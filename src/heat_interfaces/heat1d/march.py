@@ -200,6 +200,7 @@ def bd4_march(
     forcing: Forcing | None = None,
     dirichlet: Dirichlet = None,
     history: Sequence[np.ndarray] | None = None,
+    permc_spec: str | None = None,
 ) -> np.ndarray:
     """BD4 from ``u0`` at ``t = 0`` to ``t_end`` in steps of about ``dt``, one LU.
 
@@ -211,7 +212,8 @@ def bd4_march(
     steps or fewer is all RK4. A caller that knows ``u`` before ``t = 0``
     (a run started from an analytic solution) passes ``history``, the values
     at ``t = -3 dt, -2 dt, -dt`` in that order with ``dt`` as ``march_steps``
-    rounds it; then every step is BD4.
+    rounds it; then every step is BD4. ``permc_spec`` is SuperLU's column
+    ordering for the one LU (``None``: its default, ``COLAMD``).
     """
     fixed, mask, impose, rk4_step = _stepper(operator, boundary, forcing, dirichlet)
     steps, dt = march_steps(t_end, dt)
@@ -246,7 +248,7 @@ def bd4_march(
     matrix = sp.diags_array(mask) @ (
         sp.eye_array(n, format="csr") - BD4_STEP * dt * sp.csr_array(operator)
     ) + sp.diags_array(1.0 - mask)
-    lu = splu(sp.csc_array(matrix))
+    lu = splu(sp.csc_array(matrix), permc_spec=permc_spec)
     for k in range(started, steps):
         t_next = (k + 1) * dt
         rhs = mask * (

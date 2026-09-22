@@ -21,7 +21,11 @@ from heat_interfaces.heat2d.operators import (
     naive_operator,
 )
 from heat_interfaces.heat2d.rbf import BOUNDARY
-from heat_interfaces.heat2d.solve import rms_error, solve_equilibrium
+from heat_interfaces.heat2d.solve import (
+    PRODUCT_ORDERING,
+    rms_error,
+    solve_equilibrium,
+)
 
 DOMAIN = case1()
 T_END = 0.1
@@ -132,3 +136,29 @@ def test_case1_spectra_are_damped_by_bd4_at_dt_h_and_at_fig_5_6s_step():
         assert np.sum(np.abs(lam.imag) > 1e-8 * np.abs(lam).max()) > 100
         for dt in (nodes.h, 0.02):
             assert bd4_amplification(dt * lam).max() < 1
+
+
+def test_march_parabolic_passes_superlus_ordering_through():
+    # permc_spec reaches the one LU of the march: the default is COLAMD bit
+    # for bit, and PRODUCT_ORDERING marches the naive operator to the same
+    # solution to rounding (E4.3).
+    nodes, _ = aware_set(900)
+    op = naive_operator(nodes, DOMAIN.material, build_stencils(nodes, DOMAIN))
+    exact = case1_exact(1.0)
+    u0 = exact(nodes.x, nodes.y, 0.0)
+
+    def march(permc_spec):
+        return march_parabolic(
+            op,
+            nodes,
+            u0,
+            T_END,
+            nodes.h,
+            [0.0, top],
+            solution=exact,
+            permc_spec=permc_spec,
+        )
+
+    default = march(None)
+    assert np.array_equal(default, march("COLAMD"))
+    assert np.abs(march(PRODUCT_ORDERING) - default).max() < 1e-11

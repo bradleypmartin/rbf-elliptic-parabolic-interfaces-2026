@@ -12,6 +12,7 @@ from heat_interfaces.heat2d.domain import (
     Circle,
     Constant2D,
     build_node_set,
+    case1,
     case3,
 )
 from heat_interfaces.heat2d.operators import (
@@ -19,10 +20,12 @@ from heat_interfaces.heat2d.operators import (
     dirichlet_system,
     dirichlet_values,
     laplacian_operator,
+    naive_operator,
 )
 from heat_interfaces.heat2d.rbf import ITERATIVE
 from heat_interfaces.heat2d.solve import (
     ILU_ORDERING,
+    PRODUCT_ORDERING,
     ilu_preconditioner,
     reduced_system,
     solve_equilibrium,
@@ -137,3 +140,17 @@ def test_left_preconditioned_system_reports_the_unweighted_residual():
     assert weighted <= 1e-8
     with pytest.raises(ValueError):
         system.left_preconditioned(sp.eye_array(3))
+
+
+def test_the_product_ordering_is_only_a_faster_factor_of_the_naive_system():
+    # The default (``permc_spec=None``) is SuperLU's own COLAMD bit for bit,
+    # so every earlier driver is unchanged; PRODUCT_ORDERING gives the same
+    # solution of the naive case-1 system to rounding (E4.3).
+    domain = case1()
+    nodes = build_node_set(domain, 1250)
+    op = naive_operator(nodes, domain.material, build_stencils(nodes, domain))
+    values = [0.0, lambda x, y: np.sin(2 * np.pi * x)]
+    default = solve_equilibrium(op, nodes, values)
+    assert np.array_equal(default, solve_equilibrium(op, nodes, values, None, "COLAMD"))
+    fast = solve_equilibrium(op, nodes, values, permc_spec=PRODUCT_ORDERING)
+    assert np.abs(fast - default).max() < 1e-11
