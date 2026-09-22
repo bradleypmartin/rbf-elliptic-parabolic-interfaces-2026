@@ -6,9 +6,10 @@ fourth order through it because their polynomial basis is replaced by
 *seeds*, functions continued through the edge by ODEs. Canonical for E3–E4
 (plan D11); the manuscript quotes this note and never becomes a second
 source of truth. §1 is the formulation (E3.1, #26); §2 holds the 1-D
-results (E3.2, #27, to E3.6, #31, which closes it in §2.5) and
-later sections the 2-D design and results (E4.1, #32; E4.10, #41). The
-port of the 2016 methods this builds on is in `docs/port-notes.md`.
+results (E3.2, #27, to E3.6, #31, which closes it in §2.5); §3 is the
+2-D design (E4.1, #32) and §4–5 will hold the 2-D results (E4.2, #33,
+to E4.10, #41). The port of the 2016 methods this builds on is in
+`docs/port-notes.md`.
 
 The construction is the one of the wave-equation companion, *Seed
 stencils: high-order finite differences and RBF-FD through material edges
@@ -1567,3 +1568,624 @@ E5.1 (#42) can scaffold `paper/` against this section. E5.3 (#44) reads
 `outputs/heat1d_stiff.json` into `paper/data/` and adds the content hash
 the knee cache lacks. E4.10 (#41) gives `heat2d_stiff.py` the same
 `--data-dir` and `ResultsCache`. Corners stay out (E2.10's decision).
+
+## 3. Two dimensions: the design of the scalar seeds (E4.1, #32)
+
+The design note for E4.2–E4.10, written before any 2-D seed code, as §1
+was written before the 1-D code. It fixes the notation (the frame, the
+anchor, the flux variables), writes the straight-feature chain out, says
+how the seeds enter the 2016 stencil of `heat2d.interface`, decides the
+curved and double-edged cases, and turns plan §3.3's elliptic questions
+into the numbered hypotheses H1–H12 of §3.7, each with the experiment and
+the ticket that answers it. §3.8 is for whoever implements E4.2–E4.10:
+the decisions that are already taken, the traps §2 and the port found,
+and where each piece goes. Nothing here is measured; §4–5 will tick the
+hypotheses off as §2.5 ticked P1–P10.
+
+### 3.1 Setting
+
+The 2-D problems are the port's (port notes §2): the x-periodic unit
+strip, Dirichlet rows at `y = 0` and `y = 1` (and on the cooling circle of
+case 3), `u_t = ∇·(α ∇u) ≡ L u`, with α one smooth piece inside a closed
+band between two interfaces and another outside it (`heat2d.domain.Band`).
+Case 1 is the flat band `0.6 ≤ y ≤ 0.8` with `α = 0.2` inside and 1
+outside; case 2 bends both interfaces into `c + 0.02 sin 2πx` and puts
+`0.2 + 0.1 sin 2πx sin 2πy` inside; case 3 is the ring `0.349 ≤ r ≤ 0.35`
+at contrast 1500 : 1, extremised by `s` in E2.9. The 2016 method
+(dissertation §5.3, EABE §2.2.3–2.2.4, port notes §2.3–2.4) rebuilds the
+rows of the 30-node / degree-4 stencils that cross an interface: the 15
+monomials of the RBF-FD saddle-point system are replaced by the
+translated basis, piecewise polynomials continuous in `u`, in the normal
+flux and in `D^k u` and its flux along the interface, and the Gaussians
+are warped so that their `α ∂_n` is continuous too. Everything is written
+in a local frame at the foot point of the interface nearest the stencil
+centre, `x′` along the tangent, `y′` along the normal into `level > 0`, in
+units of the stencil radius.
+
+**The smooth edge in 2-D.** E4.2 (#33) replaces each interface by a tanh
+transition of width δ in the *signed normal distance* to the curve
+(`Curve.signed_distance`, exact for the graphs through the foot-point
+Newton iteration and for the circles), composed edge by edge exactly as
+`heat1d.domain.SmoothEdges._blend` composes them: from the outside piece,
+across the lower curve into the inside piece with weight
+`s(d₁/δ)`, then across the upper curve back out with weight `s(d₂/δ)`,
+`s(z) = ½ (1 + tanh z)`, so that a band thicker than its edges has two
+independent transitions and a band thinner than its edge (case 3's ring
+at δ > w = 0.001, §3.6) has the product profile `α_out + (α_in − α_out)
+s(d₁/δ) (1 − s(d₂/δ))` whose peak is below the full contrast. On case 1
+this is E3.2's 1-D medium in `y`, bit for bit, so the separable reference
+`u = sin 2πx v(y)` of E4.2 is a 1-D problem in `y` with E3.2's α. δ = 0 is
+the jump medium bit for bit, in `alpha`, `gradient` and the pieces'
+`taylor` tables, so every 2016 driver runs on the smooth medium unchanged
+at δ = 0. The smooth medium keeps the band's *protocol* (`region_index`,
+`region_piece`, `interfaces`, `taylor`) with the jump's values: that is
+what makes the δ = 0 construction below free.
+
+**The three baselines, named as in §1.1.** *Naive* is `Dx A Dx + Dy A Dy`
+with `A = diag α(x_j, y_j)` sampled at the nodes (plan D3;
+`operators.naive_operator`, on §2.2's stencils, no interface group).
+*The δ = 0 construction* is `interface_aware_operator` run on the smooth
+medium: its crossing rows read the pieces' Taylor tables and the curves'
+frames as if δ were 0, its direct rows read the smooth α, and it needs no
+new code. *Seeds* is what E4.4–E4.5 build: the same operator with the
+crossing rows, and every other row whose stencil sees an edge, rebuilt on
+the seed basis of §3.2. The comparators of E4.9 are the disc means and
+the widened edge of plan §3.4 (§3.8 lists them).
+
+**What the seeds keep and what they change.** Kept, from the port: the
+node sets with their straddling rows, the stencil groups (42 / 5 interior,
+30 / 4 in the boundary zone and across interfaces), the Gaussian block
+with `ε = 0.4/d`, the saddle-point solve `rbf.augmented_solve`, the
+Dirichlet rows, BD4 at `dt = h` from the analytic history, SuperLU and the
+iterative solvers of E2.8. Changed: the 15 augmenting functions of a
+crossing stencil (seeds in place of translated polynomials), the warp's
+coordinate (§3.4), and which rows are rebuilt (those that see the edge,
+not only those that cross a curve). Nothing about hyperviscosity: the
+diffusion operator is dissipative and BD4 implicit, so the companion's
+§5.3 problem (the hyperviscosity row's footprint) has no twin here; what
+replaces it is the implicit solve's conditioning (H5) and the spectrum's
+right edge (H6).
+
+### 3.2 The local frame, the anchor, and the straight-feature ansatz
+
+**Frame and anchor.** A seeded stencil keeps the 2016 frame's orientation
+(`interface.frame_at` at the foot point of the nearest interface, `x′`
+tangential, `y′` normal into `level > 0`) and moves its origin to the
+*evaluation node*, which lies on the normal through that foot point: the
+seeds are anchored where the operator is evaluated, as in §1.2, and in
+the stencil coordinate
+
+    ξ = (x′ − x′_e) / h_s,    η = (y′ − y′_e) / h_s,    h_s = the stencil radius,
+
+in which the chain is invariant (§1.3) and every seed is O(1) with
+`φ ≈ ξᵃ ηᵇ` on constant α. The 2016 basis keeps its origin at the foot
+point; the two are one span with a shift of origin between them
+(`interface.frame_change` between two frames of the same angle is the
+2-D `shift_matrix`), which is how E4.4 compares the seeds with E2.3's
+translated basis in the jump limit (H2). The material along the normal,
+
+    α_n(η) = α(x_e + h_s η n),   n the unit normal at the foot point,
+
+is what the march samples; `α_e = α_n(0)` is the anchor value.
+
+**The ansatz.** Where the material depends on the normal coordinate alone
+(exactly on case 1's flat edges; locally, to the order §3.5 states, on a
+curved one) the seed of the monomial `ξᵃ ηᵇ` is a polynomial in ξ with
+coefficient functions of η,
+
+    φ_{ab}(ξ, η) = Σ_j g_j(η) ξʲ,    j = a, a − 2, …, a mod 2,
+
+because `L (g(η) ξʲ) = ξʲ L_n g + j (j − 1) α g ξ^{j−2}` with
+`L_n = ∂_η α ∂_η`: the operator lowers the ξ-degree by two or not at all,
+so only the levels of `a`'s parity below `a` are ever driven. The chain of
+§1.2 read in 2-D is
+
+    L φ_{ab} = α_e [ a (a − 1) φ_{a−2,b} + b (b − 1) φ_{a,b−2} ],
+
+the constant-coefficient operator's action on the monomial with the
+lower monomials' *seeds* on the right, frozen at the anchor, exactly
+`L φ_k = k (k − 1) α_e φ_{k−2}` with the seeds of `x^{k−2}` on the right.
+Collecting the coefficient of `ξʲ` gives, per seed and per level, one
+second-order ODE in η that never differentiates α once it is written with
+the flux variable `ψ_j = α g_j′`:
+
+    g_j′ = ψ_j / α_n(η),
+    ψ_j′ = α_e [ a (a − 1) g_j^{(a−2,b)} + b (b − 1) g_j^{(a,b−2)} ] − (j + 2)(j + 1) α_n(η) g_{j+2}^{(a,b)},
+
+with the anchor data `g_a(0) = [b = 0]`, `ψ_a(0) = α_e [b = 1]` and every
+other `g_j(0)`, `ψ_j(0)` zero: the monomial's jet in η at its top level,
+and for `b ≥ 2` zero data with the source generating `ηᵇ`, as
+`φ_k(x_e) = φ_k′(x_e) = 0` did in §1.2. The right-hand side of seed
+`(a, b)` at level `j` needs the *same level* of the seeds `(a − 2, b)` and
+`(a, b − 2)`, both of `a`'s parity, and the level `j + 2` of itself: the
+system is triangular in total degree and in level, and all 15 seeds of
+degree ≤ 4 march together as one linear first-order system of
+
+    22 levels  (5 + 4 + 6 + 4 + 3 for a = 0 … 4),  44 states,
+
+against about 600 for the companion's elastic seeds (plan §3.1's "about
+70" counted every level below `a`; the parity trim cuts it to two-thirds). With
+constant α the solution is the monomial itself (`g_a = ηᵇ`, every lower
+level zero, by induction on the degree as in §1.2), which is E4.4's first
+check.
+
+**Four seeds in closed form, and the one that is not a product.** The
+linear seeds are the 1-D ones stretched along the tangent: `φ₁₀ = ξ`
+through any edge (`ψ₁ ≡ 0` gives `g₁ ≡ 1`), `φ₀₁ = φ₁(η) = α_e ∫₀^η
+dη′/α_n`, the constant-flux profile of §1.2, and `φ₁₁ = ξ φ₁(η)`;
+`φ₀₂ = φ₂(η)` is the 1-D `x²`-seed. The first seed that is not a 1-D seed
+times a power of ξ is
+
+    φ₂₀ = ξ² + g₀(η),    (α_n g₀′)′ = 2 (α_e − α_n),  g₀(0) = g₀′(0) = 0:
+
+`L ξ² = 2 α_n(η)` is not constant across the edge, and `g₀` is the normal
+profile that restores `L φ₂₀ ≡ 2 α_e`, the "`u_t = const`" condition of
+§1.2 for a temperature quadratic *along* the edge. It vanishes on
+constant α, is O(1) in stencil units across an unresolved edge, and is
+what a 1-D construction cannot supply: the 2-D content of the seeds is in
+the coupling of tangential monomials to normal profiles, and E4.6's
+elliptic test (plan §3.2) is a test of exactly these seeds, since
+`sin 2πx v(y)` is not in the span of the 1-D seeds at any resolution.
+
+**A symmetry that tests the march.** The frozen-α problem is invariant
+under shifts along ξ, so the seed of `(ξ + c)ᵃ ηᵇ` anchored at the same
+node is the binomial combination of lower seeds, and matching powers of
+`c` gives
+
+    g_j^{(a,b)}(η) = C(a, j) · g₀^{(a−j, b)}(η)   for every level j,
+
+with `g₀^{(m,b)} ≡ 0` for odd `m`. So only the nine level-zero functions
+`g₀^{(m,b)}`, `m ∈ {0, 2, 4}`, `m + b ≤ 4`, are independent (18 states),
+and the 44-state march must reproduce the identity to rounding: an
+E4.4 test that costs nothing and catches a wrong factor in the level
+coupling, the twin of the companion's injected-error test (its §4.2).
+The 44-state form is the one to implement, since it is the one that
+generalises to a tangentially varying α (§3.5) and to the elastic case.
+
+### 3.3 Numerics of the march (for E4.4)
+
+Everything §1.3 and §2.3 settled in 1-D carries over unchanged; the
+differences are in the bookkeeping of a scattered stencil.
+
+- **One march per stencil, both directions from the anchor**, the state
+  `(g_j, ψ_j)` for the 22 levels, DOP853 at `SEED_RTOL = 1e-13`,
+  `SEED_ATOL = 1e-15` in the stencil coordinate (the 1-D constants,
+  re-used, not re-tuned), restarted at every node's η so that node
+  values are integrated and never interpolated (the companion's choice;
+  DOP853's dense output is one order below its step and was not trusted
+  at 1e-13), and at every edge centre and its `±EDGE_STOP δ = ±10δ`
+  flanks along the normal. On case 1 the stops are the two lines
+  `y = 0.6, 0.8` read in the frame, `η_c = (y_c − y_e)/h_s` (`cos θ = 1`);
+  for a curved interface they are the crossings of the normal line with
+  each curve, by Newton (the companion's `crossings`), and both curves
+  of a band are stops of the same march whatever the anchor (§3.6).
+- **α on each segment from the smooth medium's normal profile**, and at
+  δ = 0 from the piece of the region the segment lies in, so the
+  evaluation is one-sided at a jump and the march reproduces E2.3's
+  algebra (H2) the way the 1-D march reproduced E1.2's to 2e-14 (§2.3).
+  The 2-D medium therefore needs the "smooth piece per region" contract
+  of `Medium1D.elements`: `region_piece(j).alpha` on a segment, never the
+  blend, when δ = 0.
+- **Batching.** The 1-D trick (§2.3: every row with the same node pattern
+  in one `solve_ivp` system) has one exact 2-D use: the nodes of one
+  straddling row share `y_e` and, on a flat edge, the same α_n, so their
+  stencils' seeds are the same functions of (ξ, η) and one march with the
+  union of their η targets serves the row (the targets are exact, not
+  interpolated). Free nodes have their own `y_e` and march alone;
+  stacking different anchors into one system is possible (block
+  diagonal, the RMS-norm dilution of §2.3) and not worth it at 44 states.
+  Cost estimate: 44 states, a few hundred steps, a few milliseconds per
+  stencil; the interface group is 414–2294 rows at 1250–40,000 nodes on
+  case 1 (port notes §2.3), so an operator's seeds cost seconds, against
+  the 1.5 ms per row the 2016 rows cost already. #35's "milliseconds per
+  stencil" is the acceptance line.
+- **Which stencils are seeded** (the E3.4 breadcrumb): those with a node
+  within `TANH_REACH δ = 20δ` of an edge centre in signed normal distance,
+  for either curve; at δ = 0 that is exactly the crossing test
+  `operators.interface_crossings`. The stencil *groups* follow the same
+  rule one size up, as `build_stencils` already does with the 42-node
+  crossing test: a node whose 42-node stencil sees the edge joins the
+  interface group and gets the 30 / 4 stencil, so that no 42 / 5 stencil
+  ever sees an unresolved edge, and of the group the members whose own 30
+  nodes see it are seeded, the rest keep the direct row. A boundary-zone
+  node whose one-sided 30 / 4 stencil sees an edge is seeded on its own
+  nodes; the chain is anchored at the node and marches only where nodes
+  are, so one-sidedness costs nothing. At δ = 0.04, `20δ = 0.8` covers
+  the strip and every row is seeded (§1.3's last paragraph; P4 says it
+  costs accuracy nothing, only the marches' time, about 40,000 × a few
+  ms at the largest count); a `--seed-reach` knob for the resolved end of
+  the sweep is E4.6's call, with the resolved-edge penalty measured
+  either way (H8).
+- **Normalisation and conditioning.** The seeds carry `α_e^{⌈(a+b)/2⌉}`
+  through the chain constants, as in 1-D (§1.2, §2.5), and across a
+  9 : 1 or 1500 : 1 contrast the normal profiles are O(contrast) in
+  stencil units: the seed block's condition number sees the scaling and
+  the weights do not (the moment conditions are homogeneous in it).
+  Report `cond` of the 30 × 15 seed block raw and column-scaled next to
+  the polynomial block's (32–34 in the companion's case; the 2016 basis
+  here has the continuity matrices' 25–223, port notes §2.3), and expect
+  the companion's picture (H3): within a small factor of the polynomial
+  block at every δ, tending to it as δ → 0.
+- **The floor.** The 1-D march's floor at `δ ≲ h/40` (row residual 1e-12
+  in units of h⁻², solution 4e-11, §2.3) is the same integrator on the
+  same chain and will be here too; case 3's ring at s = 10³ with
+  δ = 0.0025 on 40,000 nodes is at `δ/h = 0.5`, well above it, and the
+  extremised ring of E4.8 is where it may show. Below about `1e-2 h`
+  dispatch to the jump construction, as §1.4 says.
+
+### 3.4 The seeds in the RBF-FD system, and the warp they bring with them
+
+**The saddle-point system.** EABE eq. 2 with the seed block in place of
+the polynomial block (`rbf.augmented_solve` takes any `P`; E2.3 already
+passes the translated block through it):
+
+    [ A   S ] [ w ]   [ (L G_j)(x_e) ]
+    [ Sᵀ  0 ] [ λ ] = [ (L φ_e)(x_e) ],     S_{ie} = φ_e(ξ_i, η_i),
+
+`A` the Gaussian block in the (warped) coordinates below, the 30 nodes'
+seed values read off the march, and the right-hand side the *true*
+operator applied to each function at the anchor. For the seeds that is
+the chain's constant term plus one correction:
+
+    (L φ_e)(x_e) = 2 α_e [e ∈ {(2,0), (0,2)}] + h_s α_ξ [e = (1,0)]    (stencil units),
+
+`α_ξ` the tangential derivative of α at the anchor. The chain gives the
+first term (`a (a − 1) φ_{a−2,b} + b (b − 1) φ_{a,b−2}` at the anchor is
+nonzero only for the two quadratics, where the lower seed is `φ₀₀ = 1`);
+the second is what the frozen normal profile leaves out, since
+`∂_ξ (α ∂_ξ φ) = α_ξ φ_ξ + α φ_ξξ` and at the anchor `α = α_e` exactly
+while `φ_ξ ≠ 0` only for `φ₁₀ = ξ`. The normal derivative `α_η` never
+appears: the seeds satisfy `∂_η α_n ∂_η` exactly with the true profile.
+On case 1 `α_ξ = 0`; on case 2's inside piece it is the sine product's
+tangential gradient, rotated into the frame as `stencil_weights` already
+rotates `∇α` (`Frame.rotate_in`). So the seeds carry the operator's
+`∇α · ∇` term through the ODE and need it at the anchor only once, in
+one entry, where the 2016 rows apply `α ∇² + ∇α · ∇` to all 15 functions.
+The weights come back as `w = w̃ / h_s²`.
+
+**The Gaussian part, and the smooth warp for free.** The E2.4 breadcrumb
+on #32 conjectured that the seeds' warp is the quadrature
+`η̃(η) = ∫₀^η α_e / α_n dη′`, continuous through the edge and equal to
+`interface.Warp`'s piecewise-linear stretch at δ = 0. That integral is
+the seed `φ₀₁` itself. So the warped coordinate of a seeded stencil is
+
+    (ξ, η̃) = (ξ, φ₀₁(η)),
+
+read off the same march at every node, no `region` and no second
+quadrature; at δ = 0 on constant pieces it is `Warp.apply` bit for bit
+(slope 1 on the anchor's side, `α_e / α_across` beyond the jump,
+continuous at it), and at δ > 0 it is the smooth stretch. The Gaussian
+block is `G(ξ_i − ξ_j, η̃_i − η̃_j)` as in E2.4, and its right-hand side is
+`L` applied to `G(ξ, φ₀₁(η))` at the anchor by the chain rule. Written out
+with `η̃′ = α_e / α_n`, at any point of the normal line
+
+    L G(ξ, η̃(η)) = α_ξ G_ξ + α G_ξξ + ∂_η(α η̃′) G_η̃ + α η̃′² G_η̃η̃,
+    α η̃′ = α_e  ⇒  ∂_η(α η̃′) = 0,
+
+so the term in `G_η̃` that the 2016 rows carry as `α_η G_η` (the
+`g_eta * dy` of `stencil_weights`) is cancelled *exactly* by the warp's
+curvature `η̃″(0) = −α_η / α_e`, and at the anchor (`η̃′ = 1`)
+
+    (L G)(x_e) = α_e (G_ξξ + G_η̃η̃) + α_ξ G_ξ,
+
+the plain Gaussian's Laplacian at the warped offsets times `α_e`, plus
+the same tangential correction as the seeds'. E4.5 should implement the
+general chain-rule form and assert the cancellation, not assume it; the
+piecewise warp at δ = 0 has `η̃″ = 0` on the anchor's side and keeps the
+`α_η G_η` term, and the two forms agree there because `α_n` is the
+anchor's piece. This is the "smooth warp" of the ablation twin of Fig. 11
+(H7): *seeds + φ₀₁-warp* against *seeds + plain Gaussians*, with E2.4's
+2.3–6.9× on case 1 at δ = 0 as the expectation for what the warp is worth
+and E2.9's finding that on the ring the warp decides the *sign* of the
+spectrum as the reason not to run the seeds plain there.
+
+**The jump limit is E2.3's stencil.** At δ = 0 on constant pieces across
+a flat interface the seed of `ξᵃ ηᵇ` is the monomial on the anchor's
+side and, on the far side, a polynomial of degree ≤ 4 (the chain with
+constant coefficients and polynomial sources) that is continuous with
+its flux at every ξ and, by induction down the chain, has `D^k φ` and
+its flux continuous too: the 15 conditions the continuity matrices
+impose, all exact for constant pieces on a flat line. `C` being square
+and nonsingular, the far side is E2.3's translated polynomial, the two
+15-dimensional spans coincide, and with the same Gaussian block (warp on
+both, or off both) the weights agree to rounding (H2): the 2-D form of
+"one construction, two implementations" (§1.4), with the three-region
+stencils of a thin band included since both curves are stops of one
+march. On a *curved* interface E2.3 carries the curvature through the
+expansion `f` and the seeds of §3.5 do not, so they differ at O(κ h_s);
+on case 2's tangentially varying inside piece E2.3 truncates α's Taylor
+table at degree 4 where the seeds freeze it along the normal, §1.4's
+`O(h α′/α)` remark. So the rounding-level agreement is case 1's, and on
+cases 2 and 3 E4.4 records the distance and its order instead of
+claiming a limit, exactly as §2.3 did for eq. 75.
+
+**Stencil size: 30 / 4, and why the companion's 19 / 3 warning does not
+carry over.** The companion found degree-4 seed stencils unstable across
+a sharp edge in the wave case, with hyperviscosity, and settled on
+19 nodes and degree 3 (its §5.3). The 2016 diffusion method uses 30 / 4
+across the jump in every experiment and the port reproduces its fourth
+order with them (port notes §2.3–2.9), the seed rows tend to those rows
+as δ → 0 (H2), and there is no hyperviscosity row whose footprint could
+be wrong. The seed stencils are therefore 30 / 4, the interface group's
+spec, and the spectrum study of H6 is where a surprise would show.
+
+### 3.5 Curved features: route (a), and what it leaves out
+
+Plan §3.1 and the companion's §4.1 name three routes for a curved edge:
+(a) the straight-feature seeds along the true normal through the foot
+point, curvature dropped; (b) a local boundary-value problem per stencil
+on a fine patch (the multiscale / oversampling construction); (c) global
+harmonic coordinates. The companion built (a), measured it on the same
+sine pair at amplitude 0.02, and found route (b) unnecessary on these
+node sets (its §5.6.2). E4.7 (#38) takes route (a) first and measures the
+same things.
+
+**Route (a) here.** The frame is E2.3's at the foot point of the nearest
+curve, the anchor the evaluation node on its normal, the profile `α_n`
+sampled along that normal with the stops where the line meets each curve
+and its images (Newton; the flat formula kept for `θ = 0` so that case 1
+is bit for bit the flat march). Along that line the blend is exactly the
+medium's tanh in the normal distance of the curve the line is normal to,
+so a curved-edge stencil's seeds are the *flat* seeds of its local
+coordinates (the companion's `test_curved_seeds_are_the_flat_seeds_of_
+the_same_local_stencil`, 1e-12): nothing in §3.2–3.4 changes.
+
+**Two things it gets wrong, with their sizes.** A node at tangential
+offset `x′` sits at true normal distance `y′ − κ x′²/2 + O(κ²)` from the
+curve while its seed value assumes `y′`; over a 30-node stencil of radius
+`r ≈ √(30 / πN)` on the case-2 curves, `κ ≤ 0.02 (2π)² = 0.79` (tilt to
+7.2°), the geometric error `κ r²/2` at the outer nodes is
+
+    N        1250    2500    5000   10,000  20,000  40,000
+    r        0.087   0.062   0.044   0.031   0.022   0.015
+    κ r²/2   3.0e-3  1.5e-3  7.5e-4  3.8e-4  1.9e-4  9.4e-5
+
+to be read against δ: larger than a δ = 0.0025 edge at 1250 nodes,
+0.3 δ at 5000 and 0.075 δ at 20,000, and 0.075 δ at 5000 for δ = 0.01.
+It shrinks with N only as h², so route (a)'s geometry shows first at the
+sharpest δ on the coarsest sets, and where it shows the seed value at an
+outer node is off by that fraction of the edge profile. The companion
+saw exactly this pattern: at the seed floor through δ = 0.005 and 0.01
+at every N, and 1.4–1.5× the flat seeds' error at δ = 0.0025 on its
+10,000- and 19,600-node sets. The second thing: case 2's inside piece
+`0.2 + 0.1 sin 2πx sin 2πy` varies along the tangent, the frozen profile
+does not, and §3.4's anchor correction `α_ξ` restores consistency of the
+moment conditions at the anchor only; away from it the seeds solve the
+wrong problem by `O(x′ α_ξ)`, first order in `h_s` with a fixed constant.
+By §1.4's argument (the spaces differ at O(h), the annihilator's
+coefficients at O(1) on lower-order terms, the local error stays
+`O(h³)`) the order survives and the constant changes; the 2016 rows,
+which carry α's full Taylor table, do not have this term. It is the
+diffusion twin of the companion's oblique-incidence question and is
+measured, not predicted, in H9.
+
+**If route (a) is not enough.** The first step is not route (b) but the
+companion's route (a′): keep the marches, evaluate each seed at the
+node's true `(arclength, normal distance)` instead of its tangent
+coordinates, and scale the tangential jets at the anchor by
+`1/(1 − κ y′_e)`, which makes the material exact at every node and
+leaves only the operator's curvature terms (`κ ∂_n` and the metric of
+the tangential derivative) as the error, at no march cost. For the
+tangential variation of α the matching step is the ξ-Taylor ansatz: with
+`α = Σ_m a_m(η) ξᵐ` the levels couple through `a_m` (`ξʲ` is driven by
+`g_{j+2−m}` and by `∂_η(a_m ∂_η g_{j−m})`), the system is no longer
+triangular but is still 44 linear ODEs in η, truncated at the operator's
+consistency order as `interface.coefficient_operator` truncates. Neither
+is built unless H9's residual probe asks for it; route (b) stays named
+and unbuilt, with the companion's reasons.
+
+### 3.6 The double-stiff ring, and the extremizing sweep with seeds
+
+**Two edges in one march.** Case 3's ring is 0.001 wide and thinner than
+the node spacing at every count (`h ≥ 0.0026` at 160,000 nodes; port
+notes §2.7), its straddling rows sit `±0.5 h` off the midline and no
+node lies inside it. A stencil crossing the midline reaches regions 0
+and 2, and E2.3 translates it across both circles with a frame change
+between them (port notes §2.3). The seeds have no frame change and no ring
+polynomial: the normal through the foot point of the *nearest* circle
+crosses both, both crossings and their `±10δ` flanks are stops, and one
+march carries the 44 states through the ring, the diffusion twin of
+§1.3's double-cross and of P8 (7.6e-15 at δ = 0). For the concentric
+circles the normal is radial and the crossings are exact; the seeds'
+march parameters are carried as *widths* `(w, δ)` from the outer radius,
+never as two absolute radii, because `Circle(0.35 − 1/s)` stores the
+ring's width to only 8e-8 relative at `s ≥ 10¹⁰` (E2.9's breadcrumb on
+#39, item 3).
+
+**The smooth ring.** With δ of the order of `w` or above, §3.1's product
+profile `α_out + (α_in − α_out) s(d₁/δ) (1 − s(d₂/δ))` never reaches the
+ring's plateau: the effective contrast is reduced and the "ring" is a
+resistive bump of height `(α_in − α_out) tanh(w/2δ)` to leading order.
+That is a different problem from the jump ring, on purpose (it is what a
+sub-grid smooth layer *is*), and the notes must say at each δ what the
+bump's contact resistance `∫ dr/α` across it is, since that, not the
+plateau, is what the solution feels (port notes §2.9: the ring's resistance 1.5 at
+every s is what the s-sweep holds fixed).
+
+**What the s-sweep asks of the seeds.** Port notes §2.9 found that the
+continuity matrices' `O(s²)` (Fig. 20) is row scaling a pivoting solve
+never sees (16.5 row-equilibrated at every s), and that what does grow
+into the 2016 weights is the far side's translated basis, `O(s κ² scale)`
+from the ring polynomial's normal terms coupling through the curvature
+and the frame shift, with the weights' residual on the matched radial
+quadratic growing like `1.5e-18 s` at the worst stencil (the fitted line
+from s = 10⁵ on; the s = 10¹¹ point is 1.4e-7). The seeds have
+no such intermediate. What they carry instead is physical: across a
+resistive ring the constant-flux seed `φ₀₁` climbs by `α_e w / α_ring`,
+i.e. `O(s w / h_s)` in stencil units (about `2e9` at `s = 10¹¹`), in one
+column of `S`, and the seeds built on it (`φ₁₁`, `φ₂₁`, `φ₀₃`, …) the
+same. So the seed block's raw condition number should grow like
+`s w / h_s`, a *column* scaling, and be O(1) column-equilibrated (H11);
+the march itself is exact in the `(g, ψ)` form, `ψ` continuous and
+`g′ = s ψ` a scale, not a stiffness; and the number to report is E2.9's
+own, the worst and median relative residual of the seed weights on the
+matched radial quadratic per s (`matched_residual` in
+`scripts/heat2d_extremes.py`, formed from the stored radii), next to
+port notes §2.9's `1.5e-18 s` fitted line. With a smooth ring the matched profile is the
+radial solution of `∇·(α ∇u) = 4` regular at the centre,
+`u′ = 2r/α(r)`, `u = ∫ 2r/α dr`, one quadrature with the smooth `α(r)`:
+the reference-free instrument of E4.8 at any `(s, δ)`.
+
+**The reference problem, stated now.** Fig. 19's twin at δ = 0 needs no
+new reference: the per-s 160,000-node jump-aware runs of E2.9 are cached,
+and the seeds must sit on E2.9's line (every s the s = 10³ line to
+0.73–1.15×). At δ > 0 there is *no independent reference for the smooth
+ring*: it is not separable, and a Fourier × Chebyshev product grid would
+have to resolve a 0.0025-wide tanh at r = 0.35 across the whole strip. A
+self-convergence line against a fine seed run (160,000 nodes, `h ≈ δ`)
+through the resampling of E2.6 is what can be had, and it measures the
+seeds against themselves. So E4.8's evidence for δ > 0 is the matched
+radial residual (exact) first and the self-convergence line second, and
+if the fine run is too costly the ticket scales back to the δ = 0 sweep
+with seeds plus the residual at every `(s, δ)`, which already answers
+"does the breakdown move and is the march the new limit". Brad decides
+at E4.8; the plan's "Fig. 19–20 twins with a seeds line" reads as
+"Fig. 20's twin at every δ, Fig. 19's at δ = 0" until then.
+
+### 3.7 Hypotheses for E4.4–E4.9, with the experiment that tests each
+
+Plan §3.3's elliptic questions and §3.2–3.6's predictions, numbered so
+§4–5 can tick them off as §2.5 ticked P1–P10. "Reference" means the
+separable Chebyshev reference of E4.2 on the flat cases, the cached
+160,000-node jump-aware runs at δ = 0 on the curved ones, and the matched
+radial quadratic on the ring.
+
+| | Hypothesis | Experiment | Ticket |
+| --- | --- | --- | --- |
+| H1 | **The march is the chain.** Constant α returns the 15 monomials to rounding; the shift identity `g_j^{(a,b)} = C(a,j) g₀^{(a−j,b)}` holds to rounding through a δ = h/8 edge; `L φ_e − α_e Σ C φ_{e′}` evaluated on a tensor grid through the edge with high-order finite differences (the companion's injected-error lesson: no coefficient bookkeeping shared with the march) is ≤ 1e-10 relative; one stencil marches in milliseconds. | `tests/heat2d/test_seeds.py` at δ ∈ {h/8, h, 8h}; the residual grid 25 × 801 | E4.4 |
+| H2 | **The jump limit is E2.3.** At δ = 0 on case 1 the seed span equals the translated basis's span (each column in the other's span to 1e-12, three-region stencils included) and the stencil weights agree to rounding with the same Gaussian block; at δ > 0 the distance is first order in δ/h (P4's ladder, 84 % … 0.11 % in 1-D at δ/h = 1 … 0.001; the companion's 2-D 2.3e-2 → 2.4e-4 at δ = 1e-3 → 1e-5 with h = 0.05). On case 2 the distance saturates at O(κ h_s) and O(h α_ξ/α), recorded, not claimed as a limit. | seed block vs `InterfaceStencil.basis`, both re-centred; `stencil_weights(warp=False)` vs the seed solve | E4.4, E4.5 |
+| H3 | **Seed blocks condition like polynomial blocks** (P5's twin): the 30 × 15 block's condition number column-scaled within a small factor of the constant-α polynomial block's at every δ from 1e-5 h to 8 h, tending to the translated block's as δ → 0; raw, it carries the `α_e^{⌈k/2⌉}` and contrast scaling. | table per δ/h on one real stencil of each case | E4.4 |
+| H4 | **The seed operator is the aware operator at δ = 0 and the direct operator at δ ≫ h** (P4, P7 in 2-D): on case 1 at δ = 0 the seed operator's elliptic and parabolic errors equal port notes §2.5's warped line (1.60e-5 → 5.28e-9, fit 4.77) to rounding; at δ = 0.0025, 0.005, 0.01 the lines are fourth order with a δ-independent constant and lie on the δ = 0 line to a few per cent where δ ≪ h; the elliptic and parabolic lines coincide at `dt = h` as port notes §2.5's do. The elliptic line is a real test (plan §3.2): `sin 2πx v(y)` is outside the 1-D seeds' span, so the error is O(h⁴), not zero. | the flat sweep, every (n, δ) | E4.6 |
+| H5 | **Global solvability does not degrade as δ → 0** (plan R3): the seed rows' diagonal dominance (least and median DDR) and the reduced system's `gmres` / `bicgstab` iteration counts, with and without `spilu` and Appendix B's `P`, are monotone in δ/h between the direct rows' values (δ ≫ h) and the jump-aware rows' (δ = 0: least 0.08, median 0.61 on the 42 / 5 + 30 / 4 operator; bicgstab 98–319 iterations on case 3, gmres 1.1–1.3× the control's), with no breakdown; SuperLU's solve time and residual do not move with δ. If this fails at some δ/h the plan is revised before E4.6 (#36's done-when). | DDR and iteration tables per δ/h ∈ {8, 1, 1/8, 1/64, 0} on case 1 at 10,000 nodes and case 3 at 20,000 | E4.5 |
+| H6 | **Spectra** (P9's twin): the seed operator's eigenvalues at 4900 nodes on case 1 sit where the warped aware operator's do (max Re −7.27, `h² min Re` −13.2, `h² max |Im|` ≤ 0.4, every eigenvalue within ±700 of the origin real), at every δ; the slowest mode is the physical −7.27 and BD4's largest root modulus 0.897 at `dt = h`; no positive eigenvalue with the warp on. With plain Gaussians the crossing rows' complex loop of port notes §2.5 (`h² max |Im|` 1.49) returns and on the ring positive eigenvalues may (E2.9: 50–87 at s = 10¹¹ on 1250–4000 nodes). | `interior_eigenvalues` per operator and δ, the Fig. 5-6 twin with a seeds panel | E4.5 |
+| H7 | **The warp is worth on seeds what it is worth on polynomials** (the E2.4 breadcrumb): seeds with the `φ₀₁`-warp against seeds with plain Gaussians on case 1, 2.3–6.9× at 1250–20,000 nodes at δ = 0 (E2.4's numbers, since H2 makes the two operators equal there) and a comparable factor at δ > 0; the chain-rule right-hand side equals `α_e Δ_{ξη̃} G + α_ξ G_ξ` at the anchor to rounding; at δ = 0 the warp coordinate equals `Warp.apply` bit for bit. | the Fig. 11 twin with two seed lines; a unit test on the cancellation | E4.5, E4.6 |
+| H8 | **The rule needs no δ**: seeded rows are those that see the edge (reach 20δ), the seed operator needs no threshold to be switched off, and the resolved-edge penalty at δ = 0.04 (every row seeded) is ≤ 1.2× the direct operator's error (P4: the seed weights tend to the standard ones as δ/h grows; §1.4's different-space remark bounds the rest). | the δ = 0.04 column of the flat sweep, seeded vs direct | E4.6 |
+| H9 | **Route (a) reproduces the flat numbers** at δ ≥ 0.005 for n ≥ 5000 and shows its geometric floor `κ r²/2` (§3.5's table) at δ = 0.0025 on the coarse sets as a factor ≤ 1.5 above the flat line; the seed rows' residual on the true curved solution (E4.7's probe) converges at the bulk rows' rate; the tangential-α term of case 2's inside piece changes the constant, not the order. Route (a′) is built only if the probe's residual stalls. | the curved sweep against the flat one at equal δ; the residual probe | E4.7 |
+| H10 | **The 2-D knee** (P2's twin, measured first): naive `Dx A Dx + Dy A Dy` on scattered nodes is first order while `h ≳ δ` and fourth order once `h ≲ δ`, elliptic and parabolic; the δ = 0 construction sits on an O(δ) floor (the two references' difference, exact from the separable solves) for `h ≳ 2δ` and grows once the grid resolves the edge (§2.2); what separates resolved from unresolved most sharply is the flux jump across the edge read from the discrete solution. Watch the naive operator's coarse-set growing mode (+847 at 900 nodes, +17.7 at 1250) before quoting a parabolic naive number. | the naive and construction lines of the flat sweep | E4.3, E4.6 |
+| H11 | **The ring**: the seed march through both edges reproduces E2.9's s = 10³ line at δ = 0 (the Fig. 19 twin) and the matched radial residual stays at or below port notes §2.9's worst-stencil line at every s (the fit `1.5e-18 s`, not the single s = 10¹¹ point 1.4e-7), with no `O(s κ² scale)` term; the raw seed block conditions like `s w/h_s` (one column) and O(1) column-scaled; the march floor of §3.3 is the first limit to appear, at the largest s and smallest δ, and the stored width's 8e-8 the second. | `matched_residual` per (s, δ); Fig. 20's twin with a seeds line | E4.8 |
+| H12 | **The comparators** (P10's twin): the disc harmonic and arithmetic means and the widened edge cap the naive operator at second order once `h ≲ δ/4` and are first order while the edge is unresolved; T0 is the worst, sitting on the widened floor; there is no conservative scheme on scattered nodes, so T1-FV has no twin and the strongest low-order comparator is the two-cell disc harmonic mean; the seeds are 3–4 orders below every treatment at δ ≤ h/4 on the parabolic problem. The ranking is quoted in the RMS norm with the max norm beside it. | the comparator tables per δ, elliptic and parabolic | E4.9 |
+
+### 3.8 For the implementer of E4.2–E4.10
+
+Written for whoever picks up the next tickets (Brad expects a different
+model to), so that the decisions above are read as decisions and the
+traps §2 and the port paid for are not paid for twice.
+
+**Checked in scratch, 2026-09-22** (a 190-line script marching the
+44-state chain of §3.2 with `solve_ivp`, not committed; E4.4 reproduces
+every line in `tests/heat2d/test_seeds.py`): constant α returns the 15
+monomials to 1.3e-15; the shift identity holds to 2.2e-16 through a
+tanh edge half a stencil radius from the anchor at δ = h_s/24 (δ = h/8),
+where the largest seed is 10 in stencil units for the 1 : 0.2 contrast;
+the PDE residual `L φ_e − α_e Σ C φ_{e′}` on a 25 × 1601 tensor grid with
+eighth-order differences in η is 2.2e-10 relative, the differences'
+own floor; `α η̃′ = α_e` holds to 1.1e-16 with `η̃ = φ₀₁`, the chain-rule
+form of `L G` on the normal line agrees with `α G_ξξ + α_e η̃′ G_η̃η̃` to
+4.5e-12 and with `α_e Δ G` at the anchor to 1e-10; and on a real 30-node
+stencil of the 2500-node case-1 set at δ = 0 (anchor at y = 0.5896, the
+edge 0.17 radii away, regions 0 and 1) the seed block's columns lie in
+the translated basis's span and conversely to 3e-16, the weights of the
+seed solve equal `stencil_weights(warp=False)` to 5.1e-13 relative, and
+the condition numbers are 176 (E2.3's block), 212 (seeds, raw) and 142
+(seeds, columns scaled). One stencil's march, restarted at all 30 node
+η's: 3.2 ms at δ = 0, 12 ms through the tanh edge. So H1, H2 (its δ = 0
+half) and H7's cancellation are established on one stencil before any
+package code exists, and #35's "milliseconds" is met with a margin.
+
+**Decisions taken here, not to be re-derived.**
+
+1. The smooth medium keeps the `Band` protocol with the jump's
+   `region_index`, `region_piece`, `interfaces` and `taylor`, and adds
+   the blended `alpha` and `gradient` (§3.1). Consequence: naive, the
+   δ = 0 construction and every 2016 driver run on it unchanged, and
+   δ = 0 is the jump bit for bit. Name it as E4.2 likes
+   (`SmoothBand(band, delta)` is the obvious one); give it
+   `normal_profile(j, x, y)` returning the callable `α_n(η)` and the
+   stops for a stencil anchored at `(x, y)` on the normal of interface
+   `j`, in stencil units, and at δ = 0 the piece-per-segment rule.
+2. The seed frame is E2.3's orientation with the origin at the
+   evaluation node, in units of the stencil radius; the march is in
+   `(ξ, η)`; the α_e normalisation stays in the seeds; `cond` is
+   reported raw and column-scaled (§3.2–3.3).
+3. The 44-state chain with the flux variables, DOP853 at the 1-D
+   tolerances, restarted at every node η and at the centres ± 10δ; one
+   march per stencil, the straddling rows batched by shared `y_e` if it
+   ever matters (§3.3).
+4. The right-hand side of the seed block is `2 α_e` on the two
+   quadratics plus `h_s α_ξ` on `ξ`, nothing else (§3.4). Test it against
+   `stencil_weights`'s polynomial right-hand side at δ = 0, where the two
+   must agree.
+5. The Gaussian coordinate is `(ξ, φ₀₁(η))`, its right-hand side the
+   chain-rule form with the cancellation asserted, `warp=False` the plain
+   ablation (§3.4). At δ = 0 assert equality with `Warp.apply`.
+6. Seed stencils are 30 / 4 (§3.4). Seeded rows: the reach-20δ rule on
+   the 30 nodes; the interface group: the same rule on the 42 nodes.
+7. Curved edges take route (a) with the anchor correction, and (a′)
+   before (b) if H9 fails (§3.5). The ring: widths, not radii; both
+   circles as stops of one march (§3.6).
+8. E4.8's δ > 0 evidence is the matched radial residual first; the
+   self-convergence reference is Brad's call (§3.6).
+
+**Traps carried over from §2 and the port, in the order they will bite.**
+
+- *The naive operator's growing mode* on the coarse sets (+847 at 900
+  nodes, +17.7 at 1250; port notes §2.2, §2.5): check
+  `interior_eigenvalues(op, nodes).real.max()` before quoting a
+  parabolic naive number at 1250 nodes (the E2.5 breadcrumb on #34).
+- *`atol`, not `rtol`, trips a stiff integrator* on a reference whose
+  solution is small (E3.2's Radau lesson, §2.1): the separable
+  parabolic reference in `y` inherits E3.2's 1e-9 floor and its
+  20-node / 0.1-split recipe.
+- *The knee cache is blind to operator changes* (§2.2, §2.5): key the
+  2-D operator cache on δ, n, seed, mode, warp and reach, and delete it
+  after any change to the marcher.
+- *`spilu` needs `MMD_AT_PLUS_A`* and *the iterative solvers see the
+  reduced system*, never the identity-row form (port notes §2.8); the
+  E2.8 breadcrumb on #36 has the machinery's names.
+- *On the ring the warp decides the sign of the spectrum* (port notes
+  §2.7, §2.9): never run the seeds plain on case 3 without looking at
+  `max Re λ`.
+- *E1.2's and E2.3's rows differ from the exact chain at O(h α′/α) on a
+  smoothly varying piece* (§1.4, §2.5): on case 2 compare the seeds
+  with the reference, not with E2.3, and record the distance.
+- *The march floor at δ ≲ h/40* (§2.3) and *the stored ring width at
+  8e-8* (port notes §2.9) are the two floors of E4.8; name which one a
+  number sits on.
+- *A blind read of a reference floors every curve at 1e-4* (port notes
+  §2.6): any reference on another node set goes through the
+  interface-aware resampling, and at δ > 0 through a seed-aware one
+  (`interpolation_weights` with the seed block: the same system with
+  the identity on the right, as E2.6 built for the jump).
+- *Every 2-D error is the RMS over all nodes, Dirichlet rows included*,
+  `h = 1/round(0.95 √N)`, orders per halving of h (port notes §2.10);
+  the 1-D study's `‖e‖₂/‖u‖₂` is a different norm and the manuscript
+  must not mix them in one table.
+
+**Where the pieces go** (the plan's module names, CLAUDE.md's layout).
+
+| Piece | Module | Ticket |
+| --- | --- | --- |
+| the smooth band, `normal_profile`, the Chebyshev separable references in `y` (elliptic and parabolic), `dirichlet_boundary` from the reference | `heat2d/domain.py`, `heat2d/exact.py` | E4.2 (#33) |
+| the naive sweep, `--delta`, the knee table, the flux-jump diagnostic | `scripts/heat2d_stiff.py --mode naive` | E4.3 (#34) |
+| the chain, `seed_profiles` (one stencil), `seed_basis` (values and the anchor right-hand side), the shift-identity and residual tests | `heat2d/seeds.py`, `tests/heat2d/test_seeds.py` | E4.4 (#35) |
+| `seed_weights`, the `φ₀₁` warp, `build_operators(mode="seeds")` and the seeded-row rule, DDR / iteration / spectrum tables | `heat2d/seeds.py`, `heat2d/operators.py`, `scripts/heat2d_stiff_eigenvalues.py` | E4.5 (#36) |
+| the flat sweep, cached operators, the rule and the resolved-edge penalty | `scripts/heat2d_stiff.py --mode seeds` | E4.6 (#37) |
+| route (a) profiles by Newton on the sine curves, the product-grid reference for δ > 0, `--amplitude` | `heat2d/seeds.py`, `heat2d/exact.py`, the driver | E4.7 (#38) |
+| the smooth ring, widths from the outer radius, `matched_residual` through smooth α, the s-sweep with seeds, `--ring` | `heat2d/domain.py`, `scripts/heat2d_extremes.py` | E4.8 (#39) |
+| disc harmonic / arithmetic means (radius h/2, h), the widened edge, band-limited α if E5.2 keeps it | `heat2d/treatments.py` | E4.9 (#40) |
+| the figures, §4–5 of this note, `--data-dir` and `ResultsCache` as in `heat1d_stiff.py` | `scripts/heat2d_stiff.py`, `docs/figures/` | E4.10 (#41) |
+
+Every driver default runs in seconds (plan D7); the sweeps and the
+references sit behind flags and cache under `outputs/`, and the notes
+record the run times as §2 did.
+
+### 3.9 References for §3
+
+Those of §1.10, plus the companion's 2-D sections (its `docs/stiff-
+features.md` §4.1–4.2, §5.3, §5.6; cited as the arXiv preprint in the
+manuscript, never as files, plan D2), dissertation §5.3 and EABE
+§2.2.3–2.2.4 for the frame, the continuity matrices and the warp, and,
+for routes (b) and (c) of §3.5, the multiscale FEM of Hou & Wu and the
+harmonic coordinates of Owhadi & Zhang named in plan R1; those two
+enter `paper/references.bib` only through E5.2's verification, and
+nothing in §3 claims novelty over them.
