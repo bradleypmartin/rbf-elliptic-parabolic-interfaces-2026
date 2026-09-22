@@ -214,3 +214,30 @@ def test_the_naive_baseline_at_the_two_smallest_counts(tmp_path, capsys):
     again = main(argv)
     assert time.perf_counter() - t0 < 10
     assert again["knee"] == tables["knee"]
+
+
+def test_the_stencil_study_at_1250_nodes(capsys):
+    # E4.4 (#35), stiff note §4.3: H1–H3 and the march's cost on the smallest
+    # set; the 2500-node numbers the notes quote are the default run's.
+    tables = main(["--mode", "stencils", "--stencil-n", "1250"])["stencils"]
+    out = capsys.readouterr().out
+    assert "H1, the march is the chain" in out and "stencil study" in out
+    for r in tables["chain"]:
+        assert r["monomials"] < 5e-15 and r["shift"] < 5e-15 and r["warp"] == 0.0
+        assert r["one_d"] < 5e-13
+        assert r["ratio"] == 0.0 or r["residual"] < 2e-10
+    case, thin = tables["jump_limit"]
+    assert case["stencils"] > 300 and case["three_region"] == 0
+    assert thin["three_region"] > 100
+    for r in (case, thin):
+        assert r["span"] < 1e-13 and r["weights"] < 1e-11 and r["warp"] < 1e-14
+    for anchor in {r["anchor"] for r in tables["ladder"]}:
+        rows = [r for r in tables["ladder"] if r["anchor"] == anchor]
+        spans = np.array([r["span"] for r in rows])  # δ/h from 8 down, then 0
+        assert np.all(np.diff(spans[:-1]) < 0) and spans[-1] < 1e-13
+        assert spans[-4] / spans[-2] == pytest.approx(100.0, rel=0.02)
+        scaled = np.array([r["scaled"] for r in rows])
+        monomial = rows[0]["monomial"]
+        assert np.all((scaled > monomial / 3) & (scaled < 3 * monomial))
+    for r in tables["timing"]:
+        assert r["median_ms"] < 30.0

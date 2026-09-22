@@ -1,4 +1,4 @@
-"""E4 (#6): the 2-D stiff-edge study. E4.2: the references; E4.3: the naive baseline.
+"""E4 (#6), the 2-D stiff-edge study: the references, the naive knee, the seeds.
 
 The medium is case 1's band with tanh edges of width δ in the signed normal
 distance (``SmoothBand(case1().material, δ)``, stiff note §3.1), which on
@@ -52,12 +52,32 @@ at ``dt = h``. Figure: ``heat2d_stiff_knee.png``. The errors and diagnostics
 are cached in ``heat2d_stiff_knee.json``, keyed by δ, count, seed, operator
 and problem, so an extended ``--counts`` reruns only the new counts.
 
-    uv run python scripts/heat2d_stiff.py              # 2 min cold, < 1 s cached
+``--mode stencils`` (E4.4, #35; stiff note §3.7 H1–H3, §4.3) is the scalar
+seeds on real stencils of the ``--stencil-n`` case-1 set (2500 nodes, seed
+0). H1 on one stencil below the band at δ = 0, h/8, h and 8h: the seeds on
+a band of equal pieces against the monomials, the shift identity
+``g_j^{(a,b)} = C(a, j) g_0^{(a−j,b)}``, the residual ``L φ_e − α_e Σ C φ_e′``
+on a 25 × 801 grid by twelfth-order differences with alpha read from the
+medium (nothing shared with the march), the seeds of ``ηᵇ`` against E3.4's
+1-D march on the profile in ``y``, and ``ψ₀₁ ≡ α_e``, the warp's
+cancellation. H2 at δ = 0 over every crossing stencil of case 1 and of a
+band one spacing thick (three regions, translated twice by E2.3): the
+principal angle between the seed span and the translated basis's, the seed
+weights with E2.3's plain Gaussians against ``stencil_weights(warp=False)``,
+and ``φ₀₁`` against E2.4's warped normal coordinate. Then per δ/h from 8 to
+1e-5 on the four innermost-row anchors: the same distances (H2's δ > 0
+half) and the seed block's condition number raw and column-scaled, beside
+the monomial and translated blocks' (H3). Last, ``seed_basis``'s cost over
+every crossing stencil per δ, with E2.3's for scale (#35's acceptance
+line). About 20 s.
+
+    uv run python scripts/heat2d_stiff.py              # 2.5 min cold, 21 s cached
     uv run python scripts/heat2d_stiff.py --mode naive \
         --counts 1250 2500 5000 10000 20000 40000 80000 160000   # 58 min once
     uv run python scripts/heat2d_stiff.py --mode naive --seed 1 \
         --counts 1250 2500 5000 10000 20000 --spectrum-counts   # the scatter
     uv run python scripts/heat2d_stiff.py --mode references --deltas 0 0.001 0.0005
+    uv run python scripts/heat2d_stiff.py --mode stencils       # 21 s
 """
 
 from __future__ import annotations
@@ -66,6 +86,8 @@ import argparse
 import json
 import time
 from collections.abc import Sequence
+from dataclasses import replace
+from math import comb
 from pathlib import Path
 
 import matplotlib
@@ -74,31 +96,49 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
+from scipy.linalg import subspace_angles  # noqa: E402
 
 from heat_interfaces.fd_weights import fornberg_weights  # noqa: E402
 from heat_interfaces.heat1d.march import bd4_amplification  # noqa: E402
+from heat_interfaces.heat1d.stiff import seed_profiles as seed_profiles_1d  # noqa: E402
 from heat_interfaces.heat2d import (  # noqa: E402
     BOUNDARY,
+    INTERFACE_KIND,
     PRODUCT_ORDERING,
     REFERENCE_MAX_WIDTH,
     REFERENCE_N_CHEB,
     ROW_OFFSETS,
+    Band,
     Constant2D,
+    FlatLine,
     NodeSet,
     Row,
+    SeedBasis,
     SmoothBand,
+    augmented_solve,
+    block_condition,
     build_node_set,
     build_stencils,
     case1,
     case1_exact,
     case1_reference,
     control_exact,
+    gaussian_derivative,
     interface_aware_operator,
+    interface_crossings,
+    interface_stencil,
     interior_eigenvalues,
+    knn,
     march_parabolic,
     naive_operator,
+    polynomial_block,
+    polynomial_exponents,
+    profile_medium,
     rms_error,
+    seed_basis,
+    seed_profiles,
     solve_equilibrium,
+    stencil_weights,
 )
 from heat_interfaces.plotting import CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
 
@@ -150,6 +190,28 @@ KNEE_CACHE_META = {
 
 MARKERS = ("o", "s", "^", "D")
 """One marker per δ > 0, in ``STUDY_DELTAS`` order."""
+
+STENCIL_N = 2500
+"""The node set of the one-stencil study (E4.4): ``h = 1/48``, 576 crossing stencils."""
+
+STENCIL_ANCHORS = (0.5896, 0.6104, 0.7896, 0.8104)
+"""The innermost straddling rows at 2500 nodes, at ``x = 0.5``: below the band,
+inside it at either line, above it."""
+
+CHAIN_RATIOS = (1.0 / 8.0, 1.0, 8.0)
+"""δ/h of #35's checks: an unresolved, a marginal and a resolved edge."""
+
+LADDER_RATIOS = (8.0, 1.0, 0.5, 1.0 / 8.0, 1.0 / 64.0, 1e-3, 1e-4, 1e-5)
+"""δ/h of the jump-limit and conditioning ladders (P4 and P5's in 1-D)."""
+
+RESIDUAL_GRID = (25, 801)
+"""``(ξ, η)`` points of H1's residual grid on ``[−1, 1]²``."""
+
+RESIDUAL_HALF = 6
+"""Half-width of the residual's centred differences: twelfth order."""
+
+THIN = Band(FlatLine(0.6), FlatLine(0.62), Constant2D(0.2), Constant2D(1.0))
+"""A band one spacing thick at 2500 nodes: its stencils reach all three regions."""
 
 
 # --- E4.2: the references ---------------------------------------------------------
@@ -788,9 +850,311 @@ def run_naive(args) -> dict:
     return tables
 
 
+# --- E4.4: the scalar seeds on one stencil ----------------------------------------
+
+
+EXPONENTS = [tuple(int(v) for v in e) for e in polynomial_exponents(4)]
+
+
+def anchor_stencil(nodes: NodeSet, y: float, x: float = 0.5) -> np.ndarray:
+    """The 30 nearest nodes of the node nearest ``(x, y)``, that node first."""
+    target = int(np.argmin((nodes.x - x) ** 2 + (nodes.y - y) ** 2))
+    idx, _ = knn(nodes.xy, 30, query=nodes.xy[target : target + 1])
+    return nodes.xy[idx[0]]
+
+
+def crossing_stencils(nodes: NodeSet, material: Band) -> np.ndarray:
+    """``(m, 30)`` node indices of the interface group's stencils that cross (E2.3)."""
+    domain = replace(case1(), material=material)
+    stencils = build_stencils(nodes, domain, interface=BOUNDARY)
+    (group,) = [g for g in stencils.groups if g.kind == INTERFACE_KIND]
+    return group.index[interface_crossings(nodes, material, group.index)]
+
+
+def span_distance(p: np.ndarray, s: np.ndarray) -> float:
+    """The sine of the largest principal angle between two column spans."""
+    return float(np.sin(subspace_angles(p, s).max()))
+
+
+def seed_weights_with(sb: SeedBasis, st) -> np.ndarray:
+    """The seed rows' weights with E2.3's plain Gaussian block of ``st``."""
+    b_rbf = sb.alpha_e * gaussian_derivative(st.xi, st.eta, st.eps, "lap")
+    w = augmented_solve(
+        st.gaussian_block()[None],
+        sb.block[None],
+        b_rbf[None, :, None],
+        sb.rhs[None, :, None],
+    )
+    return w[0, :, 0] / sb.scale**2
+
+
+def _centred(f: np.ndarray, step: float, axis: int) -> np.ndarray:
+    """Centred d/dx of order ``2 RESIDUAL_HALF`` along ``axis``; NaN at the ends."""
+    half = RESIDUAL_HALF
+    w = fornberg_weights(0.0, step * np.arange(-half, half + 1), 1)[1]
+    f = np.moveaxis(f, axis, -1)
+    m = f.shape[-1]
+    out = np.full_like(f, np.nan)
+    out[..., half : m - half] = sum(
+        wk * f[..., k : m - 2 * half + k] for k, wk in enumerate(w)
+    )
+    return np.moveaxis(out, -1, axis)
+
+
+def chain_residual(sb: SeedBasis, medium: SmoothBand) -> float:
+    """H1: ``max |L φ_e − α_e Σ C φ_e′|`` on ``RESIDUAL_GRID``, relative per seed.
+
+    Differences in both directions with alpha from the medium at the physical
+    points: nothing but the seed values is shared with the march.
+    """
+    n_xi, n_eta = RESIDUAL_GRID
+    xi, eta = np.linspace(-1.0, 1.0, n_xi), np.linspace(-1.0, 1.0, n_eta)
+    phi = seed_profiles(sb.profile, eta, alpha_e=sb.alpha_e).values(xi[:, None])
+    f = sb.frame
+    c, s = np.cos(f.angle), np.sin(f.angle)
+    x = f.x0 + f.scale * (c * xi[:, None] - s * eta[None, :])
+    y = f.y0 + f.scale * (s * xi[:, None] + c * eta[None, :])
+    alpha = medium.alpha(x, y)
+    worst = 0.0
+    for k, (a, b) in enumerate(EXPONENTS):
+        lf = sum(
+            _centred(alpha * _centred(phi[..., k], d[1] - d[0], ax), d[1] - d[0], ax)
+            for ax, d in ((0, xi), (1, eta))
+        )
+        rhs = np.zeros_like(lf)
+        if a >= 2:
+            rhs += a * (a - 1) * phi[..., EXPONENTS.index((a - 2, b))]
+        if b >= 2:
+            rhs += b * (b - 1) * phi[..., EXPONENTS.index((a, b - 2))]
+        rhs *= sb.alpha_e
+        err = np.nanmax(np.abs(lf - rhs)) / max(np.abs(rhs).max(), 1.0)
+        worst = max(worst, float(err))
+    return worst
+
+
+def chain_rows(nodes: NodeSet, h: float, xy: np.ndarray) -> list[dict]:
+    """H1 on one stencil per δ/h: monomials, shift identity, residual, 1-D, warp."""
+    band = case1().material
+    level = Band(band.lower, band.upper, Constant2D(0.37), Constant2D(0.37))
+    rows = []
+    for ratio in (0.0, *CHAIN_RATIOS):
+        medium = SmoothBand(band, ratio * h)
+        sb = seed_basis(xy, medium)
+        flat = seed_basis(xy, SmoothBand(level, ratio * h))
+        monomials = np.abs(flat.block - polynomial_block(flat.xi, flat.eta, 4)).max()
+        eta = np.union1d(sb.eta, np.linspace(-1.0, 1.0, 41))
+        p = seed_profiles(sb.profile, eta, alpha_e=sb.alpha_e)
+        ch = p.chain
+        shift = (
+            max(
+                np.abs(
+                    p.g[ch.index(a, b, j)] - comb(a, j) * p.g[ch.index(a - j, b, 0)]
+                ).max()
+                for a, b, j in ch.levels
+            )
+            / np.abs(p.g).max()
+        )
+        warp = np.abs(p.psi[ch.index(0, 1, 0)] - sb.alpha_e).max() / sb.alpha_e
+        u = np.unique(sb.eta)
+        one = seed_profiles_1d([sb.frame.y0], [sb.scale], u, profile_medium(medium), 5)
+        two = seed_profiles(sb.profile, u, alpha_e=sb.alpha_e).values(np.zeros(u.size))
+        cols = [EXPONENTS.index((0, b)) for b in range(5)]
+        rows.append(
+            {
+                "ratio": ratio,
+                "monomials": float(monomials),
+                "shift": float(shift),
+                "residual": chain_residual(sb, medium) if ratio > 0 else float("nan"),
+                "one_d": float(
+                    np.abs(one[0].T - two[:, cols]).max() / np.abs(one).max()
+                ),
+                "warp": float(warp),
+                "largest": float(np.abs(p.g).max()),
+            }
+        )
+    return rows
+
+
+def jump_limit_rows(nodes: NodeSet) -> list[dict]:
+    """H2 at δ = 0 over every crossing stencil, case 1 and the thin band."""
+    rows = []
+    for name, band in (("case 1", case1().material), ("thin band", THIN)):
+        index = crossing_stencils(nodes, band)
+        span, weights, warp, regions = 0.0, 0.0, 0.0, 0
+        for idx in index:
+            xy = nodes.xy[idx]
+            sb = seed_basis(xy, band)
+            plain = interface_stencil(xy, band, 4, warp=False)
+            warped = interface_stencil(xy, band, 4, warp=True)
+            span = max(span, span_distance(plain.polynomial_block(), sb.block))
+            w_ref = stencil_weights(xy, band, 4, warp=False)
+            w = seed_weights_with(sb, plain)
+            weights = max(weights, float(np.abs(w - w_ref).max() / np.abs(w_ref).max()))
+            warp = max(warp, float(np.abs(sb.warp - warped.eta).max()))
+            regions += int(np.ptp(plain.region) == 2)
+        rows.append(
+            {
+                "material": name,
+                "stencils": len(index),
+                "three_region": regions,
+                "span": span,
+                "weights": weights,
+                "warp": warp,
+            }
+        )
+    return rows
+
+
+def ladder_rows(nodes: NodeSet, h: float) -> list[dict]:
+    """H2's δ > 0 half and H3, per anchor and δ/h: distance to E2.3, conditioning."""
+    band = case1().material
+    rows = []
+    for y in STENCIL_ANCHORS:
+        xy = anchor_stencil(nodes, y)
+        plain = interface_stencil(xy, band, 4, warp=False)
+        p = plain.polynomial_block()
+        w_ref = stencil_weights(xy, band, 4, warp=False)
+        jump = seed_basis(xy, band)
+        monomial = float(np.linalg.cond(polynomial_block(jump.xi, jump.eta, 4)))
+        translated = float(np.linalg.cond(p))
+        for ratio in (*LADDER_RATIOS, 0.0):
+            sb = jump if ratio == 0.0 else seed_basis(xy, SmoothBand(band, ratio * h))
+            w = seed_weights_with(sb, plain)
+            raw, scaled = block_condition(sb.block)
+            rows.append(
+                {
+                    "anchor": float(xy[0, 1]),
+                    "ratio": ratio,
+                    "span": span_distance(p, sb.block),
+                    "weights": float(np.abs(w - w_ref).max() / np.abs(w_ref).max()),
+                    "raw": raw,
+                    "scaled": scaled,
+                    "monomial": monomial,
+                    "translated": translated,
+                }
+            )
+    return rows
+
+
+def timing_rows(nodes: NodeSet, h: float) -> list[dict]:
+    """#35's acceptance line: one stencil's march over every crossing stencil."""
+    band = case1().material
+    index = crossing_stencils(nodes, band)
+    rows = []
+    t0 = time.perf_counter()
+    for idx in index:
+        stencil_weights(nodes.xy[idx], band, 4, warp=False)
+    e23 = (time.perf_counter() - t0) / len(index)
+    for ratio in (0.0, *CHAIN_RATIOS):
+        medium = SmoothBand(band, ratio * h)
+        times = []
+        for idx in index:
+            t = time.perf_counter()
+            seed_basis(nodes.xy[idx], medium)
+            times.append(time.perf_counter() - t)
+        times = 1e3 * np.array(times)
+        rows.append(
+            {
+                "ratio": ratio,
+                "stencils": len(index),
+                "median_ms": float(np.median(times)),
+                "max_ms": float(times.max()),
+                "total_s": float(times.sum() / 1e3),
+                "e23_ms": 1e3 * e23,
+            }
+        )
+    return rows
+
+
+def print_stencil_study(tables: dict, n: int, h: float) -> None:
+    print(
+        f"\nthe scalar seeds on one stencil (E4.4, H1–H3): case 1, {n} nodes, "
+        f"h = {h:.5f}, 30 / 4 stencils"
+    )
+    print(
+        "\nH1, the march is the chain (anchor y = "
+        f"{tables['chain_anchor']:.4f}): monomials = |S − ξᵃηᵇ| with α ≡ 0.37;"
+        " shift = the identity g_j = C(a,j) g_0 of the lower seed, relative;"
+        f" residual = L φ − α_e Σ C φ′ on {RESIDUAL_GRID[0]} × {RESIDUAL_GRID[1]},"
+        f" order-{2 * RESIDUAL_HALF} differences; 1-D = the seeds of ηᵇ against"
+        " E3.4's march on the y-profile; warp = |ψ₀₁ − α_e| / α_e"
+    )
+    print("    δ/h  monomials      shift   residual       1-D       warp  max |g|")
+    for r in tables["chain"]:
+        print(
+            f"  {r['ratio']:5g}  {r['monomials']:9.1e}  {r['shift']:9.1e}"
+            f"  {r['residual']:9.1e}  {r['one_d']:8.1e}  {r['warp']:9.1e}"
+            f"  {r['largest']:7.3g}"
+        )
+    print(
+        "\nH2 at δ = 0, every crossing stencil: span = sin of the largest principal"
+        " angle between the seed block's span and E2.3's translated block's;"
+        " weights = the seed solve with E2.3's plain Gaussians against"
+        " stencil_weights(warp=False), max relative; warp ="
+        " |φ₀₁ − E2.4's warped η| at the nodes"
+    )
+    print("  material    stencils  three-region      span   weights      warp")
+    for r in tables["jump_limit"]:
+        print(
+            f"  {r['material']:<10}  {r['stencils']:8d}  {r['three_region']:12d}"
+            f"  {r['span']:8.1e}  {r['weights']:8.1e}  {r['warp']:8.1e}"
+        )
+    print(
+        "\nH2 for δ > 0 and H3: distance to E2.3 and the seed block's condition"
+        " number (raw / columns scaled) per anchor; monomial and translated are the"
+        " constant-α and E2.3 blocks on the same nodes"
+    )
+    by_anchor: dict[float, list[dict]] = {}
+    for r in tables["ladder"]:
+        by_anchor.setdefault(r["anchor"], []).append(r)
+    for anchor, rows in by_anchor.items():
+        print(
+            f"  anchor y = {anchor:.4f}: cond monomial {rows[0]['monomial']:.1f},"
+            f" translated {rows[0]['translated']:.1f}"
+        )
+        print("       δ/h      span   weights    cond raw  cond scaled")
+        for r in rows:
+            print(
+                f"    {r['ratio']:6.3g}  {r['span']:8.2e}  {r['weights']:8.2e}"
+                f"  {r['raw']:10.1f}  {r['scaled']:11.1f}"
+            )
+    print(
+        "\none stencil's seed_basis (march, block, right-hand side) over every"
+        " crossing stencil; E2.3's stencil_weights for scale"
+    )
+    print("    δ/h  stencils  median ms  max ms  total s  E2.3 ms")
+    for r in tables["timing"]:
+        print(
+            f"  {r['ratio']:5g}  {r['stencils']:8d}  {r['median_ms']:9.2f}"
+            f"  {r['max_ms']:6.2f}  {r['total_s']:7.2f}  {r['e23_ms']:7.2f}"
+        )
+
+
+def run_stencils(args) -> dict:
+    """E4.4's tables: H1–H3 and the march's cost on the ``--stencil-n`` set."""
+    t0 = time.perf_counter()
+    nodes = build_node_set(
+        case1(), args.stencil_n, seed=args.seed, iterations=args.iterations
+    )
+    h = 1.0 / round(0.95 * np.sqrt(args.stencil_n))
+    xy = anchor_stencil(nodes, STENCIL_ANCHORS[0])
+    tables = {
+        "chain_anchor": float(xy[0, 1]),
+        "chain": chain_rows(nodes, h, xy),
+        "jump_limit": jump_limit_rows(nodes),
+        "ladder": ladder_rows(nodes, h),
+        "timing": timing_rows(nodes, h),
+    }
+    print_stencil_study(tables, args.stencil_n, h)
+    print(f"\nstencil study {time.perf_counter() - t0:.1f} s")
+    return {"stencils": tables}
+
+
 def main(argv: Sequence[str] | None = None) -> dict:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--mode", choices=("all", "references", "naive"), default="all")
+    parser.add_argument(
+        "--mode", choices=("all", "references", "naive", "stencils"), default="all"
+    )
     parser.add_argument("--deltas", type=float, nargs="+", default=list(STUDY_DELTAS))
     parser.add_argument("--growth", type=float, nargs="+", default=list(GROWTH))
     parser.add_argument("--counts", type=int, nargs="+", default=list(KNEE_COUNTS))
@@ -804,9 +1168,10 @@ def main(argv: Sequence[str] | None = None) -> dict:
         default=list(SPECTRUM_COUNTS),
         help="counts of the growing-mode check (none skips it)",
     )
+    parser.add_argument("--stencil-n", type=int, default=STENCIL_N)
     parser.add_argument("--outputs", type=Path, default=Path("outputs"))
     args = parser.parse_args(argv)
-    if args.mode != "references":
+    if args.mode in ("all", "naive"):
         if any(n < 300 for n in args.counts) or list(args.counts) != sorted(
             set(args.counts)
         ):
@@ -820,6 +1185,8 @@ def main(argv: Sequence[str] | None = None) -> dict:
         print_references(tables["references"])
     if args.mode in ("all", "naive"):
         tables.update(run_naive(args))
+    if args.mode in ("all", "stencils"):
+        tables.update(run_stencils(args))
     return tables
 
 

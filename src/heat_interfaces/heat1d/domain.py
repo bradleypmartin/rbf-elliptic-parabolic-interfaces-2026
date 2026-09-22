@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from math import factorial
+from math import exp, factorial
 from typing import Literal, Protocol
 
 import numpy as np
@@ -358,6 +358,19 @@ def edge_blend(
     s, t = _logistic_pair(z)
     near = z >= 0.0
     return np.where(near, b + t * (a - b), a + s * (b - a)), 2.0 * s * t
+
+
+def edge_value(a: float, b: float, z: float) -> float:
+    """``edge_blend``'s value at one point, in floats.
+
+    The same steps (the small logistic share from the near side), with
+    ``math.exp`` for NumPy's: for callers that evaluate one point at a time,
+    such as the 2-D seed march (``heat2d.seeds``), which reads alpha a
+    thousand times per stencil and pays NumPy's per-call cost on each.
+    """
+    e = exp(-2.0 * abs(z))
+    small = e / (1.0 + e)
+    return b + small * (a - b) if z >= 0.0 else a + small * (b - a)
 
 
 def _merge_cuts(cuts: np.ndarray, gap: float) -> np.ndarray:

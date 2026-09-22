@@ -8,8 +8,9 @@ fourth order through it because their polynomial basis is replaced by
 source of truth. §1 is the formulation (E3.1, #26); §2 holds the 1-D
 results (E3.2, #27, to E3.6, #31, which closes it in §2.5); §3 is the
 2-D design (E4.1, #32) and §4–5 hold the 2-D results, from the smooth
-flat band and its references (E4.2, #33, §4.1) and the naive baseline
-through it (E4.3, #34, §4.2) to E4.10 (#41). The port
+flat band and its references (E4.2, #33, §4.1), the naive baseline
+through it (E4.3, #34, §4.2) and the scalar seeds on one stencil (E4.4,
+#35, §4.3) to E4.10 (#41). The port
 of the 2016 methods this builds on is in
 `docs/port-notes.md`.
 
@@ -2807,3 +2808,222 @@ mode is on every naive operator and on no construction; and a second
 run is served from the cache in under 10 s. The E4.2 reference test now
 runs `--mode references`. `tests/heat2d/test_solve.py` and
 `test_march.py` pin the `permc_spec` pass-through.
+
+### 4.3 The scalar seeds on one stencil (E4.4, #35)
+
+`heat2d/seeds.py` is §3.2–3.4's construction up to the saddle-point solve,
+which is E4.5's. `scripts/heat2d_stiff.py --mode stencils` prints every
+table below in 21 s (the default `--mode all` runs it after §4.1–4.2). All
+numbers are on the 2500-node case-1 set (seed 0, `h = 1/48`, 576 crossing
+30 / 4 stencils), 2026-09-22.
+
+**What is built.** `chain(degree)` holds §3.2's bookkeeping: 22 levels
+`(a, b, j)` at degree 4, seeds in `polynomial_exponents` order, each seed's
+levels from `j = a` down; the right-hand side of the first-order system is
+two constant 22 × 22 matrices, `source` (the lower seeds at the same
+level, per unit `α_e`) and `lower` (the seed's own level `j + 2`, per unit
+`α_n`), so one evaluation is two small matrix-vector products.
+`seed_profiles(profile, eta)` marches the 44 states along a
+`NormalProfile` to the points `eta`, both ways from the anchor, DOP853 at
+`SEED_RTOL`, `SEED_ATOL`, one `solve_ivp` per segment between consecutive
+targets (the points, exact, and the profile's stops merged with them by
+`heat1d.stiff.march_targets`), alpha on each segment from the profile's
+piece for it, and returns `SeedProfiles`: `g`, `ψ` at the points and
+`values(ξ)`, the 15 seeds at any `ξ` broadcast against the points (E4.8's
+probes read `ψ`). `seed_basis(xy, medium)` makes one stencil's
+`SeedBasis`: the frame, the nodes' `(ξ, η)`, the profile, the `(30, 15)`
+block `S`, the right-hand side and `warp`, `φ₀₁` at the nodes.
+`block_condition` gives `cond S` raw and column-scaled. Decisions:
+
+- *The frame* has its origin at the anchor and E2.3's orientation at the
+  foot point of the nearest interface (`nearest_interface`, by signed
+  normal distance), built from the profile's normal as `frame_at` builds
+  it; `h_s` is the largest distance from the anchor, E2.3's scale. On
+  flat lines every choice of interface gives the same frame.
+- *`α_e` is the medium's value at the anchor* (the owner's at a jump, as
+  E2.3 and the 1-D march take it), not `NormalProfile.alpha_e`: the two
+  differ only for an anchor exactly on the upper line at δ = 0, where the
+  profile's segment rule reads the piece above. A jump `Band` is marched
+  as `SmoothBand(band, 0)`, the same block bit for bit.
+- *Alpha is read in floats.* The march evaluates alpha about a thousand
+  times per stencil through an edge, and `NormalProfile.alpha` on one
+  point costs 60 µs there through the band's array code (4 µs at δ = 0,
+  where a segment's piece is a constant), which made a stencil 64 ms. So
+  `NormalProfile.alpha_function(k)` returns `η ↦ alpha(η, k)` as a float
+  function: a constant piece's value, the band's blend through the new
+  `SmoothBand.alpha_at` (the same steps as `_blend`, value only, with the
+  new `heat1d.domain.edge_value` for `edge_blend`), any other piece
+  through its own `alpha`. It is 0.5 µs a call (2.9 µs with the sine
+  piece), a stencil is 7 ms, and it equals the array path bit for bit on
+  every point tested (1601 per segment, both pieces, δ = 0 and the three
+  study widths; the tests allow 2e-16).
+- *`heat1d.stiff._targets` is public* as `march_targets`, the one merge
+  rule for both marches; a stop within `MERGE_TOL` of the anchor is not a
+  target.
+- *The right-hand side* is `2 α_e` on the seeds of `ξ²` and `η²` and
+  `h_s α_ξ` on the seed of `ξ`, `α_ξ` the medium's gradient at the anchor
+  rotated into the frame (`Frame.rotate_in`); nothing else (§3.8,
+  decision 4).
+
+**H1, the march is the chain** (one stencil, anchor `y = 0.5896`, the
+edge 0.17 stencil radii above it): `monomials` is `|S − ξᵃηᵇ|` on a band
+of equal pieces (α ≡ 0.37), `shift` the identity `g_j^{(a,b)} =
+C(a, j) g₀^{(a−j,b)}` relative to the largest `g`, `residual` is
+`L φ_e − α_e Σ C φ_e′` on 25 × 801 points of `[−1, 1]²` by twelfth-order
+differences in both directions with alpha from `medium.alpha` at the
+physical points, relative per seed, `1-D` the seeds of `ηᵇ` against
+E3.4's `heat1d.stiff.seed_profiles` on the profile in `y`
+(`profile_medium`), relative, and `warp` is `|ψ₀₁ − α_e| / α_e`.
+
+| δ/h | monomials | shift | residual | 1-D | warp | max \|g\| |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 1.4e-15 | 1.6e-16 | – | 8.3e-16 | 0 | 22.2 |
+| 1/8 | 1.4e-15 | 5.0e-16 | 8.5e-11 | 7.4e-14 | 0 | 21.1 |
+| 1 | 1.4e-15 | 2.3e-16 | 4.2e-11 | 9.8e-15 | 0 | 7.71 |
+| 8 | 1.4e-15 | 6.8e-16 | 4.1e-11 | 6.5e-16 | 0 | 1.22 |
+
+The residual is the differences' floor, not the march's: with the
+eighth-order differences of the E4.1 scratch it is 2.5e-8 at h/8 on 801
+points (their truncation across an edge 17 grid steps wide) and 2.5e-10
+on 1601 points, where the round-off of two differentiations takes over at
+every δ and order (1.5–2.5e-10); twelfth order on 801 points is below
+both, and
+§3.7's "≤ 1e-10 on 25 × 801" holds with it. The 2-D and 1-D marches agree
+to 7e-14 through the unresolved edge, not to the bit: the 44 states and
+the 1-D march's 5 are different vectors under DOP853's step control.
+`ψ₀₁` is `α_e` exactly, since that state's right-hand side is identically
+zero, so `α η̃′ ≡ α_e` (the warp's cancellation, §3.4) holds to the bit
+along the whole line.
+
+*The right-hand side is the true operator at the anchor.* On a flat band
+with the sine piece inside (`α_ξ ≠ 0`), `L φ_e` at the anchor by
+twelfth-order differences on a 25 × 25 patch equals `rhs` to below 1e-11
+for all 15 seeds at δ ∈ {h/8, h, 8h}, anchors inside and outside the
+band; inside, `h_s α_ξ` is 0.009–0.02 (`tests/heat2d/test_seeds.py`).
+Away from the anchor the seeds solve the frozen profile's equation, as
+§3.5 says.
+
+**H2 at δ = 0, every crossing stencil.** `span` is the sine of the
+largest principal angle between the seed block's span and E2.3's
+translated block's, `weights` the seed solve with E2.3's plain Gaussian
+block against `stencil_weights(warp=False)`, max relative, and `warp` is
+`|φ₀₁ − η̃|` at the nodes against E2.4's warped normal coordinate
+(`interface_stencil(warp=True).eta`). The thin band is `0.6 ≤ y ≤ 0.62`,
+one spacing thick, on the same nodes.
+
+| material | stencils | three-region | span | weights | warp |
+| --- | --- | --- | --- | --- | --- |
+| case 1 | 576 | 0 | 4.9e-14 | 1.6e-12 | 1.8e-15 |
+| thin band | 333 | 240 | 1.7e-14 | 6.0e-13 | 1.3e-15 |
+
+So at δ = 0 the seed rows *are* E2.3's rows, three-region stencils
+included (E2.3 translates twice with a frame change between the lines;
+the seeds march once through both), and `φ₀₁` is `Warp.apply`: E4.5's
+warped seed rows at δ = 0 need nothing more to reproduce port notes
+§2.4's line.
+
+**H2 for δ > 0, and H3.** Per anchor (the four innermost-row nodes at
+`x = 0.5`: below the band, inside it at each line, above it), the same
+two distances and `cond S` raw and column-scaled, beside the monomial
+block's on the same nodes and E2.3's translated block's. The anchor below
+the band, in full:
+
+| δ/h | span | weights | cond raw | cond scaled |
+| --- | --- | --- | --- | --- |
+| 8 | 0.782 | 0.549 | 54.6 | 28.8 |
+| 1 | 0.301 | 0.752 | 97.9 | 80.9 |
+| 1/2 | 0.182 | 0.913 | 162.4 | 106.2 |
+| 1/8 | 5.94e-2 | 0.612 | 209.9 | 143.1 |
+| 1/64 | 7.47e-3 | 5.99e-2 | 211.9 | 141.9 |
+| 1e-3 | 4.76e-4 | 3.65e-3 | 212.3 | 141.7 |
+| 1e-4 | 4.76e-5 | 3.64e-4 | 212.3 | 141.7 |
+| 1e-5 | 4.76e-6 | 3.64e-5 | 212.3 | 141.7 |
+| 0 | 6.1e-15 | 2.9e-13 | 212.3 | 141.7 |
+
+(monomial block 57.5, translated block 175.9). The other three anchors
+have the same shape: `span` 4.60e-6 … 7.38e-6 at 1e-5 h, every ladder
+exactly ten per decade below h/64, `cond` scaled 28.5–148.7 against the
+monomial blocks' 57.5–62.9, and the δ = 0 seed blocks' raw 127.1, 204.4
+and 225.8 against the translated 181.4, 275.3 and 180.9.
+
+- *First order in δ/h, no floor.* The span distance falls monotonically
+  from 0.78 at 8h and is `0.476 δ/h` below h/64 on this stencil (0.46 to
+  0.74 across the four); the weights are first order there too, 3.6 δ/h
+  (1.1–3.6 across the four), 1–3.4 times the 1-D ladder's 1.07 δ/h (P4).
+  Down to
+  1e-5 h there is no march floor in either: §2.3's floor at `δ ≲ h/40`
+  was a 1e-12 row residual, far below these distances.
+- *The weights are not monotone above h/8* for the anchors outside the
+  band: 0.53–0.55 at 8h, 0.74–0.75 at h, 0.89–0.91 at h/2, 0.60–0.61 at
+  h/8; inside it they fall from 0.86–0.87 at 8h (with a step of 0.01 up
+  from h to h/2 at one anchor). A marginal edge moves the rows outside
+  the band furthest from the jump's; the span distance is monotone at
+  every anchor and is the one to read.
+- *H3 holds*: column-scaled, the seed block stays within 0.46–2.5× of the
+  monomial block's condition number on the same nodes at every δ from
+  1e-5 h to 8 h. It rises from 28–37 at 8h to 101–111 at h/2; below
+  that the anchors inside the band fall back to 86–89 (a peak at h/2, as
+  in 1-D) and those outside rise to 142–149, reaching the δ = 0 seed
+  block's value by h/8; all four equal that value in the limit. That
+  block and E2.3's
+  translated block span the same space in different bases (anchored at
+  the node, against at the foot point through the continuity matrices),
+  and their raw condition numbers are within 0.70–1.25× of each other, so
+  "tending to the translated block's" (§3.7) holds as "to the jump's seed
+  block, within a factor 1.3 of E2.3's". Raw, the seed block carries the
+  contrast (54.6 resolved to 212 unresolved below the band). Cases 2 and
+  3 wait for route (a) and the ring (E4.7, E4.8): `normal_profile` is
+  flat-only.
+
+**The cost** (#35's acceptance line): `seed_basis` over the 576 crossing
+stencils, median and max per stencil, against E2.3's `stencil_weights` on
+the same stencils.
+
+| δ/h | median ms | max ms | total s |
+| --- | --- | --- | --- |
+| 0 | 1.93 | 5.87 | 1.16 |
+| 1/8 | 6.94 | 8.06 | 3.96 |
+| 1 | 4.66 | 6.75 | 2.76 |
+| 8 | 3.33 | 9.74 | 2.09 |
+
+E2.3's rows cost 1.57 ms each. A second run (the default `--mode all`)
+gave medians 2.01, 7.31, 4.88 and 3.03 ms against E2.3's 1.47 and maxima
+up to 18 ms: the medians move by up to 9 %, the maxima are scheduling
+noise. So a seed row costs 1.2–5× a translated one, and §3.3's estimate
+holds: every row of a 40,000-node set seeded at
+δ/h ≈ 8 is about two minutes of marches. The straddling-row batching of
+§3.3 is not needed at these costs and is not built.
+
+**H1 and the δ = 0 half of H2, ticked; H2's δ > 0 half is recorded;
+H3, ticked on case 1.** What E4.5 inherits:
+
+- `seed_basis(xy, medium)` is everything a seed row needs but the
+  Gaussian part: `block` for `P`, `rhs` for the moment conditions,
+  `warp` for the Gaussians' normal coordinate, `scale` for `w = w̃/h_s²`.
+  The seed solve with E2.3's plain block is `seed_weights_with` in the
+  driver, three lines on `augmented_solve`.
+- The Gaussian block in `(ξ, φ₀₁(η))` and its chain-rule right-hand side
+  are E4.5's; at δ = 0 they are E2.4's to 2e-15 (the table above).
+- The seeded-row rule (reach 20δ on the 30 nodes, the interface group on
+  the 42) is E4.5's; `seed_basis` seeds whatever it is given.
+- The seeds' distance from E2.3's rows at δ > 0 is first order in δ/h
+  and O(1) at δ ≳ h/8, so the δ = 0.0025 and 0.005 lines of E4.6 at
+  1250–10,000 nodes (δ/h ≈ 0.09–0.48) are where seeds and construction
+  part.
+
+Tests: `tests/heat2d/test_seeds.py` (41) pins the chain's shape and
+nilpotence, the monomials on equal pieces at δ = 0, h/8, h and 8h, the
+shift identity and `ψ₀₁ ≡ α_e` through the edge from anchors outside and
+inside the band, the tensor-grid residual on case 1 and the thin band,
+the anchor right-hand side with a tangential gradient, the 2-D march
+against the 1-D one on the profile in `y`, the milliseconds (median under
+30 ms per stencil), the δ = 0 identity with E2.3 (span, weights, warp) on
+four case-1 anchors and three thin-band ones, the first-order ladder to
+1e-5 h, the conditioning, and the refusals (too few nodes, coincident
+nodes, a curved band). A mutation check on 2026-09-22 (the lower
+coupling's `(j + 2)(j + 1)`, the source's `b (b − 1)`, the `α_ξ` entry,
+`α_e`, the restarts at the stops, each broken in turn) failed at least
+six tests per mutation. `tests/heat2d/test_domain.py` pins `alpha_function` and
+`alpha_at` against the array path, `tests/heat1d/test_domain.py`
+`edge_value` against `edge_blend`, and `tests/test_heat2d_stiff.py` runs
+`--mode stencils` at 1250 nodes (17 s).

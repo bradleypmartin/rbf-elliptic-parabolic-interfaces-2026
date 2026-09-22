@@ -15,6 +15,7 @@ from heat_interfaces.heat1d.domain import (
     dissertation_alpha,
     eabe_alpha,
     edge_blend,
+    edge_value,
     equispaced_grid,
     grid_for,
     jump_alpha,
@@ -255,6 +256,15 @@ def test_edge_blend_is_the_logistic_blend_from_the_near_side():
     np.testing.assert_allclose(ds, 0.5 / np.cosh(z) ** 2, rtol=1e-13, atol=0)
     # The far side's share rounds away: exactly each value at |z| >= 20.
     assert np.all(value[z >= 20.0] == 1.0) and np.all(value[z <= -20.0] == 0.2)
+
+
+def test_edge_value_is_edge_blends_value_in_floats():
+    # The seed march's per-point twin (E4.4): the same steps with math.exp.
+    z = np.concatenate([np.linspace(-25.0, 25.0, 2001), [-0.0, 1e-300, -1e-300]])
+    for a, b in ((0.2, 1.0), (1.0, 0.2), (1.0, 1.0 / 1500.0)):
+        value, _ = edge_blend(np.full_like(z, a), np.full_like(z, b), z)
+        scalar = np.array([edge_value(a, b, float(t)) for t in z])
+        np.testing.assert_allclose(scalar, value, rtol=2e-16, atol=0)
 
 
 def test_on_interval_clips_the_elements_and_keeps_the_material():

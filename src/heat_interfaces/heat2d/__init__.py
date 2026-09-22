@@ -26,7 +26,10 @@ points through the fine set's own stencils, the translated basis where they
 cross an interface, and the cached ``Reference`` runs of the cases without
 an analytic solution (E2.6); ``precondition``: the diagonal dominance ratio
 and Appendix B's row-recombination preconditioner, with ``solve``'s reduced
-interior system, ``gmres`` / ``bicgstab`` and ``spilu`` (E2.8).
+interior system, ``gmres`` / ``bicgstab`` and ``spilu`` (E2.8); ``seeds``: the
+15 scalar seeds of a stencil through a smooth flat edge, marched as one
+44-state chain along the normal from the evaluation node, with the warp
+coordinate and the moment conditions' right-hand side (E4.4).
 """
 
 from .domain import (
@@ -169,6 +172,17 @@ from .rbf import (
     rbf_interpolation_weights,
 )
 from .resample import Reference, reference_solution, resample
+from .seeds import (
+    SEED_DEGREE,
+    Chain,
+    SeedBasis,
+    SeedProfiles,
+    block_condition,
+    chain,
+    nearest_interface,
+    seed_basis,
+    seed_profiles,
+)
 from .solve import (
     ILU_ORDERING,
     METHODS,
@@ -325,4 +339,13 @@ __all__ = [
     "neighbour_table",
     "reduced_system",
     "solve_iterative",
+    "SEED_DEGREE",
+    "Chain",
+    "SeedBasis",
+    "SeedProfiles",
+    "block_condition",
+    "chain",
+    "nearest_interface",
+    "seed_basis",
+    "seed_profiles",
 ]
