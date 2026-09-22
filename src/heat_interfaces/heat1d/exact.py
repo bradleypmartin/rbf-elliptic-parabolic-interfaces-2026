@@ -40,16 +40,21 @@ from .domain import X_MAX, X_MIN, Medium1D
 RADAU_RTOL, RADAU_ATOL = 1e-9, 1e-11
 """Radau's tolerances for the parabolic reference.
 
-Radau's Newton iteration on the linear system converges in one step, and
-the second step's update is the round-off of the solve, about ``eps · h
-‖A‖``; the iteration is declared failed when that exceeds the tolerance,
-the step is cut, and on a sub-grid edge (``‖A‖`` above 1e10 with 32
-Chebyshev nodes on elements of width δ = 0.0025) the march dies with
-"required step size is less than spacing between numbers" at rtol 1e-12
-and takes 10–100× the steps at 1e-10. At 1e-9 every δ of the E3 study runs
-in about 400 steps, and the result agrees with the 1e-12 run to 1e-13
-where that one completes (δ = 0): Radau's error on these smooth-in-time
-solutions is far below its tolerance (E3.2, `docs/stiff-diffusion.md` §2.1).
+On the linear system Radau's Newton iteration converges in one step; the
+next update is the round-off of the solve, about ``eps · h ‖A‖`` in
+absolute terms, and Radau measures it against ``atol + rtol |y|``. Where
+that floor exceeds the tolerance the iteration counts as failed and the
+step is cut, so it is the absolute tolerance that must sit above the
+floor. On the ``1/9 | 1`` edge at δ = 0.0025 (‖A‖ up to 6e10 on the
+δ-wide elements, unsplit; E3.2, 2026-09-21): at (rtol, atol) =
+(1e-12, 1e-13) the 24-node march dies with "required step size is less
+than spacing between numbers" and the 32-node one takes 20,614 steps
+(53 s); at (1e-10, 1e-12) they take 3,291 and 13,127 steps; at
+(1e-10, 1e-11) 519 and 709; at (1e-9, 1e-11) 400 and 399 (0.1–0.2 s).
+Every one of those runs agrees with the (1e-9, 1e-11) run to 1.4e-13 or
+better, and at δ = 0 the (1e-12, 1e-13) run (1,805 steps) agrees with it
+to 1e-13: Radau's error on these smooth-in-time solutions is far below
+its tolerance (``docs/stiff-diffusion.md`` §2.1).
 """
 
 
@@ -197,7 +202,10 @@ class ChebyshevPieces:
     per internal edge, ``u_L - u_R = 0`` and ``alpha_L u_L' - alpha_R u_R' =
     0`` with the one-sided values of the pieces (equal on a smooth edge's
     cuts, so the matching is C¹ there). ``constrained`` indexes the element
-    ends, one unknown per row.
+    ends, one unknown per row. ``evaluate`` reads a point on a shared edge
+    from the element to its right; E1.3's version read it from the piece
+    ``PiecewiseAlpha.at_interface`` names, and the matching row makes the
+    two readings equal to solver precision.
     """
 
     medium: Medium1D

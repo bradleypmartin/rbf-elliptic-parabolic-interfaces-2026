@@ -551,26 +551,36 @@ and cached under `outputs/` by `parabolic_reference(..., cache=)`, reused
 when medium (its `repr`), problem label, `t_end`, resolution and tolerances
 match. Two decisions, 2026-09-21:
 
-- **Radau's tolerance is 1e-9 / 1e-11 (`RADAU_RTOL`, `RADAU_ATOL`), not
-  E1.3's 1e-12 / 1e-13.** The linear system's Newton iteration converges in
-  one step and the next update is the round-off of the solve, about
-  `eps · h ‖A‖`; when that exceeds the tolerance Radau counts the
-  iteration as failed and cuts the step. On the `1/9 | 1` edge at
-  δ = 0.0025 (‖A‖ ≈ 6e10 with 32 nodes on elements of width δ) the 1e-12
-  march dies with "required step size is less than spacing between
-  numbers", the 1e-10 one takes 3291 steps (24 nodes, 5.9 s) and 13,127
-  (32 nodes, 46 s), and the 1e-9 one 400 steps (0.1–0.2 s) with results
-  that agree with the 1e-10 runs to 1e-13. At δ = 0 the 1e-12 run
-  (1805 steps) and the 1e-9 run (436) agree to 1e-13, and E1.3's accuracy
-  tests pass with margin (the decaying mode to 2e-13, the separable
-  solution to 2e-11, the t = 30 equilibrium to 1.4e-11). Port notes §1.4
-  now say so.
+- **Radau's tolerances are (rtol, atol) = (1e-9, 1e-11) (`RADAU_RTOL`,
+  `RADAU_ATOL`), not E1.3's (1e-12, 1e-13).** The linear system's Newton
+  iteration converges in one step and the next update is the round-off of
+  the solve, about `eps · h ‖A‖` in absolute terms; Radau measures it
+  against `atol + rtol |y|`, counts the iteration as failed where it
+  exceeds that, and cuts the step, so it is the absolute tolerance that
+  has to sit above the floor. On the `1/9 | 1` edge at δ = 0.0025
+  (unsplit elements; ‖A‖ up to 6e10 on the δ-wide ones), with 24 and 32
+  nodes per element:
+
+  | rtol, atol | steps, 24 nodes | steps, 32 nodes | time |
+  | --- | --- | --- | --- |
+  | 1e-12, 1e-13 | fails after 12 s: "required step size is less than spacing between numbers" | 20,614 | 53 s |
+  | 1e-10, 1e-12 | 3,291 | 13,127 | 6 s / 46 s |
+  | 1e-10, 1e-11 | 519 | 709 | ≤ 1 s |
+  | 1e-9, 1e-11 | 400 | 399 | 0.1–0.2 s |
+
+  Every run agrees with the (1e-9, 1e-11) one to 1.4e-13 or better; at
+  δ = 0 the (1e-12, 1e-13) run (1805 steps) and the (1e-9, 1e-11) run
+  (436) agree to 1e-13; and E1.3's accuracy tests pass with margin at the
+  new default (the decaying mode to 2e-13, the separable solution to
+  2e-11, the t = 30 equilibrium to 1.4e-11). Port notes §1.4 now say so.
+  (The first draft of this note blamed rtol and put the failure at 32
+  nodes; the review caught it, and the table is the re-measurement.)
 - **Resolution: 20 nodes per element, elements wider than 0.1 split
   (`ChebyshevPieces.build(max_width=)`), checked against 24 nodes and
   0.05.** The collocation system's round-off floor grows with the node
   count on the δ-wide elements (the Chebyshev equilibrium against the
-  quadrature on the `1/9 | 1` edge at δ = 0.0025: 8e-12, 7e-12, 1.1e-11
-  at 24, 32, 48 unsplit nodes; on eq. 75: 5e-11, 1.0e-10, 1.5e-10, and
+  quadrature on the `1/9 | 1` edge at δ = 0.0025: 8e-12, 7e-12, 1e-11
+  at 24, 32, 48 unsplit nodes; on eq. 75: 5e-11, 1e-10, 2e-10, and
   the 48-node Radau march there takes 2529 steps and 76 s) while the
   truncation error falls with it on the wide pieces (32 unsplit nodes leave
   eq. 75's half-unit sinusoid layer at 6e-9, 48 at 5e-13). Fewer nodes on
@@ -583,25 +593,30 @@ check resolutions cached too) reports, per medium and δ, the reference's
 elements, interior unknowns, Radau steps and seconds, the check's seconds,
 the max difference between the two resolutions on 2001 points
 (*agreement*) and the Chebyshev equilibrium's max difference from the
-quadrature at the reference's resolution (*elliptic*):
+quadrature at the reference's resolution (*elliptic*). The element,
+unknown and step counts reproduce exactly from run to run; the two floor
+columns are round-off and move by 10–30 % between runs of the same code
+on the same machine (threaded BLAS reductions), so they are quoted to one
+figure:
 
 | medium | δ | elements | unknowns | steps | s (ref / check) | agreement | elliptic |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `1/9 \| 1` | 0 | 20 | 380 | 436 | 0.25 / 1.24 | 7.7e-13 | 4.9e-13 |
-| | 0.04 | 23 | 437 | 433 | 0.31 / 1.47 | 1.3e-12 | 7.5e-13 |
-| | 0.01 | 25 | 475 | 429 | 0.35 / 1.87 | 4.7e-12 | 5.5e-12 |
-| | 0.0025 | 27 | 513 | 427 | 0.46 / 2.13 | 1.9e-12 | 1.0e-12 |
-| eq. 75 | 0 | 20 | 380 | 473 | 0.27 / 1.35 | 2.1e-11 | 8.8e-12 |
-| | 0.04 | 27 | 513 | 473 | 0.50 / 2.23 | 3.2e-11 | 3.4e-11 |
-| | 0.01 | 30 | 570 | 470 | 0.51 / 2.77 | 4.5e-11 | 1.4e-11 |
-| | 0.0025 | 33 | 627 | 468 | 0.63 / 3.26 | 5.5e-11 | 1.3e-11 |
+| `1/9 \| 1` | 0 | 20 | 380 | 436 | 0.25 / 1.24 | 8e-13 | 5e-13 |
+| | 0.04 | 23 | 437 | 433 | 0.31 / 1.47 | 1e-12 | 8e-13 |
+| | 0.01 | 25 | 475 | 429 | 0.35 / 1.87 | 5e-12 | 6e-12 |
+| | 0.0025 | 27 | 513 | 427 | 0.46 / 2.13 | 2e-12 | 1e-12 |
+| eq. 75 | 0 | 20 | 380 | 473 | 0.27 / 1.35 | 2e-11 | 9e-12 |
+| | 0.04 | 27 | 513 | 473 | 0.50 / 2.23 | 3e-11 | 3e-11 |
+| | 0.01 | 30 | 570 | 470 | 0.51 / 2.77 | 5e-11 | 1e-11 |
+| | 0.0025 | 33 | 627 | 468 | 0.63 / 3.26 | 6e-11 | 1e-11 |
 
 **P1 holds**: δ = 0 is the jump bit for bit, the tails are the pieces to
 the bit beyond 20δ (two ulps at 19δ), and the parabolic reference agrees
-between two resolutions to 5.5e-11 at worst (eq. 75 at δ = 0.0025), 2e-12
-on the `1/9 | 1` medium, against the ticket's 1e-10. The floor is a
-property of collocation on δ-wide elements in double precision, not of the
-tolerance; eq. 75's is 5–10× the constant-piece medium's. For the study
+between two resolutions to about 6e-11 at worst (eq. 75 at δ = 0.0025;
+5.5e-11 and 6.3e-11 in two runs), 2e-12 on the `1/9 | 1` medium, against
+the ticket's 1e-10. The floor is a property of collocation on δ-wide
+elements in double precision, not of the tolerance; eq. 75's is 5–10×
+the constant-piece medium's. For the study
 that is enough by four orders on eq. 75, where every method's error stays
 above 1e-6 (the plain FD4 rows inside the layer, §1.6), and by two on the
 `1/9 | 1` medium, where the jump-aware line reached 6e-12 at 800 nodes in
