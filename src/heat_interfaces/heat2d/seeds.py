@@ -36,6 +36,12 @@ at the anchor in stencil units: ``2 α_e`` on the seeds of ``ξ²`` and
 ``η²``, ``h_s α_ξ`` on the seed of ``ξ`` (the tangential derivative the
 frozen profile leaves out), zero on the rest. Flat interfaces only, as
 ``SmoothBand.normal_profile``; curved ones are route (a), E4.7 (#38).
+
+``seed_weights`` (E4.5, #36) closes the saddle-point system: the Gaussians
+in ``(ξ, φ₀₁(η))``, the warp the march brings with it, and their right-hand
+side the chain rule for ``L G(ξ, η̃(η))`` with the cancellation
+``α η̃′ ≡ α_e`` checked, not assumed. ``operators.seed_operator`` puts those
+rows into the global matrix on the stencils that see an edge.
 """
 
 from __future__ import annotations
@@ -52,10 +58,29 @@ from ..heat1d.stiff import MERGE_TOL, SEED_ATOL, SEED_RTOL, march_targets
 from .domain import Band, NormalProfile, SmoothBand
 from .interface import Frame
 from .neighbors import periodic_dx
-from .rbf import check_coincidence, polynomial_count, polynomial_exponents
+from .rbf import (
+    GA_SHAPE,
+    augmented_solve,
+    check_coincidence,
+    gaussian,
+    gaussian_derivative,
+    polynomial_count,
+    polynomial_exponents,
+)
 
 SEED_DEGREE = 4
 """The seeds' degree: 15 of them on 30 nodes, the interface group's spec (§3.4)."""
+
+WARP_TOL = 1e-9
+"""How far ``ψ₀₁ = α η̃′`` may stray from ``α_e`` before the warp is refused.
+
+§3.4's cancellation: the warp ``η̃ = φ₀₁`` is the constant-flux seed, so
+``α η̃′ ≡ α_e`` along the whole line and the ``G_η̃`` term of
+``L G(ξ, η̃(η))`` vanishes identically. That state's right-hand side is
+identically zero, so the march returns ``α_e`` to the bit (§4.3);
+``seed_coordinates`` checks it rather than assuming it, and a failure means
+the march, not the geometry.
+"""
 
 
 @dataclass(frozen=True)
@@ -216,7 +241,10 @@ class SeedBasis:
     ``xi, eta`` are the nodes in it and ``profile`` the material along its
     normal. ``block`` is ``S[i, e] = φ_e(ξ_i, η_i)``, the ``P`` of EABE eq. 2
     for the seeds; ``rhs[e]`` is ``(L φ_e)(anchor)`` in stencil units (the
-    weights are ``w̃ / scale²``).
+    weights are ``w̃ / scale²``); ``gradient`` is ``∇α`` at the anchor rotated
+    into the frame and scaled, ``(h_s α_ξ, h_s α_η)``, whose first component
+    is ``rhs``'s only entry that is not a moment condition and whose second
+    the warp cancels (§3.4, ``seed_weights``).
     """
 
     xy: np.ndarray
@@ -229,6 +257,7 @@ class SeedBasis:
     profiles: SeedProfiles
     block: np.ndarray
     rhs: np.ndarray
+    gradient: tuple[float, float]
 
     @property
     def scale(self) -> float:
@@ -290,12 +319,122 @@ def seed_basis(
     alpha_e = float(medium.alpha(x[:1], y[:1])[0])
     profiles = seed_profiles(profile, eta, degree, alpha_e, rtol, atol)
     gx, gy = (float(g[0]) for g in medium.gradient(x[:1], y[:1]))
+    gradient = tuple(scale * c for c in frame.rotate_in(gx, gy))
     rhs = np.zeros(q)
     rhs[_column(degree, 2, 0)] = rhs[_column(degree, 0, 2)] = 2.0 * alpha_e
-    rhs[_column(degree, 1, 0)] = scale * frame.rotate_in(gx, gy)[0]
+    rhs[_column(degree, 1, 0)] = gradient[0]
     return SeedBasis(
-        xy, medium, j, frame, profile, xi, eta, profiles, profiles.values(xi), rhs
+        xy,
+        medium,
+        j,
+        frame,
+        profile,
+        xi,
+        eta,
+        profiles,
+        profiles.values(xi),
+        rhs,
+        gradient,
     )
+
+
+def seed_coordinates(sb: SeedBasis, warp: bool = True) -> tuple[np.ndarray, np.ndarray]:
+    """The nodes in the Gaussian block's coordinates: ``(ξ, φ₀₁(η))``, or ``(ξ, η)``.
+
+    §3.4's warp. ``φ₀₁`` is the seed of ``η``, the constant-flux solution
+    ``∫ α_e / α_n``: continuous with its flux through the edge, E2.4's
+    piecewise-linear stretch at δ = 0 (E4.4 measured 1.8e-15 over 576
+    stencils) and the smooth stretch at δ > 0, read off the same march as the
+    block. The flux ``ψ₀₁`` must be ``α_e`` along the whole line for the
+    ``G_η̃`` term of ``L G`` to cancel, so it is checked here against
+    ``WARP_TOL``. ``warp=False`` is the plain-Gaussian ablation (H7).
+    """
+    if not warp:
+        return sb.xi, sb.eta
+    flux = sb.profiles.psi[sb.profiles.chain.index(0, 1, 0)]
+    drift = float(np.abs(flux - sb.alpha_e).max() / abs(sb.alpha_e))
+    if drift > WARP_TOL:
+        raise RuntimeError(
+            f"the warp's flux alpha eta-tilde' left alpha_e by {drift:.1e} "
+            f"relative, above {WARP_TOL:g}: the march, not the geometry"
+        )
+    return sb.xi, sb.warp
+
+
+def seed_weights(
+    xy: np.ndarray,
+    medium: Band | SmoothBand,
+    degree: int = SEED_DEGREE,
+    shape: float = GA_SHAPE,
+    warp: bool = True,
+    rtol: float = SEED_RTOL,
+    atol: float = SEED_ATOL,
+) -> np.ndarray:
+    """Weights of ``div(alpha grad u)`` at ``xy[0]`` from ``u`` at the nodes ``xy``.
+
+    ``interface.stencil_weights``'s contract with the seeds in place of the
+    translated basis (§3.4): EABE eq. 2 with ``seed_basis``'s block for ``P``
+    and its moment conditions for the polynomial right-hand side, Gaussians
+    ``ε = shape / d`` in the coordinates of ``seed_coordinates``, and for
+    their right-hand side ``L`` applied to ``G(ξ, η̃(η))`` at the anchor by
+    the chain rule,
+
+        L G = α G_ξξ + α_ξ G_ξ + (α η̃′)′ G_η̃ + α η̃′² G_η̃η̃,
+
+    ``α η̃′`` read from the marched ``ψ₀₁`` and ``(α η̃′)′`` from the chain's
+    own rate for that state. Both collapse: ``ψ₀₁`` is ``α_e`` from the
+    anchor's initial condition, and its rate is *structurally* zero — the
+    state ``(0, 1, 0)`` has no lower seed and no level above it, so the
+    chain's ``source`` and ``lower`` rows are empty at every η and for every
+    profile. So the term the 2016 rows carry as ``α_η G_η`` is cancelled by
+    the warp's curvature and ``L G`` is ``α_e (G_ξξ + G_η̃η̃) + α_ξ G_ξ``. The
+    two coefficients are assembled rather than written as 1 and 0 so that a
+    chain which ever acquires a source there (a curved feature's anchor
+    correction, E4.7) carries it instead of silently losing it, and
+    ``seed_coordinates``'s check on the whole line is what actually guards
+    the cancellation. With ``warp=False`` the coordinates are the frame's own
+    and the plain Gaussian's right-hand side carries the true ``α_η G_η``.
+    The weights come back in physical units, ``w̃ / h_s²``.
+    """
+    return weights_of(seed_basis(xy, medium, degree, rtol, atol), shape, warp)
+
+
+def weights_of(sb: SeedBasis, shape: float = GA_SHAPE, warp: bool = True) -> np.ndarray:
+    """``seed_weights`` on a ``SeedBasis`` already marched (the ablations' entry)."""
+    xi, eta = seed_coordinates(sb, warp)
+    x, y = sb.xy[:, 0], sb.xy[:, 1]
+    r = np.hypot(periodic_dx(x - x[0]), y - y[0])
+    eps = shape * sb.scale / float(np.where(r > 0.0, r, np.inf).min())
+    a_e = sb.alpha_e
+    g_xi, g_eta = sb.gradient
+    ch = sb.profiles.chain
+    if warp:
+        # (α η̃′) at the anchor and its derivative, from the march and from
+        # the chain: 1 and 0 for this chain, whatever the profile (see
+        # ``seed_weights``), and read rather than written so that they are
+        # the chain's own numbers.
+        segment = int(sb.profile.segment(np.zeros(1))[0])
+        rate = ch.rate(a_e, sb.profile.alpha_function(segment))
+        flux = float(sb.profiles.psi[ch.index(0, 1, 0), 0])
+        d_flux = float(rate(0.0, ch.initial(a_e))[ch.size + ch.index(0, 1, 0)])
+        slope = flux / a_e
+        b_rbf = (
+            a_e * gaussian_derivative(xi, eta, eps, "dxx")
+            + g_xi * gaussian_derivative(xi, eta, eps, "dx")
+            + d_flux * gaussian_derivative(xi, eta, eps, "dy")
+            + a_e * slope**2 * gaussian_derivative(xi, eta, eps, "dyy")
+        )
+    else:
+        b_rbf = (
+            a_e * gaussian_derivative(xi, eta, eps, "lap")
+            + g_xi * gaussian_derivative(xi, eta, eps, "dx")
+            + g_eta * gaussian_derivative(xi, eta, eps, "dy")
+        )
+    block = gaussian(xi[:, None] - xi[None, :], eta[:, None] - eta[None, :], eps)
+    w = augmented_solve(
+        block[None], sb.block[None], b_rbf[None, :, None], sb.rhs[None, :, None]
+    )
+    return w[0, :, 0] / sb.scale**2
 
 
 def block_condition(block: np.ndarray) -> tuple[float, float]:

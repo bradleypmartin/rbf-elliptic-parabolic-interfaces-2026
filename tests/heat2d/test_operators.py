@@ -1,6 +1,7 @@
 """Stencil groups, derivative matrices, the naive and direct operators, Dirichlet rows,
-the equilibrium solve on the control and on case 1, the control's spectrum, and
-the warp-and-straddle ablation of case 2."""
+the equilibrium solve on the control and on case 1, the control's spectrum, the
+warp-and-straddle ablation of case 2, and (E4.5, #36) the seeded-row rule, the
+seed operator and the dispatch by name."""
 
 from dataclasses import replace
 
@@ -28,8 +29,10 @@ from heat_interfaces.heat2d.operators import (
     BOUNDARY_ZONE,
     INTERFACE_KIND,
     INTERIOR_KIND,
+    OPERATOR_MODES,
     alpha_matrix,
     boundary_zone,
+    build_operator,
     build_stencils,
     derivative_matrices,
     direct_operator,
@@ -39,6 +42,8 @@ from heat_interfaces.heat2d.operators import (
     interface_crossings,
     laplacian_operator,
     naive_operator,
+    seed_operator,
+    seeded_rows,
 )
 from heat_interfaces.heat2d.rbf import BOUNDARY, INTERIOR, ITERATIVE
 from heat_interfaces.heat2d.solve import rms_error, solve_equilibrium
@@ -516,3 +521,112 @@ def test_every_operator_runs_on_the_smooth_band_and_is_the_jumps_at_delta_zero()
     near = ~crossing & ~far
     assert near.sum() > 50 and rows[near].max() > 0.0
     assert abs(builders["naive"](SmoothBand(band, delta)) - jump["naive"]).max() > 1.0
+
+
+# --- E4.5 (#36): the seeded-row rule, the seed operator and the dispatch ----
+
+
+def test_seeded_rows_is_the_crossing_test_at_delta_zero_and_grows_with_delta():
+    # §3.3's rule: the span of a stencil's signed distances meets the edge's
+    # support [−20δ, 20δ]. At δ = 0 that is the straddling test, whatever the
+    # spacing; at δ = 0.04 on case 1, 20δ = 0.8 covers the strip (H8).
+    nodes, st = aware_set(1250)
+    band = DOMAIN.material
+    index, _ = knn(nodes.xy, INTERIOR.size)
+    crossing = interface_crossings(nodes, band, index)
+    np.testing.assert_array_equal(seeded_rows(nodes, band, index), crossing)
+    np.testing.assert_array_equal(
+        seeded_rows(nodes, SmoothBand(band, 0.0), index), crossing
+    )
+    counts = [
+        seeded_rows(nodes, SmoothBand(band, r * nodes.h), index).sum()
+        for r in (1 / 64, 1 / 8, 1 / 2, 1)
+    ]
+    assert counts[0] == crossing.sum()
+    assert crossing.sum() < counts[1] < counts[2] < counts[3] == nodes.n
+    assert seeded_rows(nodes, SmoothBand(band, 0.04), index).all()
+    # A stencil that straddles an edge far thinner than the spacing is seeded
+    # although no node of it is within 20δ.
+    thin = SmoothBand(band, nodes.h / 1000)
+    assert seeded_rows(nodes, thin, index).sum() == crossing.sum()
+    assert not seeded_rows(nodes, ONE, index).any()
+
+
+def test_a_reach_group_holds_every_stencil_that_sees_the_edge():
+    # The rule one size up: with reach on, no stencil outside the interface
+    # group sees the edge, so no 42 / 5 stencil ever does.
+    nodes, _ = node_set(1250)
+    medium = SmoothBand(DOMAIN.material, nodes.h / 8)
+    domain = replace(DOMAIN, material=medium)
+    st = build_stencils(nodes, domain, interface=BOUNDARY, reach=TANH_REACH)
+    index, _ = knn(nodes.xy, INTERIOR.size)
+    np.testing.assert_array_equal(
+        st.near_interface, seeded_rows(nodes, medium, index, TANH_REACH)
+    )
+    for g in st.groups:
+        if g.kind != INTERFACE_KIND:
+            assert not seeded_rows(nodes, medium, g.index, TANH_REACH).any()
+    plain = build_stencils(nodes, domain, interface=BOUNDARY)
+    assert st.near_interface.sum() > plain.near_interface.sum()
+
+
+def test_seed_operator_is_the_jump_aware_operator_at_delta_zero():
+    # H2 at the operator level: every seeded row is E2.3's row (the seed span
+    # is the translated basis's and φ₀₁ is Warp.apply), and the rows that see
+    # nothing are the direct operator's in both.
+    nodes, st = aware_set(1250)
+    band = DOMAIN.material
+    aware = interface_aware_operator(nodes, band, st)
+    seeds = seed_operator(nodes, band, st)
+    assert seeds.nnz == aware.nnz
+    assert abs(seeds - aware).max() < 1e-11 * abs(aware).max()
+    assert abs(seed_operator(nodes, SmoothBand(band, 0.0), st) - seeds).max() == 0.0
+    # Without interfaces there is nothing to seed.
+    assert (
+        abs(seed_operator(nodes, ONE, st) - direct_operator(nodes, ONE, st)).max()
+        == 0.0
+    )
+
+
+def test_seed_operator_replaces_exactly_the_rows_that_see_the_edge():
+    nodes, _ = node_set(1250)
+    medium = SmoothBand(DOMAIN.material, nodes.h / 8)
+    domain = replace(DOMAIN, material=medium)
+    st = build_stencils(nodes, domain, interface=BOUNDARY, reach=TANH_REACH)
+    op = seed_operator(nodes, medium, st)
+    direct = direct_operator(nodes, medium, st)
+    moved = np.asarray(abs(op - direct).sum(axis=1)).ravel() > 0
+    group = next(g for g in st.groups if g.kind == INTERFACE_KIND)
+    seeded = np.zeros(nodes.n, dtype=bool)
+    seeded[group.rows[seeded_rows(nodes, medium, group.index, TANH_REACH)]] = True
+    np.testing.assert_array_equal(moved, seeded)
+    assert 300 < seeded.sum() < nodes.n
+    assert np.all(np.diff(op.indptr)[group.rows] == BOUNDARY.size)
+
+
+def test_build_operator_dispatches_by_name():
+    nodes, st = aware_set(1250)
+    band = DOMAIN.material
+    assert set(OPERATOR_MODES) == {"naive", "direct", "jump-aware", "seeds"}
+    plain = node_set(1250)[1]
+    assert (
+        abs(
+            build_operator(nodes, band, plain, "naive")
+            - naive_operator(nodes, band, plain)
+        ).max()
+        == 0.0
+    )
+    assert (
+        abs(
+            build_operator(nodes, band, st, "jump-aware", warp=False)
+            - interface_aware_operator(nodes, band, st, warp=False)
+        ).max()
+        == 0.0
+    )
+    assert OPERATOR_MODES["seeds"] is seed_operator
+    assert (
+        abs(build_operator(nodes, ONE, st) - direct_operator(nodes, ONE, st)).max()
+        == 0.0
+    )
+    with pytest.raises(ValueError, match="unknown operator"):
+        build_operator(nodes, band, st, "seed")

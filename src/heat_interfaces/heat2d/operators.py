@@ -22,6 +22,11 @@ on the translated basis of ``interface.py``: ``build_stencils`` given an
 cross an interface into a third group of 30-node / degree-4 stencils (EABE
 §3, "across interfaces"), so no standard stencil ever sees a jump, and the
 members of that group whose own 30 nodes cross are translated.
+``seed_operator`` (E4.5, #36) is the same dispatch for a *smooth* edge of
+width δ below the spacing: the rows whose stencils see the edge
+(``seeded_rows``, the reach rule of ``docs/stiff-diffusion.md`` §3.3) are
+``seeds.seed_weights``'s, the rest the direct operator's, and at δ = 0 the
+two agree to rounding. ``build_operator`` is the dispatch by name.
 """
 
 from __future__ import annotations
@@ -33,10 +38,13 @@ from math import sqrt
 import numpy as np
 import scipy.sparse as sp
 
+from ..heat1d.domain import TANH_REACH
+from ..heat1d.stiff import SEED_ATOL, SEED_RTOL, edge_width
 from .domain import Domain, NodeSet
 from .interface import stencil_weights
 from .neighbors import knn, offsets
 from .rbf import BOUNDARY, GA_SHAPE, INTERIOR, StencilSpec, rbf_fd_weights
+from .seeds import seed_weights
 
 BOUNDARY_ZONE = 3.0
 """Half-width of the boundary zone in units of ``1/√n`` (MATLAB ``3 * hApprox``)."""
@@ -108,6 +116,34 @@ def interface_crossings(nodes: NodeSet, material, index: np.ndarray) -> np.ndarr
     return np.ptp(region[index], axis=1) > 0
 
 
+def seeded_rows(
+    nodes: NodeSet,
+    material,
+    index: np.ndarray,
+    reach: float = TANH_REACH,
+) -> np.ndarray:
+    """True per row of ``index`` whose nodes see an edge of ``material`` (§3.3).
+
+    A stencil sees an edge when the span of its nodes' signed distances to
+    that curve meets the edge's support ``[−reach δ, reach δ]``, δ the
+    medium's width (``heat1d.stiff.edge_width``; past ``TANH_REACH`` δ alpha
+    is the piece bit for bit). At δ = 0 the support is the curve itself and
+    the rule is ``interface_crossings`` exactly, the stencils that straddle
+    it; that test is also OR-ed in at δ > 0, so a stencil straddling an edge
+    far thinner than the spacing is seeded whatever its nodes' distances.
+    The rule needs no δ of its own (H8): at δ = 0.04 on case 1, ``20 δ = 0.8``
+    covers the strip and every row is seeded.
+    """
+    seen = interface_crossings(nodes, material, index)
+    half = reach * edge_width(material)
+    if half <= 0.0:
+        return seen
+    for curve in getattr(material, "interfaces", ()):
+        d = curve.signed_distance(nodes.x, nodes.y)[index]
+        seen |= (d.min(axis=1) <= half) & (d.max(axis=1) >= -half)
+    return seen
+
+
 def build_stencils(
     nodes: NodeSet,
     domain: Domain,
@@ -115,6 +151,7 @@ def build_stencils(
     boundary: StencilSpec = BOUNDARY,
     zone: float = BOUNDARY_ZONE,
     interface: StencilSpec | None = None,
+    reach: float = 0.0,
 ) -> Stencils:
     """Nearest-neighbour stencils: ``interior`` off the zones, ``boundary`` in the zone.
 
@@ -123,7 +160,9 @@ def build_stencils(
     spec instead (the interface group takes precedence over the boundary
     zone), so no stencil of any group but the interface group can see a
     jump; without one the interfaces are ignored, as the naive operator
-    wants.
+    wants. With ``reach`` the membership test is ``seeded_rows``'s instead,
+    so that no 42 / 5 stencil sees an unresolved edge either (§3.3); at
+    δ = 0 the two tests agree.
     """
     near = boundary_zone(nodes, domain, zone)
     specs = [interior, boundary] + ([interface] if interface is not None else [])
@@ -133,7 +172,11 @@ def build_stencils(
     index, _ = knn(nodes.xy, k)
     cross = np.zeros(nodes.n, dtype=bool)
     if interface is not None:
-        cross = interface_crossings(nodes, domain.material, index)
+        cross = (
+            seeded_rows(nodes, domain.material, index, reach)
+            if reach
+            else interface_crossings(nodes, domain.material, index)
+        )
     groups = []
     for spec, rows, kind in (
         (interior, np.flatnonzero(~near & ~cross), INTERIOR_KIND),
@@ -263,6 +306,78 @@ def interface_aware_operator(
             op[row, :] = 0.0
             op[row, idx] = w
     return op.tocsr()
+
+
+def seed_operator(
+    nodes: NodeSet,
+    material,
+    stencils: Stencils,
+    warp: bool = True,
+    reach: float = TANH_REACH,
+    shape: float = GA_SHAPE,
+    rtol: float = SEED_RTOL,
+    atol: float = SEED_ATOL,
+) -> sp.csr_array:
+    """The seed operator (E4.5, §3.4): direct rows, seed rows where an edge is seen.
+
+    ``interface_aware_operator``'s shape with ``seeds.seed_weights`` in place
+    of ``interface.stencil_weights`` and ``seeded_rows`` in place of
+    ``interface_crossings``: the rows of the interface group whose own nodes
+    see an edge of width δ within ``reach`` δ are marched, the rest are the
+    direct operator's. ``stencils`` should come from ``build_stencils`` with
+    an ``interface`` spec and the same ``reach``, so that the group holds
+    every row the rule will seed. ``warp=False`` is the plain-Gaussian
+    ablation (H7). At δ = 0 on a jump ``Band`` the rows are E2.3's to
+    rounding (H2), so the operator is ``interface_aware_operator``'s.
+    """
+    op = direct_operator(nodes, material, stencils, shape)
+    if not hasattr(material, "region_index"):
+        return op
+    op = op.tolil()
+    for g in stencils.groups:
+        if g.kind != INTERFACE_KIND:
+            continue
+        seen = seeded_rows(nodes, material, g.index, reach)
+        for row, idx in zip(g.rows[seen], g.index[seen], strict=True):
+            w = seed_weights(
+                nodes.xy[idx], material, g.spec.degree, shape, warp, rtol, atol
+            )
+            op[row, :] = 0.0
+            op[row, idx] = w
+    return op.tocsr()
+
+
+OPERATOR_MODES: dict[str, Callable[..., sp.csr_array]] = {
+    "naive": naive_operator,
+    "direct": direct_operator,
+    "jump-aware": interface_aware_operator,
+    "seeds": seed_operator,
+}
+"""The operators by name, ``heat1d.stiff.OPERATOR_MODES``'s twin: eq. 76's
+product, the blind stencil, §5.3's translated rows, the seeds."""
+
+
+def build_operator(
+    nodes: NodeSet,
+    material,
+    stencils: Stencils,
+    mode: str = "seeds",
+    **options: object,
+) -> sp.csr_array:
+    """``OPERATOR_MODES[mode](nodes, material, stencils, **options)``.
+
+    The dispatch the plan's E4.5 names. Each mode wants the stencils it was
+    built for: ``naive`` and ``direct`` the plain groups, ``jump-aware`` and
+    ``seeds`` an interface group (``build_stencils(interface=BOUNDARY)``,
+    with ``reach`` for the seeds).
+    """
+    try:
+        build = OPERATOR_MODES[mode]
+    except KeyError:
+        raise ValueError(
+            f"unknown operator {mode!r}; one of {sorted(OPERATOR_MODES)}"
+        ) from None
+    return build(nodes, material, stencils, **options)
 
 
 BoundaryValue = float | Callable[[np.ndarray, np.ndarray], np.ndarray]

@@ -29,7 +29,10 @@ and Appendix B's row-recombination preconditioner, with ``solve``'s reduced
 interior system, ``gmres`` / ``bicgstab`` and ``spilu`` (E2.8); ``seeds``: the
 15 scalar seeds of a stencil through a smooth flat edge, marched as one
 44-state chain along the normal from the evaluation node, with the warp
-coordinate and the moment conditions' right-hand side (E4.4).
+coordinate and the moment conditions' right-hand side (E4.4), and the seed
+rows themselves, warped or plain (``seed_weights``, E4.5), which
+``operators.seed_operator`` puts into the global matrix on the stencils that
+see an edge (``seeded_rows``; ``build_operator`` dispatches by name).
 """
 
 from .domain import (
@@ -132,10 +135,12 @@ from .operators import (
     BOUNDARY_ZONE,
     INTERFACE_KIND,
     INTERIOR_KIND,
+    OPERATOR_MODES,
     StencilGroup,
     Stencils,
     alpha_matrix,
     boundary_zone,
+    build_operator,
     build_stencils,
     derivative_matrices,
     derivative_matrix,
@@ -146,6 +151,8 @@ from .operators import (
     interface_crossings,
     laplacian_operator,
     naive_operator,
+    seed_operator,
+    seeded_rows,
 )
 from .precondition import (
     NEIGHBOURS,
@@ -174,6 +181,7 @@ from .rbf import (
 from .resample import Reference, reference_solution, resample
 from .seeds import (
     SEED_DEGREE,
+    WARP_TOL,
     Chain,
     SeedBasis,
     SeedProfiles,
@@ -181,7 +189,10 @@ from .seeds import (
     chain,
     nearest_interface,
     seed_basis,
+    seed_coordinates,
     seed_profiles,
+    seed_weights,
+    weights_of,
 )
 from .solve import (
     ILU_ORDERING,
@@ -339,13 +350,21 @@ __all__ = [
     "neighbour_table",
     "reduced_system",
     "solve_iterative",
+    "OPERATOR_MODES",
     "SEED_DEGREE",
+    "WARP_TOL",
     "Chain",
     "SeedBasis",
     "SeedProfiles",
     "block_condition",
+    "build_operator",
     "chain",
     "nearest_interface",
     "seed_basis",
+    "seed_coordinates",
+    "seed_operator",
     "seed_profiles",
+    "seed_weights",
+    "seeded_rows",
+    "weights_of",
 ]
