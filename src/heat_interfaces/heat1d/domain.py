@@ -7,12 +7,18 @@ the node count, not by a switch: with ``h = 2 / (n - 1)`` an interface at 0
 sits on a node for odd ``n`` and halfway between two nodes for even ``n``,
 and the dissertation's pair (0, 0.5) can never both sit mid-cell. The knee
 studies (E3) select the placement through ``node_counts`` / ``grid_for``.
+
+``SmoothEdges`` is the stiff-edge medium of ``docs/stiff-diffusion.md`` §1.1:
+the same pieces, each jump replaced by a tanh transition of width ``delta``,
+the jump itself at ``delta = 0``. Every material reports its ``elements``, the
+intervals on which alpha is smooth up to their ends, and the references in
+``exact.py`` cut on them.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import factorial
 from typing import Literal, Protocol
 
@@ -27,6 +33,28 @@ The one tolerance for interface placement: ``Grid1D.placement``,
 ``node_counts`` and ``Grid1D.snapped`` all use it. Materials never snap;
 ``PiecewiseAlpha`` decides ownership by exact equality, so the quadrature
 reference samples the piece a point is really in.
+"""
+
+TANH_REACH = 20.0
+"""Beyond ``TANH_REACH * delta`` from an edge centre ``SmoothEdges.alpha`` is the piece.
+
+Bit for bit, for the study's media: the far piece's weight ``1 / (1 + e^{2z})``
+is 4.2e-18 at ``z = 20``, below half an ulp of the near piece's value once the
+values are within a factor ten of each other. At 19δ (the figure
+``docs/stiff-diffusion.md`` §1.1 quotes) the blend is within two ulps.
+"""
+
+EDGE_CUTS = (1.0, 3.0, 9.0, 27.0)
+"""Where the references cut a smooth edge: at ``x_c ± m delta`` for these ``m``.
+
+Each element then spans at most a factor three in ``z = (x - x_c) / delta``
+away from the centre element ``[-δ, δ]``, which keeps the transition's pole
+at ``z = iπ/2`` and, for contrasts of order ten, the complex zero of alpha at
+Bernstein-ellipse parameter ``ρ ≳ 3.4`` from every element, so 24 Gauss
+points or 48 Chebyshev nodes per element resolve it to rounding. Past the
+last cut the tails are below 1e-23 (and past ``TANH_REACH`` exactly the
+piece), so the outermost elements run to the domain ends, or to the next
+edge's cuts.
 """
 
 Side = Literal["left", "right"]
@@ -122,8 +150,12 @@ def grid_for(
 class Medium1D(Protocol):
     """What the operators, the reference and the interface stencils need of a material.
 
-    ``taylor`` serves E1.2's continuity matrices; a smooth edge (E3) has the
-    same expansion from either side and may ignore ``side``.
+    ``taylor`` serves E1.2's continuity matrices with the pieces' expansions
+    about ``interfaces[i]``, a smooth edge included (``SmoothEdges.taylor``).
+    ``elements`` serves the references: the edges ``-1 = e_0 < … < e_m = 1``
+    and, per element, a ``Piece`` smooth on it up to its ends, so that alpha
+    can be evaluated one-sidedly at a jump and a smooth edge is cut where its
+    transition needs resolving.
     """
 
     interfaces: tuple[float, ...]
@@ -133,6 +165,8 @@ class Medium1D(Protocol):
     def alpha_x(self, x: np.ndarray) -> np.ndarray: ...
 
     def taylor(self, i: int, side: Side, degree: int) -> np.ndarray: ...
+
+    def elements(self) -> tuple[np.ndarray, tuple[Piece, ...]]: ...
 
 
 class Piece(Protocol):
@@ -280,6 +314,11 @@ class PiecewiseAlpha:
         piece = self.pieces[i] if side == "left" else self.pieces[i + 1]
         return piece.taylor(self.interfaces[i], degree)
 
+    def elements(self) -> tuple[np.ndarray, tuple[Piece, ...]]:
+        """The pieces between the interfaces: the elements of a jump are its pieces."""
+        edges = np.array([X_MIN, *self.interfaces, X_MAX], dtype=float)
+        return edges, self.pieces
+
     def _piecewise(self, method: str, x: np.ndarray) -> np.ndarray:
         x = np.asarray(x, dtype=float)
         flat = x.ravel()
@@ -290,6 +329,109 @@ class PiecewiseAlpha:
             if mask.any():
                 out[mask] = getattr(piece, method)(flat[mask])
         return out.reshape(x.shape)
+
+
+def _logistic_pair(z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """``(s, 1 - s)`` for ``s = ½ (1 + tanh z) = 1 / (1 + e^{-2z})``.
+
+    Each is computed as ``e / (1 + e)`` or ``1 / (1 + e)`` with ``e =
+    e^{-2|z|}`` in (0, 1], so the small one is accurate to rounding in the
+    tails rather than the round-off of ``1 - s``.
+    """
+    e = np.exp(-2.0 * np.abs(z))
+    small, large = e / (1.0 + e), 1.0 / (1.0 + e)
+    positive = z >= 0.0
+    return np.where(positive, large, small), np.where(positive, small, large)
+
+
+def _merge_cuts(cuts: np.ndarray, gap: float) -> np.ndarray:
+    """The ends and the sorted ``cuts``, dropping any within ``gap`` of a kept one."""
+    kept = [X_MIN]
+    for c in np.sort(cuts):
+        if c - kept[-1] > gap and X_MAX - c > gap:
+            kept.append(float(c))
+    kept.append(X_MAX)
+    return np.array(kept)
+
+
+@dataclass(frozen=True)
+class SmoothEdges:
+    """``jump`` with each interface replaced by a tanh edge of width ``delta``.
+
+    ``docs/stiff-diffusion.md`` §1.1: across the edge at ``x_c``,
+
+        alpha = (1 - s) alpha⁻(x) + s alpha⁺(x),   s = ½ [1 + tanh((x - x_c) / δ)],
+
+    with the pieces keeping their own variation on both sides. The edges are
+    folded in from the left, ``alpha ← (1 - s_k) alpha + s_k alpha_{k+1}``, so
+    the pieces' weights are a partition of unity even when two edges lie
+    within a few δ of each other (a thin layer, §1.3's double-cross). Beyond
+    ``TANH_REACH`` δ from a centre alpha is the piece bit for bit; ``delta =
+    0`` is the ``jump`` itself, bit for bit, in ``alpha``, ``alpha_x``,
+    ``taylor`` and ``elements``.
+
+    ``interfaces`` are the edge centres, so ``straddling_windows`` and
+    ``jump_aware_operator`` see the smooth edge as a jump there, and
+    ``taylor`` delegates to the pieces: ``jump_aware_operator(grid,
+    SmoothEdges(m, delta))`` is the "δ = 0 construction on a smooth edge" of
+    §1.7, E3.3's baseline, with no further code. (The smooth alpha's own
+    expansion about the centre, whose k-th coefficient is O(δ⁻ᵏ), would serve
+    no stencil and is not offered.) The elements cut each edge at
+    ``x_c ± EDGE_CUTS δ``.
+    """
+
+    jump: PiecewiseAlpha
+    delta: float
+    interfaces: tuple[float, ...] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if not (np.isfinite(self.delta) and self.delta >= 0.0):
+            raise ValueError("the edge width delta must be finite and non-negative")
+        object.__setattr__(self, "interfaces", self.jump.interfaces)
+
+    def alpha(self, x: np.ndarray) -> np.ndarray:
+        return self._blend(x)[0]
+
+    def alpha_x(self, x: np.ndarray) -> np.ndarray:
+        return self._blend(x)[1]
+
+    def taylor(self, i: int, side: Side, degree: int) -> np.ndarray:
+        """The pieces' expansions about the centre, the jump's data (see the class)."""
+        return self.jump.taylor(i, side, degree)
+
+    def elements(self) -> tuple[np.ndarray, tuple[Piece, ...]]:
+        if self.delta == 0.0:
+            return self.jump.elements()
+        cuts = np.array(
+            [
+                xc + sign * m * self.delta
+                for xc in self.interfaces
+                for m in EDGE_CUTS
+                for sign in (-1.0, 1.0)
+            ]
+        )
+        edges = _merge_cuts(cuts, gap=0.5 * self.delta)
+        return edges, (self,) * (len(edges) - 1)
+
+    def _blend(self, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        if self.delta == 0.0:
+            return self.jump.alpha(x), self.jump.alpha_x(x)
+        x = np.asarray(x, dtype=float)
+        pieces = self.jump.pieces
+        a, a_x = pieces[0].alpha(x), pieces[0].alpha_x(x)
+        for xc, piece in zip(self.interfaces, pieces[1:], strict=True):
+            b, b_x = piece.alpha(x), piece.alpha_x(x)
+            z = (x - xc) / self.delta
+            s, t = _logistic_pair(z)
+            near = z >= 0.0
+            # From the near piece on each side, so the far piece's share is an
+            # addition that rounds away in the tails; s' = 2 s (1 - s) / δ.
+            a, a_x = (
+                np.where(near, b + t * (a - b), a + s * (b - a)),
+                np.where(near, b_x + t * (a_x - b_x), a_x + s * (b_x - a_x))
+                + (2.0 * s * t / self.delta) * (b - a),
+            )
+        return a, a_x
 
 
 DISSERTATION_BC = (1.0, 0.0)

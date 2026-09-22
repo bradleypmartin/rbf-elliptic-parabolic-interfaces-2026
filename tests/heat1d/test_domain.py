@@ -2,17 +2,21 @@ import numpy as np
 import pytest
 
 from heat_interfaces.heat1d.domain import (
+    EDGE_CUTS,
     PLACEMENT_TOL,
+    TANH_REACH,
     Constant,
     Grid1D,
     PiecewiseAlpha,
     Sinusoid,
     Smooth,
+    SmoothEdges,
     dissertation_alpha,
     eabe_alpha,
     equispaced_grid,
     grid_for,
     jump_alpha,
+    matlab_alpha,
     node_counts,
 )
 
@@ -130,3 +134,111 @@ def test_placement_and_snapping_share_one_tolerance():
         j = int(np.argmin(np.abs(g.x - xi)))
         assert g.snapped([xi])[j] == xi
         assert g.placement(xi, tol=PLACEMENT_TOL / 100) in ("node", None)
+
+
+# --- E3.2 (#27): the smooth-edged medium -----------------------------------
+
+
+def logistic(x, xc, delta):
+    return 0.5 * (1.0 + np.tanh((x - xc) / delta))
+
+
+def test_delta_zero_is_the_jump_bit_for_bit():
+    for jump in (matlab_alpha(), dissertation_alpha()):
+        m = SmoothEdges(jump, 0.0)
+        x = np.concatenate([np.linspace(-1, 1, 1001), jump.interfaces])
+        assert m.interfaces == jump.interfaces
+        assert np.array_equal(m.alpha(x), jump.alpha(x))
+        assert np.array_equal(m.alpha_x(x), jump.alpha_x(x))
+        for i in range(len(jump.interfaces)):
+            for side in ("left", "right"):
+                assert np.array_equal(m.taylor(i, side, 4), jump.taylor(i, side, 4))
+        edges, pieces = m.elements()
+        j_edges, j_pieces = jump.elements()
+        assert np.array_equal(edges, j_edges) and pieces == j_pieces
+
+
+def test_a_smooth_edge_between_constants_is_the_tanh_blend():
+    a, b, delta = 1.0 / 9.0, 1.0, 0.0025
+    m = SmoothEdges(matlab_alpha(), delta)
+    x = np.linspace(-0.05, 0.05, 2001)
+    s = logistic(x, 0.0, delta)
+    np.testing.assert_allclose(m.alpha(x), a + (b - a) * s, rtol=1e-15, atol=1e-17)
+    np.testing.assert_allclose(
+        m.alpha_x(x), (b - a) / (2 * delta) / np.cosh(x / delta) ** 2, rtol=1e-13
+    )
+    assert float(m.alpha(0.0)) == pytest.approx((a + b) / 2)
+    inner = np.abs(x) < 15 * delta  # beyond that the tails are flat to rounding
+    assert np.all(np.diff(m.alpha(x[inner])) > 0)
+
+
+def test_the_tails_reach_the_pieces_bit_for_bit_beyond_tanh_reach():
+    for jump, delta in ((matlab_alpha(), 0.0025), (dissertation_alpha(), 0.01)):
+        m = SmoothEdges(jump, delta)
+        for xc in jump.interfaces:
+            far = xc + np.array([-1.0, 1.0]) * TANH_REACH * delta
+            assert np.array_equal(m.alpha(far), jump.alpha(far))
+            nearer = xc + np.array([-1.0, 1.0]) * 19.0 * delta
+            gap = np.abs(m.alpha(nearer) - jump.alpha(nearer))
+            assert np.all(gap <= 2 * np.spacing(jump.alpha(nearer)))
+        x = np.linspace(-1, 1, 20001)
+        inside = np.any(
+            [np.abs(x - xc) < TANH_REACH * delta for xc in jump.interfaces], axis=0
+        )
+        assert np.array_equal(m.alpha(x[~inside]), jump.alpha(x[~inside]))
+
+
+def test_smoothly_varying_pieces_keep_their_variation_through_the_blend():
+    # Eq. 75 with δ = 0.01 at both edges of the layer; the blend of the two
+    # pieces at each point, hand-built, folding the edges in from the left.
+    jump = dissertation_alpha()
+    m = SmoothEdges(jump, 0.01)
+    x = np.linspace(-1, 1, 4001)
+    p0, p1, p2 = (p.alpha(x) for p in jump.pieces)
+    s0, s1 = logistic(x, 0.0, 0.01), logistic(x, 0.5, 0.01)
+    expected = (1 - s1) * ((1 - s0) * p0 + s0 * p1) + s1 * p2
+    np.testing.assert_allclose(m.alpha(x), expected, rtol=1e-13, atol=1e-16)
+    # The analytic derivative against a central difference of the blend.
+    h = 1e-6
+    fd = (m.alpha(x + h) - m.alpha(x - h)) / (2 * h)
+    np.testing.assert_allclose(m.alpha_x(x), fd, rtol=1e-7, atol=1e-7)
+    assert m.alpha(x).min() > 0.1
+
+
+def test_a_thin_layer_blends_as_a_partition_of_unity():
+    # Two edges 0.002 apart with δ = 0.001: the weights of the three pieces
+    # still sum to one and alpha stays between the extreme values.
+    jump = PiecewiseAlpha((0.1, 0.102), (Constant(1.0), Constant(1e-3), Constant(0.5)))
+    m = SmoothEdges(jump, 1e-3)
+    x = np.linspace(0.08, 0.12, 4001)
+    a = m.alpha(x)
+    assert np.all(a >= 1e-3) and np.all(a <= 1.0)
+    assert float(m.alpha(0.101)) < 0.3  # the layer's value is seen mid-layer
+
+
+def test_smooth_edges_elements_cut_at_the_edge_cuts_and_merge_collisions():
+    m = SmoothEdges(matlab_alpha(), 0.0025)
+    edges, pieces = m.elements()
+    expected = [-1.0, *(-0.0025 * c for c in reversed(EDGE_CUTS))]
+    expected += [*(0.0025 * c for c in EDGE_CUTS), 1.0]
+    np.testing.assert_allclose(edges, expected, atol=1e-15)
+    assert pieces == (m,) * (len(edges) - 1)
+    assert edges[-2] > TANH_REACH * m.delta  # the last cut is past the reach
+    # δ = 0.04 at 0 and 0.5: cuts beyond the ends are dropped, cuts of the two
+    # edges that collide are merged, and every element is at least δ/2 wide.
+    d = SmoothEdges(dissertation_alpha(), 0.04)
+    edges, _ = d.elements()
+    assert edges[0] == -1.0 and edges[-1] == 1.0
+    assert np.all(np.diff(edges) > 0.02)
+    for xc in d.interfaces:
+        for c in EDGE_CUTS:
+            for cut in (xc - c * 0.04, xc + c * 0.04):
+                if -1 + 0.02 < cut < 1 - 0.02:
+                    assert np.min(np.abs(edges - cut)) <= 0.02 + 1e-12
+
+
+def test_smooth_edges_rejects_a_negative_or_infinite_width():
+    with pytest.raises(ValueError, match="delta"):
+        SmoothEdges(matlab_alpha(), -0.1)
+    with pytest.raises(ValueError, match="delta"):
+        SmoothEdges(matlab_alpha(), np.inf)

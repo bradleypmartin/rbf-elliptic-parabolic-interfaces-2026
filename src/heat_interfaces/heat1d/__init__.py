@@ -6,20 +6,24 @@ stencil and the §4.1 jump-aware operator; ``interface``: the coefficient-space
 algebra behind it (continuity matrices, the translated basis, the stencil
 solve); ``solve``: Dirichlet rows and the sparse solve; ``exact``: the
 quadrature reference ``u = A + B ∫ dξ/alpha`` and the piecewise Chebyshev
-reference for the parabolic problems; ``march``: BD4 and RK4 with
-time-dependent Dirichlet ends and the BD4 stability region. Seeds (E3) and
-treatments (E3.5) follow.
+reference for the parabolic problems, cached as ``ParabolicReference``;
+``march``: BD4 and RK4 with time-dependent Dirichlet ends and the BD4
+stability region. ``SmoothEdges`` (E3.2) is the stiff-edge medium; seeds
+(E3.4) and treatments (E3.5) follow.
 """
 
 from .domain import (
     DISSERTATION_BC,
+    EDGE_CUTS,
     PLACEMENT_TOL,
+    TANH_REACH,
     Constant,
     Grid1D,
     Medium1D,
     PiecewiseAlpha,
     Sinusoid,
     Smooth,
+    SmoothEdges,
     dissertation_alpha,
     eabe_alpha,
     equispaced_grid,
@@ -29,13 +33,17 @@ from .domain import (
     node_counts,
 )
 from .exact import (
+    RADAU_ATOL,
+    RADAU_RTOL,
     ChebyshevPieces,
+    ParabolicReference,
     chebyshev_equilibrium,
     chebyshev_lobatto,
     chebyshev_parabolic,
     equilibrium_exact,
     equilibrium_flux,
     inverse_alpha_integral,
+    parabolic_reference,
 )
 from .interface import (
     Jump,
@@ -76,16 +84,22 @@ from .solve import dirichlet_system, normalized_l2, rms_error, solve_equilibrium
 
 __all__ = [
     "DISSERTATION_BC",
+    "EDGE_CUTS",
     "PLACEMENT_TOL",
+    "RADAU_ATOL",
+    "RADAU_RTOL",
+    "TANH_REACH",
     "ChebyshevPieces",
     "Constant",
     "Grid1D",
     "Jump",
     "Medium1D",
+    "ParabolicReference",
     "PiecewiseAlpha",
     "Region",
     "Sinusoid",
     "Smooth",
+    "SmoothEdges",
     "alpha_matrix",
     "bd4_amplification",
     "bd4_march",
@@ -119,6 +133,7 @@ __all__ = [
     "naive_operator",
     "node_counts",
     "normalized_l2",
+    "parabolic_reference",
     "ramp_boundary",
     "rk4_dt_limit",
     "rk4_march",

@@ -5,10 +5,10 @@ than the node spacing h, and stencils on the unchanged grid that keep
 fourth order through it because their polynomial basis is replaced by
 *seeds*, functions continued through the edge by ODEs. Canonical for E3–E4
 (plan D11); the manuscript quotes this note and never becomes a second
-source of truth. §1 is the formulation (E3.1, #26); §2 will hold the 1-D
-results (E3.6, #31) and later sections the 2-D design and results (E4.1,
-#32; E4.10, #41). The port of the 2016 methods this builds on is in
-`docs/port-notes.md`.
+source of truth. §1 is the formulation (E3.1, #26); §2 holds the 1-D
+results as the tickets land (E3.2, #27 onward, closed by E3.6, #31) and
+later sections the 2-D design and results (E4.1, #32; E4.10, #41). The
+port of the 2016 methods this builds on is in `docs/port-notes.md`.
 
 The construction is the one of the wave-equation companion, *Seed
 stencils: high-order finite differences and RBF-FD through material edges
@@ -496,3 +496,138 @@ E5.2 ledger re-verifies before any enters `paper/references.bib`.
   Hemisphere; the Crossref record found is the CRC Press 2018 edition,
   doi:10.1201/9781482234213, ch. 4 "Heat Conduction" (the interface
   conductivity). Section number and page to be pinned in E5.2.
+
+## 2. Results in 1-D (E3.2–E3.6)
+
+### 2.1 The smooth medium and the references at any δ (E3.2, #27)
+
+`heat1d.domain.SmoothEdges(jump, delta)` is §1.1's medium: the pieces of a
+`PiecewiseAlpha` blended across each interface with `s = ½ [1 + tanh((x −
+x_c)/δ)]`, the edges folded in from the left so the pieces' weights are a
+partition of unity even for a layer thinner than δ. `alpha_x` is analytic
+(`s′ = 2 s (1 − s)/δ`). On both study media alpha stays positive at every
+δ (eq. 75's minimum is 0.12 at δ = 0.0025, 0.28 at 0.04; the sinusoid piece
+is negative on part of (−0.5, 0) but its weight there is below 0.12).
+Decisions, each pinned by a test in `tests/heat1d/test_domain.py`:
+
+- **δ = 0 is the jump bit for bit** in `alpha`, `alpha_x`, `taylor`,
+  `elements` and `interfaces` (delegation, not a limit).
+- **The tails.** The blend is computed from the near piece on each side, so
+  beyond `TANH_REACH` = 20 δ from a centre it *is* the piece to the bit for
+  values within a factor ten of each other; at the 19δ of §1.1 it is
+  within two ulps. `alpha_x` there is the true derivative of the blend,
+  3e-15 at 20δ for δ = 0.0025, not zero.
+- **`taylor` returns the pieces' data**, not the smooth alpha's expansion
+  (whose k-th coefficient is O(δ⁻ᵏ) and would serve no stencil), and
+  `interfaces` are the edge centres: `jump_aware_operator(grid,
+  SmoothEdges(m, δ))` is therefore §1.7's δ = 0 construction on a smooth
+  edge with no further code, which is what E3.3 (#28) measures.
+- **Elements.** Every medium reports `elements()`, the intervals on which
+  alpha is smooth up to their ends, and both references cut on them: the
+  pieces for a jump; for a smooth edge the cuts `x_c ± m δ`, `m ∈
+  EDGE_CUTS = (1, 3, 9, 27)`, with cuts closer than δ/2 to a kept one
+  merged (the two edges of eq. 75 at δ = 0.04 share cuts) and the medium
+  itself as every element's piece. Each element spans at most a factor
+  three in `z = (x − x_c)/δ` away from `[−δ, δ]`, which keeps the
+  transition's pole at `z = iπ/2` and, for contrasts of order ten, the
+  complex zero of alpha at Bernstein-ellipse parameter ρ ≳ 3.4 from every
+  element; past 27δ the tails are below 1e-23.
+
+**The equilibrium reference** is the quadrature of E1.1 on those cuts. For
+a tanh edge between constants `a | b` the integral has the closed form
+`F = δ [z/a + (a − b)/(2ab) ln(a + b e^{2z})]` + const, and the 24-point
+Gauss panels reproduce it to 1e-14 at δ from 0.1 to 1e-6 for the `1/9 | 1`
+contrast and to 1e-13 at contrast 100 (`test_quadrature_on_a_tanh_edge_
+matches_the_closed_form`). The first-order approach to the jump of §1.7
+shows in it: `F₀(1) − F_δ(1)` is positive and scales exactly with δ
+(ratios 10.000 between δ = 0.01, 0.001, 0.0001); E3.3 records the constant.
+
+**The parabolic reference** is E1.3's Chebyshev collocation generalised
+from pieces to elements (`ChebyshevPieces` on `elements()`, `u` and
+`α u_x` matched at every element edge, which on a smooth edge's cuts is C¹
+continuity), integrated by Radau, kept as `ParabolicReference` (element
+edges, nodal values, JSON metadata; `evaluate` interpolates to any grid)
+and cached under `outputs/` by `parabolic_reference(..., cache=)`, reused
+when medium (its `repr`), problem label, `t_end`, resolution and tolerances
+match. Two decisions, 2026-09-21:
+
+- **Radau's tolerances are (rtol, atol) = (1e-9, 1e-11) (`RADAU_RTOL`,
+  `RADAU_ATOL`), not E1.3's (1e-12, 1e-13).** The linear system's Newton
+  iteration converges in one step and the next update is the round-off of
+  the solve, about `eps · h ‖A‖` in absolute terms; Radau measures it
+  against `atol + rtol |y|`, counts the iteration as failed where it
+  exceeds that, and cuts the step, so it is the absolute tolerance that
+  has to sit above the floor. On the `1/9 | 1` edge at δ = 0.0025
+  (unsplit elements; ‖A‖ up to 6e10 on the δ-wide ones), with 24 and 32
+  nodes per element:
+
+  | rtol, atol | steps, 24 nodes | steps, 32 nodes | time |
+  | --- | --- | --- | --- |
+  | 1e-12, 1e-13 | fails after 12 s: "required step size is less than spacing between numbers" | 20,614 | 53 s |
+  | 1e-10, 1e-12 | 3,291 | 13,127 | 6 s / 46 s |
+  | 1e-10, 1e-11 | 519 | 709 | ≤ 1 s |
+  | 1e-9, 1e-11 | 400 | 399 | 0.1–0.2 s |
+
+  Every run agrees with the (1e-9, 1e-11) one to 1.4e-13 or better; at
+  δ = 0 the (1e-12, 1e-13) run (1805 steps) and the (1e-9, 1e-11) run
+  (436) agree to 1e-13; and E1.3's accuracy tests pass with margin at the
+  new default (the decaying mode to 2e-13, the separable solution to
+  2e-11, the t = 30 equilibrium to 1.4e-11). Port notes §1.4 now say so.
+  (The first draft of this note blamed rtol and put the failure at 32
+  nodes; the review caught it, and the table is the re-measurement.)
+- **Resolution: 20 nodes per element, elements wider than 0.1 split
+  (`ChebyshevPieces.build(max_width=)`), checked against 24 nodes and
+  0.05.** The collocation system's round-off floor grows with the node
+  count on the δ-wide elements (the Chebyshev equilibrium against the
+  quadrature on the `1/9 | 1` edge at δ = 0.0025: 8e-12, 7e-12, 1e-11
+  at 24, 32, 48 unsplit nodes; on eq. 75: 5e-11, 1e-10, 2e-10, and
+  the 48-node Radau march there takes 2529 steps and 76 s) while the
+  truncation error falls with it on the wide pieces (32 unsplit nodes leave
+  eq. 75's half-unit sinusoid layer at 6e-9, 48 at 5e-13). Fewer nodes on
+  narrower elements serve both: 20 nodes resolve a tanh element to 1e-11
+  (ρ ≥ 3.4) and a 0.1-wide piece of the sinusoid to 1e-12, 16 do not
+  (1e-9).
+
+`scripts/heat1d_stiff.py` (20 s, both media at the four δ of E3.3, the
+check resolutions cached too) reports, per medium and δ, the reference's
+elements, interior unknowns, Radau steps and seconds, the check's seconds,
+the max difference between the two resolutions on 2001 points
+(*agreement*) and the Chebyshev equilibrium's max difference from the
+quadrature at the reference's resolution (*elliptic*). The element,
+unknown and step counts reproduce exactly from run to run; the two floor
+columns are round-off and move by 10–30 % between runs of the same code
+on the same machine (threaded BLAS reductions), so they are quoted to one
+figure:
+
+| medium | δ | elements | unknowns | steps | s (ref / check) | agreement | elliptic |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `1/9 \| 1` | 0 | 20 | 380 | 436 | 0.25 / 1.24 | 8e-13 | 5e-13 |
+| | 0.04 | 23 | 437 | 433 | 0.31 / 1.47 | 1e-12 | 8e-13 |
+| | 0.01 | 25 | 475 | 429 | 0.35 / 1.87 | 5e-12 | 6e-12 |
+| | 0.0025 | 27 | 513 | 427 | 0.46 / 2.13 | 2e-12 | 1e-12 |
+| eq. 75 | 0 | 20 | 380 | 473 | 0.27 / 1.35 | 2e-11 | 9e-12 |
+| | 0.04 | 27 | 513 | 473 | 0.50 / 2.23 | 3e-11 | 3e-11 |
+| | 0.01 | 30 | 570 | 470 | 0.51 / 2.77 | 5e-11 | 1e-11 |
+| | 0.0025 | 33 | 627 | 468 | 0.63 / 3.26 | 6e-11 | 1e-11 |
+
+**P1 holds**: δ = 0 is the jump bit for bit, the tails are the pieces to
+the bit beyond 20δ (two ulps at 19δ), and the parabolic reference agrees
+between two resolutions to about 6e-11 at worst (eq. 75 at δ = 0.0025;
+5.5e-11 and 6.3e-11 in two runs), 2e-12 on the `1/9 | 1` medium, against
+the ticket's 1e-10. The floor is a property of collocation on δ-wide
+elements in double precision, not of the tolerance; eq. 75's is 5–10×
+the constant-piece medium's. For the study
+that is enough by four orders on eq. 75, where every method's error stays
+above 1e-6 (the plain FD4 rows inside the layer, §1.6), and by two on the
+`1/9 | 1` medium, where the jump-aware line reached 6e-12 at 800 nodes in
+E1.3: the 800-node points of E3.4's seed line will sit on the reference's
+floor and are read as such.
+
+Tests (`tests/heat1d/test_exact.py`): the closed form above at five δ and
+two contrasts; the δ = 0 medium passing the jump's closed form bit for bit
+with the jump; the Chebyshev equilibrium on a smooth edge within 3e-11 of
+the quadrature at δ = 0.04 and 0.0025; the two-resolution agreement below
+1e-10 at δ = 0, 0.01, 0.0025; the cache round trip (files written, reused
+with the recorded run time, rebuilt when `t_end` changes, a dot in the
+file stem kept). `tests/test_heat1d_stiff.py` runs the driver at two δ and
+checks that the second run reads every reference from the cache.

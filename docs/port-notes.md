@@ -134,7 +134,9 @@ throughout.
 and 1 right of it, zero initial condition, `u(−1, t)` ramped from 0 to 1,
 `u(1, t) = 0`. Even node counts put the interface mid-cell (four rebuilt rows).
 Reference: piecewise Chebyshev collocation, 32 Gauss–Lobatto nodes per piece
-with `u` and `α u_x` matched at the jump, Radau in time at `rtol = 1e-12`.
+with `u` and `α u_x` matched at the jump, Radau in time at `rtol = 1e-12`
+when these numbers were taken; E3.2 set the default to 1e-9, which agrees
+with it to 1e-13 here (stiff note §2.1).
 
 | nodes | naive | rate | jump-aware | rate |
 | --- | --- | --- | --- | --- |
@@ -202,7 +204,8 @@ is why the naive runs of §1.4 are stable and merely first order.
 - **Reference solutions** (E1.1, E1.3). Quadrature for equilibrium;
   piecewise Chebyshev with Radau for the parabolic problems. The latter
   covers a jump (`δ = 0`) by matching `u` and `α u_x` across it, a mild
-  extension of plan D4's "fine jump-aware run".
+  extension of plan D4's "fine jump-aware run". E3.2 generalised the pieces
+  to a medium's `elements()` and cached the result (stiff note §2.1).
 - **Stencil algebra in units of h** (E1.2). Positions `x / h` and Taylor
   coefficients `a_k h^k`, weights scaled back by `h²`, so the small solves
   are as well conditioned at 3201 nodes as at 101. Windows that straddle two
