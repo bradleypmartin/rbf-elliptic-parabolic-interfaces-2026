@@ -1,5 +1,6 @@
 """The E3 driver: E3.2's references, built, checked, cached, reused; E3.3's knee;
-E3.4's seed line, weights and spectra; E3.5's comparator table."""
+E3.4's seed line, weights and spectra; E3.5's comparator table; E3.6's seed
+functions, snapshot and results file."""
 
 import json
 import sys
@@ -19,6 +20,9 @@ from heat1d_stiff import (  # noqa: E402
     MAX_WIDTH,
     N_CHEB,
     OPERATORS,
+    RESULTS,
+    SEED_RATIOS,
+    SNAPSHOT_OPERATORS,
     TREATMENTS,
     WIDENINGS,
     check_references,
@@ -31,10 +35,13 @@ from heat1d_stiff import (  # noqa: E402
     reference_path,
     row_residuals,
     save_knee_cache,
+    seed_functions,
     seed_spectra,
+    snapshot,
     weights_vs_jump,
     widened_floors,
 )
+from heat_interfaces.results_cache import read_results  # noqa: E402
 
 
 def test_main_builds_checks_and_then_reuses_the_references(tmp_path, capsys):
@@ -43,11 +50,42 @@ def test_main_builds_checks_and_then_reuses_the_references(tmp_path, capsys):
         *("--deltas", "0", "0.0025"),
         *("--media", "matlab"),
         *("--counts", "50", "100"),
+        *("--data-dir", str(tmp_path / "data")),
     ]
     main(argv)
     out = capsys.readouterr().out
     # Two references, four knee rows, four comparator rows.
     assert "within the 1e-10" in out and out.count("solved") == 2 + 4 + 4
+    # E3.6: the two figures and the results file, written to both directories.
+    assert (tmp_path / "heat1d_stiff_seeds.png").exists()
+    assert (tmp_path / "heat1d_stiff_snapshot.png").exists()
+    results = read_results(tmp_path / RESULTS)
+    assert (tmp_path / "data" / RESULTS).read_text() == (tmp_path / RESULTS).read_text()
+    assert results["driver"] == "heat1d_stiff" and results["args"]["media"] == [
+        "matlab"
+    ]
+    assert results["args"]["data_dir"] == str(tmp_path / "data")
+    assert set(results["timings"]) == {
+        "references",
+        "knee",
+        "comparators",
+        "figures",
+        "total",
+    }
+    ramp = results["tables"]["knee/ramp"]["matlab"]
+    assert set(ramp) == {"0", "0.0025"} and [r["n"] for r in ramp["0"]] == [50, 100]
+    assert set(ramp["0"][0]) >= {"n", "h", "floor", *OPERATORS}
+    assert set(results["tables"]["comparators/ramp"]["matlab"]["0.0025"][0]) >= set(
+        COMPARATORS
+    )
+    assert [r["label"] for r in results["tables"]["snapshot"]["rows"]] == list(
+        SNAPSHOT_OPERATORS
+    )
+    assert [r["ratio"] for r in results["tables"]["seed_functions"]["rows"]] == [
+        0.0,
+        *SEED_RATIOS,
+    ]
+    assert len(results["tables"]["references"]) == 2
     for delta in (0.0, 0.0025):
         for n, w in ((N_CHEB, MAX_WIDTH), (CHECK_N_CHEB, CHECK_MAX_WIDTH)):
             stem = reference_path(tmp_path, "matlab", delta, n, w)
@@ -309,3 +347,67 @@ def test_the_widened_edge_sits_on_its_own_floor_until_the_edge_is_resolved():
             assert e["T0 widened m=1"] >= 0.99 * f[1]
         else:
             assert e["T0 widened m=1"] == pytest.approx(e["naive"], rel=0.02)
+
+
+# --- E3.6 (#31) --------------------------------------------------------------
+
+
+def test_the_seed_functions_meet_the_translated_basis_at_first_order_in_delta_over_h():
+    # At δ = 0 the march is E1.2's algebra function by function (P4 checked the
+    # weights only); away from it the sup distance of each seed from the
+    # translated basis is first order in δ/h (5.1e-2, 5.1e-3, 5.1e-4 for φ₁),
+    # while the monomials stay O(1) away: the kink of the 1/9 | 1 jump.
+    data = seed_functions("matlab", 200, ratios=(0.1, 0.01, 0.001))
+    rows = {r["ratio"]: r for r in data["rows"]}
+    assert max(rows[0.0]["vs_jump"]) < 1e-13
+    assert min(rows[0.0]["vs_monomials"]) > 0.5
+    for k in range(4):
+        d = np.array([rows[r]["vs_jump"][k] for r in (0.1, 0.01, 0.001)])
+        assert np.all(np.abs(np.log10(d[:-1] / d[1:]) - 1) < 0.1), (k, d)
+    assert rows[0.001]["vs_jump"][0] == pytest.approx(5.12e-4, rel=0.02)
+    # On eq. 75 the δ = 0 gap is E1.2's truncation of the sinusoid pieces
+    # (0.19–0.40 at h = 0.01, the 1.25 of the weights) and no δ closes it.
+    eq75 = {r["ratio"]: r for r in seed_functions("eq75", 200, ratios=(0.1,))["rows"]}
+    assert 0.15 < min(eq75[0.0]["vs_jump"]) and max(eq75[0.0]["vs_jump"]) < 0.45
+    assert min(eq75[0.1]["vs_jump"]) > 0.15
+    # Stencil units: the nodes at 0, ±½, ±1, the edge a quarter of the way right;
+    # on the node's side of it the δ = 0 seeds are the monomials themselves.
+    np.testing.assert_allclose(data["xi_nodes"], [-1.0, -0.5, 0.0, 0.5, 1.0])
+    assert data["xi_edges"] == pytest.approx([0.25])
+    left = data["xi"] < 0.0
+    for k in range(5):
+        np.testing.assert_allclose(
+            data["seeds"][0.0][k][left], data["monomials"][k][left], atol=1e-13
+        )
+    assert data["h_s"] == pytest.approx(2 * data["h"])
+
+
+def test_the_snapshot_repeats_the_sweeps_numbers_and_says_where_the_error_sits(
+    tmp_path,
+):
+    # The same four marches as the sweep's row at 100 nodes and δ = 0.0025
+    # (h = 8δ): naive on its first-order line, the construction on its floor,
+    # T1-FV second order, the seeds on the δ = 0 line, four orders below naive.
+    # The naive and construction errors are not confined to the edge (a wrong
+    # effective resistance shifts the whole profile), though the largest
+    # nodal error of the naive operator sits beside it.
+    grids = knee_grids("matlab", [100])
+    cache: dict[str, float] = {}
+    rows = parabolic_sweep(
+        "matlab", 0.0025, grids, tmp_path, cache, (16, 0.25), SNAPSHOT_OPERATORS
+    )
+    pic = snapshot("matlab", 0.0025, 100, tmp_path, (16, 0.25))
+    got = {r["label"]: r for r in pic["rows"]}
+    for label in SNAPSHOT_OPERATORS:
+        assert got[label]["error"] == pytest.approx(rows[0][label], rel=1e-12)
+    assert (
+        got["naive"]["error"]
+        > got["δ = 0 construction"]["error"]
+        > got["T1-FV"]["error"]
+        > got["seeds"]["error"]
+    )
+    assert got["naive"]["error"] > 1e4 * got["seeds"]["error"]
+    assert got["naive"]["local"] < 0.3 and got["δ = 0 construction"]["local"] < 0.3
+    assert abs(got["naive"]["at"]) <= 2 * pic["h"]
+    assert pic["n"] == 100 and pic["x"].shape == pic["u"].shape == (100,)
+    assert pic["u_fine"].shape == pic["alpha_fine"].shape == (2001,)
