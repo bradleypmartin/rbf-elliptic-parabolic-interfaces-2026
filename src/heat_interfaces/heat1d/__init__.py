@@ -100,6 +100,7 @@ from .stiff import (
     seeded_windows,
 )
 from .treatments import (
+    LinearPiece,
     NodalAlpha,
     arithmetic_cells,
     cell_windows,
@@ -124,6 +125,7 @@ __all__ = [
     "Constant",
     "Grid1D",
     "Jump",
+    "LinearPiece",
     "Medium1D",
     "NodalAlpha",
     "ParabolicReference",

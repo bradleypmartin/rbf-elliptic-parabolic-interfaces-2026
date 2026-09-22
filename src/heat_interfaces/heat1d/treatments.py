@@ -31,6 +31,7 @@ diffusion.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -42,6 +43,28 @@ from .stiff import edge_width
 
 
 @dataclass(frozen=True)
+class LinearPiece:
+    """``a0 + a1 (x - x0)``: one cell of a ``NodalAlpha``, a ``Piece`` of its own."""
+
+    x0: float
+    a0: float
+    a1: float
+
+    def alpha(self, x: np.ndarray) -> np.ndarray:
+        return self.a0 + self.a1 * (np.asarray(x, dtype=float) - self.x0)
+
+    def alpha_x(self, x: np.ndarray) -> np.ndarray:
+        return np.full_like(np.asarray(x, dtype=float), self.a1)
+
+    def taylor(self, x0: float, degree: int) -> np.ndarray:
+        a = np.zeros(degree + 1)
+        a[0] = self.a0 + self.a1 * (x0 - self.x0)
+        if degree >= 1:
+            a[1] = self.a1
+        return a
+
+
+@dataclass(frozen=True, repr=False)
 class NodalAlpha:
     """A diffusivity given by its ``values`` at the nodes of ``grid``, linear between.
 
@@ -50,10 +73,14 @@ class NodalAlpha:
     elsewhere, so the naive operator, which samples alpha at the nodes only,
     sees the table and nothing else. It has no interfaces (the treatment has
     replaced the edge by a table), so the straddling and seeded windows are
-    empty on it; ``alpha_x`` is the interpolant's slope, read from the cell
-    to the right of a node; ``elements`` cut at the nodes, on each of which
-    the interpolant is smooth, so the quadrature reference of the treated
-    material is well defined should anyone want it.
+    empty on it and ``taylor`` has nothing to expand about; ``alpha_x`` is
+    the interpolant's slope, read from the cell to the right of a node;
+    ``elements`` cut at the nodes with a ``LinearPiece`` per cell, so the
+    quadrature and Chebyshev references of the treated material are well
+    defined should anyone want them. The ``repr``, which keys the parabolic
+    reference cache, carries a hash of the whole table rather than numpy's
+    summary of it, which elides the middle of any array past 1000 entries,
+    where the edge is.
     """
 
     grid: Grid1D
@@ -67,6 +94,10 @@ class NodalAlpha:
         if not np.all(np.isfinite(values)) or np.any(values <= 0.0):
             raise ValueError("a diffusivity must be positive and finite")
         object.__setattr__(self, "values", values)
+
+    def __repr__(self) -> str:
+        digest = hashlib.sha1(self.values.tobytes()).hexdigest()
+        return f"NodalAlpha(n={self.grid.n}, h={self.grid.h!r}, sha1={digest})"
 
     def alpha(self, x: np.ndarray) -> np.ndarray:
         x = np.asarray(x, dtype=float)
@@ -84,7 +115,14 @@ class NodalAlpha:
         raise ValueError("a nodal treatment has no interfaces to expand about")
 
     def elements(self) -> tuple[np.ndarray, tuple[Piece, ...]]:
-        return self.grid.x.copy(), (self,) * (self.grid.n - 1)
+        slopes = np.diff(self.values) / self.grid.h
+        pieces = tuple(
+            LinearPiece(float(x0), float(a0), float(a1))
+            for x0, a0, a1 in zip(
+                self.grid.x[:-1], self.values[:-1], slopes, strict=True
+            )
+        )
+        return self.grid.x.copy(), pieces
 
 
 def cell_windows(grid: Grid1D, cells: float) -> tuple[np.ndarray, np.ndarray]:
@@ -173,6 +211,7 @@ def face_conductance_operator(
 
 
 __all__ = (
+    "LinearPiece",
     "NodalAlpha",
     "arithmetic_cells",
     "cell_windows",

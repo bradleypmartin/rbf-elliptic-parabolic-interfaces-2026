@@ -14,11 +14,14 @@ from heat_interfaces.heat1d.domain import (
     matlab_alpha,
 )
 from heat_interfaces.heat1d.exact import (
+    chebyshev_equilibrium,
     edge_resistance_deficit,
     equilibrium_exact,
     equilibrium_flux,
     inverse_alpha_integral,
+    parabolic_reference,
 )
+from heat_interfaces.heat1d.march import ramp_boundary
 from heat_interfaces.heat1d.operators import (
     jump_aware_operator,
     naive_operator,
@@ -27,6 +30,7 @@ from heat_interfaces.heat1d.operators import (
 from heat_interfaces.heat1d.solve import normalized_l2, solve_equilibrium
 from heat_interfaces.heat1d.stiff import seeded_windows
 from heat_interfaces.heat1d.treatments import (
+    LinearPiece,
     NodalAlpha,
     arithmetic_cells,
     cell_windows,
@@ -77,7 +81,17 @@ def test_nodal_alpha_is_the_table_at_the_nodes_and_linear_between():
     assert m.alpha_x(g.x[-1]) == pytest.approx(np.diff(values)[-1] / g.h)
     edges, pieces = m.elements()
     np.testing.assert_array_equal(edges, g.x)
-    assert len(pieces) == g.n - 1 and all(p is m for p in pieces)
+    # One linear piece per cell, each a Piece: value, slope, and a Taylor
+    # expansion about any point that is the interpolant's line.
+    assert len(pieces) == g.n - 1
+    for k, piece in enumerate(pieces):
+        assert isinstance(piece, LinearPiece)
+        x_mid = (g.x[k] + g.x[k + 1]) / 2
+        assert piece.alpha(x_mid) == pytest.approx(m.alpha(x_mid))
+        assert piece.alpha_x(x_mid) == pytest.approx(m.alpha_x(x_mid))
+        np.testing.assert_allclose(
+            piece.taylor(g.x[k + 1], 3), [values[k + 1], m.alpha_x(x_mid), 0.0, 0.0]
+        )
     # No interfaces: nothing straddles, nothing is seeded, nothing expands.
     assert m.interfaces == ()
     assert straddling_windows(g, m) == [] and seeded_windows(g, m) == []
@@ -306,3 +320,49 @@ def test_eabe_medium_treatments_are_well_defined_on_a_varying_piece():
         normalized_l2(solve_equilibrium(face_conductance_operator(g, m), *BC), u)
         < 1e-13
     )
+
+
+def test_nodal_alpha_reprs_differ_where_numpy_would_elide_the_edge(tmp_path):
+    # Spar finding on #30: numpy summarises an array past 1000 entries with
+    # its first and last three, which is never where the edge is, so two
+    # different treatments at 1601 nodes printed the same. The repr keys
+    # the parabolic reference cache, so it hashes the whole table instead.
+    g = equispaced_grid(1601)
+    m = SmoothEdges(matlab_alpha(), 0.01)
+    t1, t2 = harmonic_cells(g, m, 2), arithmetic_cells(g, m, 1)
+    assert np.max(np.abs(t1.values - t2.values)) > 1e-3
+    assert repr(t1) != repr(t2)
+    assert repr(t1) == repr(harmonic_cells(g, m, 2))
+    nudged = NodalAlpha(g, t1.values * (1 + np.finfo(float).eps * (g.x > 0)))
+    assert repr(nudged) != repr(t1)
+    assert "..." not in repr(t1) and str(g.n) in repr(t1)
+    # And the cache is not fooled: two treated media on one coarse grid
+    # (cheap Chebyshev elements) give two references, the second not reused.
+    g = equispaced_grid(9)
+    m = SmoothEdges(matlab_alpha(), 0.05)
+    kwargs = dict(
+        initial=np.zeros_like,
+        boundary=ramp_boundary(1.0, *BC),
+        t_end=0.5,
+        n_cheb=6,
+        problem="t",
+        cache=tmp_path / "ref",
+    )
+    first = parabolic_reference(harmonic_cells(g, m, 1), **kwargs)
+    again = parabolic_reference(harmonic_cells(g, m, 1), **kwargs)
+    other = parabolic_reference(arithmetic_cells(g, m, 1), **kwargs)
+    assert again.reused and not other.reused
+    assert np.max(np.abs(other.u - first.u)) > 1e-6
+
+
+def test_the_chebyshev_reference_of_a_treated_medium_is_the_interpolants():
+    # elements() hands the reference one LinearPiece per cell, so the
+    # Chebyshev equilibrium of a NodalAlpha is its quadrature equilibrium.
+    # The steepest cell has 1/alpha's pole a third of a cell past its end,
+    # so 9 Chebyshev nodes leave 5e-6 and 25 leave 6e-13.
+    g = equispaced_grid(21)
+    t = harmonic_cells(g, SmoothEdges(matlab_alpha(), 0.02), 2)
+    x = np.linspace(-1.0, 1.0, 101)
+    cheb = chebyshev_equilibrium(t, *BC, x, n_cheb=24)
+    quad = equilibrium_exact(t, *BC, x)
+    np.testing.assert_allclose(cheb, quad, atol=1e-11)
