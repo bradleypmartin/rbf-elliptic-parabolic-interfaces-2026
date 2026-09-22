@@ -13,6 +13,7 @@ from heat_interfaces.heat1d.domain import (
 )
 from heat_interfaces.heat1d.exact import (
     ParabolicReference,
+    alpha_integral,
     chebyshev_equilibrium,
     chebyshev_lobatto,
     chebyshev_parabolic,
@@ -98,6 +99,27 @@ def test_a_medium_without_interfaces_integrates_too():
     x = np.array([-1.0, 0.0, 1.0])
     np.testing.assert_allclose(inverse_alpha_integral(m, x), [0.0, 4.0, 8.0])
     np.testing.assert_allclose(equilibrium_exact(m, 1.0, 0.0, x), [1.0, 0.5, 0.0])
+    np.testing.assert_allclose(alpha_integral(m, x), [0.0, 0.25, 0.5])
+
+
+def test_alpha_integral_is_the_same_quadrature_as_the_resistance():
+    # E3.5's arithmetic mean: exact across a jump, spectral on a sinusoid,
+    # and both integrals are cut at the same elements.
+    x = np.array([-1.0, -0.3, 0.0, 0.2, 1.0])
+    jump = jump_alpha(1.0 / 9.0, 1.0)
+    np.testing.assert_allclose(
+        alpha_integral(jump, x), np.where(x <= 0, (x + 1) / 9, 1 / 9 + x), rtol=1e-14
+    )
+    m = dissertation_alpha()
+    k = 2 * np.pi
+    layer = np.clip(x, 0.0, 0.5)
+    expected = (x + 1) - layer + 0.1 * layer + 0.4 * (1 - np.cos(k * layer)) / k
+    np.testing.assert_allclose(alpha_integral(m, x), expected, rtol=1e-13)
+    s = SmoothEdges(jump, 0.01)
+    total = float(alpha_integral(s, np.array(1.0)))
+    # The smooth edge adds ∫ (blend − jump) = (b − a) δ ∫ (s(z) − H(z)) dz = 0
+    # by the blend's symmetry, so the total is the jump's to rounding.
+    assert total == pytest.approx(1 / 9 + 1, rel=1e-13)
 
 
 @pytest.mark.parametrize("gap", [1e-16, 1e-15, 1e-14, 1e-13, 1e-12, 1e-10])

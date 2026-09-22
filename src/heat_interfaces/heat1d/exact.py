@@ -58,10 +58,14 @@ its tolerance (``docs/stiff-diffusion.md`` §2.1).
 """
 
 
-def inverse_alpha_integral(
-    medium: Medium1D, x: np.ndarray, n_gauss: int = 24, n_panels: int = 1
+def _cumulative_integral(
+    medium: Medium1D,
+    x: np.ndarray,
+    integrand: Callable[[np.ndarray], np.ndarray],
+    n_gauss: int,
+    n_panels: int,
 ) -> np.ndarray:
-    """``F(x) = ∫_{-1}^{x} dξ / alpha(ξ)`` at every point of ``x`` (any shape).
+    """``∫_{-1}^{x} integrand(alpha(ξ)) dξ`` at every point of ``x`` (any shape).
 
     [-1, 1] is cut at the medium's element edges (the interfaces, and the
     ``EDGE_CUTS`` of a smooth edge) and at the requested points; every cut
@@ -82,11 +86,35 @@ def inverse_alpha_integral(
     nodes, weights = np.polynomial.legendre.leggauss(n_gauss)
     mid, half = (lo + hi) / 2, (hi - lo) / 2
     samples = mid[:, None] + half[:, None] * nodes[None, :]
-    integrand = 1.0 / medium.alpha(samples.ravel()).reshape(samples.shape)
-    per_panel = half * (integrand @ weights)
+    values = integrand(medium.alpha(samples.ravel())).reshape(samples.shape)
+    per_panel = half * (values @ weights)
     at_edges = np.concatenate([[0.0], np.cumsum(per_panel)])
     at_cuts = at_edges[::n_panels]
     return at_cuts[np.searchsorted(cuts, x.ravel())].reshape(x.shape)
+
+
+def inverse_alpha_integral(
+    medium: Medium1D, x: np.ndarray, n_gauss: int = 24, n_panels: int = 1
+) -> np.ndarray:
+    """``F(x) = ∫_{-1}^{x} dξ / alpha(ξ)``, the resistance, at every point of ``x``.
+
+    The quadrature of ``_cumulative_integral``: exact to rounding on constant
+    pieces, spectral on smooth ones, and on a smooth edge resolved by its
+    ``EDGE_CUTS`` (the closed form of ``edge_resistance_deficit`` to 1e-14).
+    """
+    return _cumulative_integral(medium, x, lambda a: 1.0 / a, n_gauss, n_panels)
+
+
+def alpha_integral(
+    medium: Medium1D, x: np.ndarray, n_gauss: int = 24, n_panels: int = 1
+) -> np.ndarray:
+    """``G(x) = ∫_{-1}^{x} alpha(ξ) dξ`` at every point of ``x``, the same quadrature.
+
+    The arithmetic cell mean of E3.5's T2 treatment is ``(G(b) − G(a)) / (b −
+    a)``, as the harmonic mean of T1 and the face conductances of T1-FV are
+    ``(b − a) / (F(b) − F(a))``.
+    """
+    return _cumulative_integral(medium, x, lambda a: a, n_gauss, n_panels)
 
 
 def edge_resistance_deficit(left: float, right: float) -> float:

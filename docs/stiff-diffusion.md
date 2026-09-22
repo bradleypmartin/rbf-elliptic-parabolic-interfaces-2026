@@ -424,7 +424,7 @@ scheme with exact face conductances (item 3: second order at every δ,
 exact at equilibrium by construction), which is the strongest low-order
 comparator on that ground and the finite-volume twin the manuscript
 should show. Brad decides; #30's text is amended either way (breadcrumb
-posted with this ticket).
+posted with this ticket). E3.5 built both; §2.4 has the tables.
 
 ### 1.9 What the later sections check
 
@@ -1145,3 +1145,197 @@ validation) and
 `tests/test_heat1d_stiff.py` (the driver's seed line on the ramp problem
 at the study's reference resolution, the weights and conditioning table,
 the eq. 75 floor, the spectra at 49 and 101 nodes).
+
+### 2.4 The coefficient treatments (E3.5, #30)
+
+![treatments](figures/heat1d_stiff_treatments.png)
+
+`heat1d/treatments.py`, and the comparator tables appended to
+`scripts/heat1d_stiff.py` (30 s cold per medium for the 144 extra BD4
+marches, 2 s cached; the whole driver 2 min cold, 6 s cached). Plan §3.4's
+"change the medium, keep the scheme" comparators on §2.2's grids and
+problems, read against the true-δ references with the seeds as the
+target:
+
+- **The nodal treatments are a material.** `NodalAlpha(grid, values)`: a
+  table at the nodes, linear between them, no interfaces, elements cut at
+  the nodes. `naive_operator` samples it to the bit, so a treatment is
+  `Dx A Dx` on a changed A and nothing else. T1 `harmonic_cells(grid,
+  medium, cells)` is `(b − a) / ∫_a^b dξ/α` over the window `x_j ± cells
+  h/2` (one cell: the node's own cell; two: to the neighbours; clipped at
+  the domain ends), T2 `arithmetic_cells` the same window's `∫ α / (b −
+  a)` (`exact.alpha_integral`, the resistance quadrature with the other
+  integrand). Both are differences of cumulative quadratures, so they
+  carry a relative rounding of about `n ε` (1e-12 at 6400 nodes), below
+  anything the tables read.
+- **T0** `widened_edge(grid, medium, m)` is `SmoothEdges(jump, max(δ,
+  m h))`: the same class, a wider edge, so the references and the windows
+  stay consistent; below `δ = m h` it does not depend on δ at all.
+- **T1-FV** `face_conductance_operator` is the three-point conservative
+  scheme with `a_{i+½} = h / ∫_{x_i}^{x_{i+1}} dξ/α` (§1.8 item 3), an
+  operator, not a medium; zero end rows for the Dirichlet rows to replace.
+- **T3**, the band-limited α, is not built: the ticket keeps it only if
+  E5.2 (#43) finds it in use for diffusion.
+
+Errors `‖e‖₂/‖u‖₂` at the nodes (the rate in parentheses), the ramp
+problem at t = 2, MATLAB medium, the comparator columns in P10's order
+with the untreated naive line and the seeds as the two ends:
+
+| n | h/δ | naive | T1 1c | T1 2c | T2 1c | T0 m=1 | T0 m=2 | T1-FV | seeds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| *δ = 0 (jump, mid-cell)* | | | | | | | | | |
+| 50 | ∞ | 3.86e-3 | 3.86e-3 | 6.26e-4 | 3.86e-3 | 1.12e-2 | 2.22e-2 | 1.31e-4 | 2.49e-6 |
+| 100 | ∞ | 1.96e-3 (0.98) | 1.96e-3 (0.98) | 2.30e-4 (1.44) | 1.96e-3 (0.98) | 5.67e-3 (0.98) | 1.13e-2 (0.98) | 3.24e-5 (2.02) | 2.95e-8 (6.40) |
+| 200 | ∞ | 9.90e-4 (0.99) | 9.90e-4 (0.99) | 8.32e-5 (1.47) | 9.90e-4 (0.99) | 2.85e-3 (0.99) | 5.69e-3 (0.99) | 8.10e-6 (2.00) | 1.61e-9 (4.19) |
+| 400 | ∞ | 4.97e-4 (0.99) | 4.97e-4 (0.99) | 2.97e-5 (1.48) | 4.97e-4 (0.99) | 1.43e-3 (0.99) | 2.86e-3 (0.99) | 2.02e-6 (2.00) | 9.76e-11 (4.05) |
+| 800 | ∞ | 2.49e-4 (1.00) | 2.49e-4 (1.00) | 1.06e-5 (1.49) | 2.49e-4 (1.00) | 7.18e-4 (1.00) | 1.43e-3 (1.00) | 5.06e-7 (2.00) | 6.11e-12 (4.00) |
+| 1600 | ∞ | 1.25e-4 (1.00) | 1.25e-4 (1.00) | 3.75e-6 (1.50) | 1.25e-4 (1.00) | 3.59e-4 (1.00) | 7.18e-4 (1.00) | 1.26e-7 (2.00) | 4.18e-12 (0.55) |
+| *δ = 0.01* | | | | | | | | | |
+| 50 | 4.08 | 3.09e-3 | 1.53e-3 | 7.03e-4 | 1.79e-3 | 8.65e-3 | 2.00e-2 | 1.30e-4 | 2.46e-6 |
+| 100 | 2.02 | 1.79e-4 (4.11) | 1.23e-4 (3.63) | 2.37e-4 (1.57) | 8.21e-4 (1.13) | 2.93e-3 (1.56) | 8.69e-3 (1.20) | 3.27e-5 (2.00) | 2.99e-8 (6.36) |
+| 200 | 1.01 | 9.25e-5 (0.95) | 5.97e-5 (1.04) | 6.99e-5 (1.76) | 1.54e-4 (2.41) | 9.12e-5 (5.00) | 2.92e-3 (1.57) | 8.14e-6 (2.00) | 1.64e-9 (4.19) |
+| 400 | 0.50 | 1.54e-6 (5.91) | 4.38e-6 (3.77) | 1.91e-5 (1.87) | 3.48e-5 (2.15) | 1.54e-6 (5.89) | 7.34e-6 (8.63) | 2.03e-6 (2.00) | 9.89e-11 (4.05) |
+| 800 | 0.25 | 9.32e-8 (4.04) | 1.20e-6 (1.87) | 4.94e-6 (1.95) | 8.74e-6 (1.99) | 9.32e-8 (4.04) | 9.32e-8 (6.30) | 5.09e-7 (2.00) | 6.32e-12 (3.97) |
+| 1600 | 0.13 | 5.96e-9 (3.97) | 3.09e-7 (1.96) | 1.25e-6 (1.99) | 2.19e-6 (2.00) | 5.96e-9 (3.97) | 5.96e-9 (3.97) | 1.27e-7 (2.00) | 5.76e-12 (0.13) |
+| *δ = 0.0025* | | | | | | | | | |
+| 50 | 16.3 | 3.85e-3 | 3.28e-3 | 6.35e-4 | 2.78e-3 | 1.05e-2 | 2.16e-2 | 1.31e-4 | 2.48e-6 |
+| 100 | 8.08 | 2.04e-3 (0.92) | 1.37e-3 (1.26) | 2.38e-4 (1.42) | 1.11e-3 (1.33) | 4.99e-3 (1.08) | 1.06e-2 (1.02) | 3.20e-5 (2.03) | 2.95e-8 (6.39) |
+| 200 | 4.02 | 7.90e-4 (1.37) | 3.95e-4 (1.79) | 8.94e-5 (1.41) | 4.59e-4 (1.27) | 2.16e-3 (1.21) | 5.02e-3 (1.09) | 8.00e-6 (2.00) | 1.62e-9 (4.19) |
+| 400 | 2.01 | 4.36e-5 (4.18) | 2.74e-5 (3.85) | 2.96e-5 (1.60) | 1.99e-4 (1.20) | 7.23e-4 (1.58) | 2.16e-3 (1.22) | 2.01e-6 (2.00) | 9.74e-11 (4.05) |
+| 800 | 1.00 | 2.19e-5 (0.99) | 1.40e-5 (0.97) | 8.69e-6 (1.77) | 3.76e-5 (2.41) | 2.18e-5 (5.05) | 7.21e-4 (1.58) | 5.01e-7 (2.00) | 5.61e-12 (4.12) |
+| 1600 | 0.50 | 2.20e-7 (6.64) | 5.50e-7 (4.67) | 2.37e-6 (1.87) | 8.59e-6 (2.13) | 2.20e-7 (6.63) | 4.96e-7 (10.5) | 1.25e-7 (2.00) | 4.22e-12 (0.41) |
+
+The δ = 0.04 block (h/δ = 1.02 at 50 nodes, resolved from 100 on) and both
+elliptic tables are in the driver's output; the seed line is §2.3's, on
+the reference's floor from 800 nodes.
+
+**P10, T1-FV (holds).** Exact at equilibrium at every δ and both
+placements: 1e-14 at 50 nodes, rising with n to 6.5e-12 at 1600 (MATLAB)
+and 1.4e-11 at 1601 (eq. 75), the cumulative quadrature's `n ε` on top of
+the direct solve's growth that the seed line shows too (§2.3); the
+discrete flux equals `equilibrium_flux` at every face to 2e-12
+(`test_the_face_conductance_scheme_is_exact_at_equilibrium`). Second order
+in the ramp problem at every δ with one constant: on the MATLAB medium the
+δ = 0, 0.01 and 0.0025 columns agree to 1 % at every count and the δ = 0.04
+one (1.40e-4 → 1.35e-7) sits 7 % above them; on eq. 75 the rate is 2.00
+at every δ from 401 nodes on but the constant moves with δ by up to 40 %
+(6.47e-8, 3.93e-8, 4.62e-8, 4.99e-8 at 1601 nodes for δ = 0, 0.04, 0.01,
+0.0025: the sinusoid varies across the edge, §2.2's slow approach again),
+with one wobble (rate 0.91 at 201 nodes, h = 4δ, δ = 0.0025) where the
+face across the edge changes character. **On eq. 75 it is ahead of the seeds at coarse counts:**
+at δ = 0, 1.63e-5, 4.12e-6, 1.03e-6 against the seeds' 1.28e-4, 1.99e-5,
+2.20e-6 at 101, 201, 401 nodes, the seeds ahead from 801 (1.91e-7 against
+2.59e-7); at δ = 0.0025, 6.35e-6 against 8.50e-6 at 101, the seeds ahead
+from 201. That is §2.3's pre-asymptotic sinusoid line (rates 2.7 → 3.75
+on the plain rows, the `O(h α′/α)` floor), not the edge: at δ = 0.04 and
+0.01 the seeds lead at every count, by 400× at 101 nodes and δ = 0.01
+(2.92e-8 against 1.28e-5). On the MATLAB medium they lead everywhere, by
+50× at 50 nodes and 3e4× at 1600.
+
+**P10, T1 under `Dx A Dx` (holds, with a reading).** Not exact: the
+module reproduces §1.8's residuals 5.58 and 1.24 (one and two cells, the
+mid-cell jump at 100 nodes; `test_no_nodal_alpha_makes_dx_a_dx_exact_
+the_section_1_8_residuals`). With the edge mid-cell the one-cell window
+ends *on* the jump, so at δ = 0 T1 (one cell) and T2 (one cell) are the
+naive operator to rounding in every row of the table; on eq. 75, whose
+edges sit on nodes, the one-cell window straddles them and T1 (one cell)
+is 9–35× below naive at δ = 0 (2.07e-3 → 2.56e-5, rates → 1.5). The
+**two-cell harmonic mean converges at order 1.5** in this norm (rates 1.44
+→ 1.50 parabolic, 1.50 elliptic, both media), a local defect and not a
+global one: its max-norm error is O(h) (1.18e-3 → 7.28e-5 at 100 → 1600
+nodes, rates 1.00) and sits on the two nodes beside the edge, with
+rounding (1e-12) beyond |x| > 0.2, so `‖e‖₂/‖u‖₂ ∝ h · n^{−1/2}`. A
+max-norm table would call it first order; the manuscript says which norm.
+It is the best nodal treatment while the edge is unresolved (7.03e-4
+against naive's 3.09e-3 at 50 nodes, δ = 0.01), 6–33× ahead of naive at
+δ = 0 (the gap widening with n, the orders differing by ½) and 4–9× at
+h ≥ 4δ.
+
+**P10, T0 (holds, with the constant).** T0's own floor is the widened
+medium's exact equilibrium against the true one, `‖u_{max(δ, m h)} −
+u_δ‖/‖u_δ‖`, and T0's elliptic error *is* that floor: to 0.1 % for m = 2
+at every h > δ/2 (ratios 1.000 on both media, 1.006 at h = δ/2 where the
+widened edge is `1.01 δ` wide and the operator is at its own knee) and to
+1 % for m = 1 at h ≥ 2δ (1.006, 0.998, 0.999, 1.000 at δ = 0.0025), then
+above it at
+h ≈ δ (ratio 4.9 at h = 1.01 δ, 19 at 1.00 δ: `m h − δ` is a sliver and the
+naive operator's knee error is what is left), and the naive operator
+itself once m h ≤ δ. The floor is `c (m h − δ)` in resistance (§2.2's
+closed form, `test_the_widened_edge_sits_a_resistance_deficit_from_the_
+true_medium` to 1e-10) and 0.70–0.74 `(m h − δ)` in this norm on the
+MATLAB medium, drifting to 0.66 by a width of 0.08 as the widened tails
+reach the boundary. So T0 is first order with the constant `c m`, as
+predicted, and that makes it the **worst** treatment, not T1's equal: 2.9×
+(m = 1) and 5.7× (m = 2) above naive at δ = 0 on the MATLAB medium, on
+every grid. Widening an edge the grid already fails to resolve adds
+resistance error without removing the knee; it only ever helps a scheme
+whose failure is on the resolved side, which `Dx A Dx` is not.
+
+**P10, T2 (holds where it says "≈ naive", not elsewhere).** Equal to
+naive at δ = 0 with the edge mid-cell (the one-cell window again), 20–40 %
+below it on eq. 75, and at δ > 0 the worst nodal treatment for h ≲ 2δ
+(1.54e-4 against T1's 5.97e-5 at h = δ, δ = 0.01), second order once the
+edge is resolved.
+
+**Every nodal treatment caps the naive operator at second order once the
+edge is resolved.** For h ≲ δ/4 the naive line is fourth order and the
+treated lines are second order with the FV constant times 1–5 (δ = 0.04,
+1600 nodes, ramp: naive 2.05e-10, T1-FV 1.35e-7, T1 1c 1.62e-7, T2
+5.76e-7, T1 2c 6.50e-7; the seeds 2.2e-11 on the reference's floor): the
+cell mean perturbs a smooth α by O(w²) and the fourth-order operator
+faithfully solves the perturbed problem. The nodal treatments therefore
+have the δ = 0 construction's property (§2.2): they help only while
+h ≳ δ and must know δ to be switched off, which the seeds need not.
+
+**The ranking as measured.** With the edge unresolved (h ≥ 4δ, δ = 0
+included), on both media and both problems: *seeds < T1-FV < T1 (two
+cells) < naive ≳ T1 (one cell) ≈ T2 < T0 (m = 1) < T0 (m = 2)*, the middle
+three within a factor two of each other; at 200 nodes and δ = 0.0025 on
+the ramp problem, 1.6e-9, 8.0e-6, 8.9e-5, 7.9e-4 / 4.0e-4 / 4.6e-4, 2.2e-3,
+5.0e-3. Across the knee (h from 2δ to δ/2) the naive line and T0 (m = 1)
+drop through the cell-mean lines, and in §2.2's dip at h ≈ 2δ naive can
+come in below T1 (two cells) by a quarter (δ = 0.01 at 100 nodes; not at
+δ = 0.0025 and 400). Resolved
+(h ≤ δ/4): *seeds < naive = T0 < T1-FV ≈ T1 (one cell) < T2 ≈ T1 (two
+cells)*. P10's "T1 ≈ T0" and "T2 ≈ naive at every δ" are corrected; its
+order of the ends stands, with the one exception above (eq. 75 below 800
+nodes at δ = 0 and 0.0025, where the seeds' sinusoid line is still
+pre-asymptotic and the second-order FV is ahead).
+
+**What this changes downstream.** P10 is ticked for T1-FV's exactness and
+order and for T0's floor and constant, and corrected for the ranking.
+Three things for the manuscript: the strongest low-order comparator is
+the finite-volume scheme with exact face conductances, exact at
+equilibrium and second order at every δ with one constant, and on the
+smoothly varying medium it is ahead of the seeds until the seeds' own
+sinusoid error has converged (the honest comparator paragraph says so;
+E4.9's scattered-node treatments, #40, have no such twin); the cell means
+and the widened edge are first-order-family treatments (1.5 in this norm
+for the two-cell mean) that help only while h ≳ δ and cap the fourth-order
+operator at second order once h ≲ δ/4, so they share the construction's
+need to know δ; and the 1-D elliptic table cannot rank the methods (plan
+§3.2), T1-FV and the seeds both exact and growing together with n, so the
+elliptic remark stays one line and the ranking is the parabolic table's.
+E3.6 (#31) inherits `COMPARATORS`, `COMPARATOR_STYLE` and the figure; E5.2
+(#43) pins the sources (Tikhonov & Samarskii 1962 for the exact
+conductances, Patankar 1980 ch. 4 for the harmonic mean) and decides T3.
+
+Tests: `tests/heat1d/test_treatments.py` (every treatment the identity on
+a constant α, T1-FV then α times the three-point second difference; the
+`NodalAlpha` table, interpolant, slopes, elements and validation; the
+windows' clipping; T1-FV exact at equilibrium at three δ on both
+placements and both media with the flux to 1e-11; Patankar's harmonic mean
+at δ = 0 mid-cell and the pieces' own values on a node; §1.8's residuals
+5.58 and 1.24 from the module; the δ = 0 forms bit-equal through
+`SmoothEdges(jump, 0)`, the first-order approach as δ → 0 for the means
+and the conductances, T0 δ-independent below `m h`; AM ≥ HM with the 7/3
+ratio beside the mid-cell jump, both means second order on a sinusoid
+with the 4× between one and two cells; T1-FV second order on a
+manufactured smooth problem; the widened medium's resistance deficit
+`c (m h − δ)`; the one-cell mean seeing the tanh tail and nothing beyond
+it; a smooth-edged eq. 64) and `tests/test_heat1d_stiff.py` (the
+comparator table complete at every δ with T1-FV's rate 2 and δ-independent
+constant, the ranking where the edge is unresolved, the one-cell means
+equal to naive at δ = 0 mid-cell, the elliptic exactness of T1-FV and the
+seeds; T0 on its floor to 1 % for m = 2 and the floor constant in
+0.65–0.76; the driver's second figure and the cache keys).

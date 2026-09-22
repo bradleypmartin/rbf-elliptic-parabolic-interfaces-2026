@@ -33,10 +33,22 @@ adds: the seed weights against E1.2's as δ/h shrinks (P4) with the stencil
 solve's condition number at each δ/h (P5), the seed rows' residual on the
 true-δ equilibrium next to the δ = 0 rows' (P6), and the seed operator's
 interior spectrum at the study's counts and at the coarse eq. 75 counts the
-δ = 0 construction cannot run (P9). The treatments (E3.5) and the manuscript
-figures (E3.6) are added by their tickets.
+δ = 0 construction cannot run (P9).
 
-    uv run python scripts/heat1d_stiff.py     # 1 min cold, 4 s with everything cached
+E3.5 (#30; P10, §2.4 records) runs the coefficient treatments of plan §3.4
+(``heat1d/treatments.py``) on the same grids and problems as a *comparator
+table* per medium and δ, elliptic and parabolic: naive ``Dx A Dx`` (the
+untreated end), T1 the harmonic cell mean over one and two cells, T2 the
+arithmetic mean, T0 the edge widened to ``max(δ, m h)`` for m = 1, 2 (all
+four a changed medium under the naive operator), T1-FV the three-point
+conservative scheme with exact face conductances (stiff note §1.8 item 3,
+its own operator), and the seeds (the target). T0 is also read against its
+own floor, the widened medium's exact equilibrium against the true one.
+Figure: ``heat1d_stiff_treatments.png``; the parabolic errors share the knee
+cache, keyed by label. The manuscript figures (E3.6) are added by their
+ticket.
+
+    uv run python scripts/heat1d_stiff.py     # 2 min cold, 6 s with everything cached
     uv run python scripts/heat1d_stiff.py --counts 50 100 200 400 800 1600 3200 6400
                                               # the two extra counts: + 3 min, once
     uv run python scripts/heat1d_stiff.py --deltas 0 0.0025 --media matlab
@@ -64,13 +76,16 @@ from heat_interfaces.heat1d import (  # noqa: E402
     Jump,
     ParabolicReference,
     SmoothEdges,
+    arithmetic_cells,
     bd4_amplification,
     bd4_march,
     chebyshev_equilibrium,
     dissertation_alpha,
     edge_resistance_deficit,
     equilibrium_exact,
+    face_conductance_operator,
     grid_for,
+    harmonic_cells,
     interior_operator,
     inverse_alpha_integral,
     jump_aware_operator,
@@ -86,6 +101,7 @@ from heat_interfaces.heat1d import (  # noqa: E402
     solve_equilibrium,
     stencil_weights,
     straddling_windows,
+    widened_edge,
 )
 from heat_interfaces.heat1d.domain import X_MAX, X_MIN  # noqa: E402
 from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
@@ -168,6 +184,53 @@ edge on every row within ``TANH_REACH`` δ of a centre.
 
 COLOURS = {"naive": NAIVE, "δ = 0 construction": CONSTRUCTION, "seeds": AWARE}
 """Orange, purple, blue (``plotting``); the floors are dotted in the construction's."""
+
+
+def _treated(transform, **kwargs):
+    """``naive_operator`` on the medium ``transform(grid, medium, **kwargs)`` builds."""
+
+    def build(grid: Grid1D, medium: SmoothEdges):
+        return naive_operator(grid, transform(grid, medium, **kwargs))
+
+    return build
+
+
+WIDENINGS = (1, 2)
+"""T0's factors m: the edge widened to ``max(δ, m h)``."""
+
+TREATMENTS = {
+    "T1 harmonic 1c": _treated(harmonic_cells, cells=1),
+    "T1 harmonic 2c": _treated(harmonic_cells, cells=2),
+    "T2 arithmetic 1c": _treated(arithmetic_cells, cells=1),
+    **{f"T0 widened m={m}": _treated(widened_edge, m=m) for m in WIDENINGS},
+    "T1-FV": face_conductance_operator,
+}
+"""E3.5's coefficient treatments (plan §3.4; ``heat1d/treatments.py``).
+
+Each is a changed medium sampled by the naive operator, except T1-FV, the
+conservative three-point scheme with exact face conductances, which is an
+operator of its own (stiff note §1.8). T3, the band-limited alpha, waits on
+the literature pass (E5.2, #43).
+"""
+
+COMPARATORS = {"naive": naive_operator, **TREATMENTS, "seeds": seed_operator}
+"""The comparator table's columns: P10's ranking with its two ends.
+
+The naive and seed columns share their cache keys with ``OPERATORS``, so the
+knee sweep's marches are not repeated.
+"""
+
+COMPARATOR_STYLE = {
+    "naive": (NAIVE, "-"),
+    "T1 harmonic 1c": ("#8c564b", "-"),
+    "T1 harmonic 2c": ("#8c564b", "--"),
+    "T2 arithmetic 1c": ("#d62728", "-"),
+    "T0 widened m=1": ("#7f7f7f", "-"),
+    "T0 widened m=2": ("#7f7f7f", "--"),
+    "T1-FV": ("#2ca02c", "-"),
+    "seeds": (AWARE, "-"),
+}
+"""Colour and line style per comparator; the knee's orange and blue keep their sense."""
 
 SPECTRUM_COUNTS = {"matlab": (50, 100, 400), "eq75": (49, 53, 101, 401)}
 """Node counts of the spectrum check (P9); eq. 75's go below ``MIN_COUNT``."""
@@ -311,14 +374,17 @@ def knee_grids(name: str, counts: Sequence[int]) -> list[Grid1D]:
     return grids
 
 
-def elliptic_sweep(name: str, delta: float, grids: Sequence[Grid1D]) -> list[dict]:
-    """Both operators on the equilibrium problem at ``delta``, one row per grid.
+def elliptic_sweep(
+    name: str, delta: float, grids: Sequence[Grid1D], operators=OPERATORS
+) -> list[dict]:
+    """Each operator on the equilibrium problem at ``delta``, one row per grid.
 
     Errors are ``‖e‖₂/‖u‖₂`` against the quadrature on the smooth medium.
     ``floor`` is ``‖u₀ − u_δ‖₂/‖u_δ‖₂`` at the nodes, the difference of the
     jump's and the smooth medium's exact equilibria: what the δ = 0
     construction converges to while the grid does not resolve the edge
-    (§1.7), first order in δ.
+    (§1.7), first order in δ. ``operators`` maps a column label to
+    ``op(grid, medium)``: the knee's ``OPERATORS`` or the ``COMPARATORS``.
     """
     medium, jump = study_medium(name, delta), study_medium(name, 0.0)
     rows = []
@@ -329,7 +395,7 @@ def elliptic_sweep(name: str, delta: float, grids: Sequence[Grid1D]) -> list[dic
             "h": g.h,
             "floor": normalized_l2(equilibrium_exact(jump, *BC, g.x), ref),
         }
-        for label, op in OPERATORS.items():
+        for label, op in operators.items():
             row[label] = normalized_l2(solve_equilibrium(op(g, medium), *BC), ref)
         rows.append(row)
     return rows
@@ -347,13 +413,15 @@ def parabolic_sweep(
     outputs: Path,
     cache: dict[str, float],
     resolution: tuple[int, float] = (N_CHEB, MAX_WIDTH),
+    operators=OPERATORS,
 ) -> list[dict]:
     """BD4 at ``dt = h`` on the ramp problem against the cached reference, per grid.
 
     Errors are ``‖e‖₂/‖u‖₂`` at ``t = T_END``. ``floor`` is the δ = 0
     reference against the δ one at the nodes. ``cache`` holds errors from
     earlier runs (``knee_key``); the ones missing are computed and added,
-    the caller saves it.
+    the caller saves it. ``operators`` as in ``elliptic_sweep``; the cache
+    is keyed by label, so a column shared by two maps is marched once.
     """
     medium = study_medium(name, delta)
     ref = study_reference(name, delta, outputs, *resolution)
@@ -367,7 +435,7 @@ def parabolic_sweep(
             "h": g.h,
             "floor": normalized_l2(jump_ref.evaluate(g.x), at_nodes),
         }
-        for label, op in OPERATORS.items():
+        for label, op in operators.items():
             key = knee_key(name, delta, g.n, label, resolution)
             if key not in cache:
                 u = bd4_march(op(g, medium), np.zeros(g.n), T_END, g.h, boundary)
@@ -476,6 +544,28 @@ def row_residuals(
     return rows
 
 
+def widened_floors(
+    name: str, delta: float, grids: Sequence[Grid1D], factors: Sequence[int] = WIDENINGS
+) -> list[dict]:
+    """T0's floor per grid: the widened medium's exact equilibrium against the true one.
+
+    ``‖u_{max(δ, m h)} − u_δ‖₂/‖u_δ‖₂`` at the nodes for each factor ``m``,
+    quadrature against quadrature: what T0 converges to if the naive
+    operator resolves the widened edge, ``c (m h − δ)`` in resistance on
+    constant pieces (§2.2's floor constant), first order in h.
+    """
+    medium = study_medium(name, delta)
+    rows = []
+    for g in grids:
+        ref = equilibrium_exact(medium, *BC, g.x)
+        row = {"n": g.n, "h": g.h}
+        for m in factors:
+            wide = widened_edge(g, medium, m)
+            row[m] = normalized_l2(equilibrium_exact(wide, *BC, g.x), ref)
+        rows.append(row)
+    return rows
+
+
 def study_window(name: str, n: int) -> tuple[Grid1D, np.ndarray, float, list[Jump]]:
     """The grid, the five nodes and the centre of P4's stencil, and E1.2's jumps.
 
@@ -579,7 +669,7 @@ def print_sweep(
     title: str, results: dict[float, list[dict]], cached: bool = False
 ) -> None:
     """One table per δ; with ``cached`` a source column says which rows were rerun."""
-    labels = list(OPERATORS)
+    labels = _labels(results)
     print(f"\n{title}")
     for delta, rows in results.items():
         print(f"  δ = {delta:g}")
@@ -597,6 +687,65 @@ def print_sweep(
             if cached:
                 line += "  solved" if r.get("solved") else "  cached"
             print(line)
+
+
+def _labels(results: dict[float, list[dict]]) -> list[str]:
+    """The operator columns of a sweep's rows, in order."""
+    rows = next(iter(results.values()))
+    return [k for k in rows[0] if k not in ("n", "h", "floor", "solved")]
+
+
+def print_comparators(
+    title: str, results: dict[float, list[dict]], cached: bool = False
+) -> None:
+    """The comparator table per δ: every column as ``error (rate)``, compactly."""
+    labels = _labels(results)
+    print(f"\n{title}")
+    print("  columns: " + ", ".join(labels))
+    for delta, rows in results.items():
+        print(f"  δ = {delta:g}")
+        head = f"    {'n':>6s}{'h/δ':>8s}"
+        for label in labels:
+            short = label.replace(" harmonic", "").replace(" arithmetic", "")
+            head += f"{short.replace(' widened', ''):>17s}"
+        print(head + f"{'floor':>10s}" + ("  source" if cached else ""))
+        rates = {label: _rates([r[label] for r in rows]) for label in labels}
+        for i, r in enumerate(rows):
+            line = f"    {r['n']:6d}"
+            line += f"{r['h'] / delta:8.2f}" if delta else f"{'∞':>8s}"
+            for label in labels:
+                rate = rates[label][i].strip()
+                line += f"{r[label]:10.2e} ({rate:>4s})"
+            line += f"{r['floor']:10.2e}" if delta else f"{'-':>10s}"
+            if cached:
+                line += "  solved" if r.get("solved") else "  cached"
+            print(line)
+
+
+def print_widened_floors(
+    name: str, delta: float, elliptic: list[dict], floors: list[dict]
+) -> None:
+    """T0's elliptic error next to its own floor, and the ratio, per factor m."""
+    print(
+        f"\nT0 against its floor, {name}, δ = {delta:g}: the naive operator on the"
+        f" edge widened to max(δ, m h), and ‖u_{{max(δ, m h)}} − u_δ‖/‖u_δ‖ (quadrature"
+        f" against quadrature); ratio → 1 once the naive operator sees the widened"
+        f" edge fully, 'naive' where m h ≤ δ leaves the medium as it is"
+    )
+    head = f"    {'n':>6s}{'h/δ':>8s}"
+    for m in WIDENINGS:
+        head += f"{f'T0 m={m}':>11s}{'floor':>10s}{'ratio':>7s}"
+    print(head)
+    for e, f in zip(elliptic, floors, strict=True):
+        assert e["n"] == f["n"]
+        line = f"    {e['n']:6d}{e['h'] / delta:8.2f}"
+        for m in WIDENINGS:
+            error = e[f"T0 widened m={m}"]
+            # A zero floor is the medium itself (m h ≤ δ, up to an ulp of h):
+            # T0 is then the naive operator.
+            ratio = f"{error / f[m]:7.3f}" if f[m] > 1e-13 else f"{'naive':>7s}"
+            line += f"{error:11.2e}{f[m]:10.2e}{ratio}"
+        print(line)
 
 
 def print_floors(name: str, rows: list[dict]) -> None:
@@ -742,6 +891,56 @@ def plot_knee(
     plt.close(fig)
 
 
+def plot_comparators(
+    elliptic: dict[str, dict[float, list[dict]]],
+    parabolic: dict[str, dict[float, list[dict]]],
+    path: Path,
+) -> None:
+    """The comparators against node count: a row per medium and problem, a column per δ.
+
+    ``COMPARATOR_STYLE`` colours; the dashed verticals mark ``h = δ``.
+    """
+    names = list(elliptic)
+    deltas = sorted(d for d in next(iter(elliptic.values())) if d > 0)
+    panels = []
+    for name in names:
+        panels.append((name, "equilibrium", elliptic[name]))
+        panels.append((name, f"ramp, $t = {T_END:g}$", parabolic[name]))
+    fig, axes = plt.subplots(
+        len(panels),
+        len(deltas),
+        figsize=(3.3 * len(deltas), 2.9 * len(panels)),
+        squeeze=False,
+        sharey="row",
+    )
+    titles = {"matlab": "MATLAB $1/9\\,|\\,1$", "eq75": "eq. 75"}
+    for i, (name, problem, results) in enumerate(panels):
+        labels = _labels(results)
+        for j, delta in enumerate(deltas):
+            ax = axes[i, j]
+            rows = results[delta]
+            n = np.array([r["n"] for r in rows], dtype=float)
+            for label in labels:
+                colour, ls = COMPARATOR_STYLE.get(label, ("k", ":"))
+                ax.loglog(n, [r[label] for r in rows], color=colour, ls=ls, lw=1.0)
+            ax.axvline((X_MAX - X_MIN) / delta + 1, color=REFERENCE, lw=0.6, ls="--")
+            ax.set_title(
+                f"{titles.get(name, name)}, {problem}, δ = {delta:g}", fontsize=8
+            )
+            ax.grid(True, which="both", alpha=0.3)
+            if i == len(panels) - 1:
+                ax.set_xlabel("nodes")
+        axes[i, 0].set_ylabel("$\\|e\\|_2 / \\|u\\|_2$")
+    handles = [
+        Line2D([], [], color=colour, ls=ls, label=label)
+        for label, (colour, ls) in COMPARATOR_STYLE.items()
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=8)
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--deltas", type=float, nargs="+", default=list(STUDY_DELTAS))
@@ -783,6 +982,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     cache = load_knee_cache(args.outputs)
     elliptic: dict[str, dict[float, list[dict]]] = {}
     parabolic: dict[str, dict[float, list[dict]]] = {}
+    compared_e: dict[str, dict[float, list[dict]]] = {}
+    compared_p: dict[str, dict[float, list[dict]]] = {}
     for name in args.media:
         grids = knee_grids(name, args.counts)
         elliptic[name] = {d: elliptic_sweep(name, d, grids) for d in args.deltas}
@@ -813,6 +1014,43 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(
         f"\nknee study {time.perf_counter() - t1:.1f} s; figure and"
         f" {KNEE_CACHE} in {args.outputs}/"
+    )
+
+    t2 = time.perf_counter()
+    for name in args.media:
+        grids = knee_grids(name, args.counts)
+        compared_e[name] = {
+            d: elliptic_sweep(name, d, grids, COMPARATORS) for d in args.deltas
+        }
+        print_comparators(
+            f"comparators (E3.5), equilibrium problem, {name}: ‖e‖₂/‖u‖₂ (rate)"
+            f" against the quadrature at each δ",
+            compared_e[name],
+        )
+        compared_p[name] = {
+            d: parabolic_sweep(
+                name, d, grids, args.outputs, cache, resolution, COMPARATORS
+            )
+            for d in args.deltas
+        }
+        save_knee_cache(args.outputs, cache)
+        print_comparators(
+            f"comparators (E3.5), ramp problem at t = {T_END:g}, BD4 dt = h, {name}:"
+            f" ‖e‖₂/‖u‖₂ (rate) against the Chebyshev reference at each δ",
+            compared_p[name],
+            cached=True,
+        )
+        for d in args.deltas:
+            if d > 0:
+                print_widened_floors(
+                    name, d, compared_e[name][d], widened_floors(name, d, grids)
+                )
+    plot_comparators(
+        compared_e, compared_p, args.outputs / "heat1d_stiff_treatments.png"
+    )
+    print(
+        f"\ncomparators {time.perf_counter() - t2:.1f} s; figure"
+        f" heat1d_stiff_treatments.png in {args.outputs}/"
     )
 
 

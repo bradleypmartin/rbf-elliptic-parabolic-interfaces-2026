@@ -10,7 +10,9 @@ reference for the parabolic problems, cached as ``ParabolicReference``;
 ``march``: BD4 and RK4 with time-dependent Dirichlet ends and the BD4
 stability region. ``SmoothEdges`` (E3.2) is the stiff-edge medium; ``stiff``
 (E3.4) marches the seeds through it and builds the seed operator, with
-``build_operator`` dispatching by name; treatments (E3.5) follow.
+``build_operator`` dispatching by name; ``treatments`` (E3.5) are the
+coefficient treatments the naive operator samples (cell means, the widened
+edge) and the finite-volume twin with exact face conductances.
 """
 
 from .domain import (
@@ -38,6 +40,7 @@ from .exact import (
     RADAU_RTOL,
     ChebyshevPieces,
     ParabolicReference,
+    alpha_integral,
     chebyshev_equilibrium,
     chebyshev_lobatto,
     chebyshev_parabolic,
@@ -96,6 +99,16 @@ from .stiff import (
     seed_weights,
     seeded_windows,
 )
+from .treatments import (
+    LinearPiece,
+    NodalAlpha,
+    arithmetic_cells,
+    cell_windows,
+    face_conductance_operator,
+    face_conductances,
+    harmonic_cells,
+    widened_edge,
+)
 
 __all__ = [
     "DISSERTATION_BC",
@@ -112,18 +125,23 @@ __all__ = [
     "Constant",
     "Grid1D",
     "Jump",
+    "LinearPiece",
     "Medium1D",
+    "NodalAlpha",
     "ParabolicReference",
     "PiecewiseAlpha",
     "Region",
     "Sinusoid",
     "Smooth",
     "SmoothEdges",
+    "alpha_integral",
     "alpha_matrix",
+    "arithmetic_cells",
     "bd4_amplification",
     "bd4_march",
     "bd4_stability_boundary",
     "build_operator",
+    "cell_windows",
     "chebyshev_equilibrium",
     "chebyshev_lobatto",
     "chebyshev_parabolic",
@@ -144,7 +162,10 @@ __all__ = [
     "equilibrium_exact",
     "equilibrium_flux",
     "equispaced_grid",
+    "face_conductance_operator",
+    "face_conductances",
     "grid_for",
+    "harmonic_cells",
     "interior_operator",
     "march_steps",
     "inverse_alpha_integral",
@@ -172,4 +193,5 @@ __all__ = [
     "straddling_windows",
     "translated_basis",
     "translation_matrix",
+    "widened_edge",
 ]
