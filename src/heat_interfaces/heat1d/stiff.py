@@ -125,11 +125,12 @@ def _stops(x_e: np.ndarray, h_s: np.ndarray, medium: Medium1D) -> np.ndarray:
     return ((stops[None, :] - x_e[:, None]) / h_s[:, None]).ravel()
 
 
-def _targets(ahead: np.ndarray, stops: np.ndarray) -> np.ndarray:
+def march_targets(ahead: np.ndarray, stops: np.ndarray) -> np.ndarray:
     """The node positions ``ahead`` (exact) and the stops among them, increasing.
 
     A stop within ``MERGE_TOL`` of a node, or of a stop already kept, is
-    dropped: a restart point may move by that much, a node may not.
+    dropped: a restart point may move by that much, a node may not. The 2-D
+    march (``heat2d.seeds``) merges its node and edge targets the same way.
     """
     kept = list(np.unique(ahead))
     for s in np.sort(stops):
@@ -215,7 +216,7 @@ def seed_profiles(
         far = np.max(side * xi[ahead])
         inside = stops[(side * stops > 0.0) & (side * stops < far)]
         y, t0 = y0.reshape(-1), 0.0
-        for t in _targets(side * xi[ahead], side * inside):
+        for t in march_targets(side * xi[ahead], side * inside):
             t1 = side * t
             groups = _piece_groups(medium, x_e + h_s * (0.5 * (t0 + t1)))
             rate = _chain(x_e, h_s, alpha_e, coef, groups)
@@ -343,6 +344,7 @@ __all__: Sequence[str] = (
     "SEED_RTOL",
     "build_operator",
     "edge_width",
+    "march_targets",
     "seed_basis",
     "seed_operator",
     "seed_profiles",

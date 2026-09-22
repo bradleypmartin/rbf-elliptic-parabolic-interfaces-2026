@@ -24,13 +24,14 @@ innermost pair (EABE Fig. 12b).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from math import factorial, sqrt
 from typing import Literal, Protocol
 
 import numpy as np
 
-from ..heat1d.domain import edge_blend
+from ..heat1d.domain import edge_blend, edge_value
 from ..heat1d.stiff import EDGE_STOP
 from .neighbors import PERIOD, knn, offsets, periodic_dx, wrap_x
 
@@ -458,6 +459,27 @@ class SmoothBand:
     def alpha(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         return self._blend(x, y)[0]
 
+    def alpha_at(self, x: float, y: float) -> float:
+        """``alpha`` at one point, in floats: ``_blend``'s value without its gradient.
+
+        For the seed march (E4.4), which reads alpha along a line a thousand
+        times per stencil; through the array code each call costs about
+        60 µs across an edge. The same steps in the same order, with
+        ``edge_value`` for ``edge_blend`` and a flat line's level for its
+        signed distance, so it is ``alpha`` to rounding (bit for bit where
+        ``math.exp`` and NumPy's ``exp`` agree).
+        """
+        if self.delta == 0.0:
+            return float(self.band.alpha(np.array([x]), np.array([y]))[0])
+        a = _piece_at(self.outside, x, y)
+        for curve, piece in ((self.lower, self.inside), (self.upper, self.outside)):
+            if isinstance(curve, FlatLine):
+                d = y - curve.c
+            else:
+                d = float(curve.signed_distance(np.array([x]), np.array([y]))[0])
+            a = edge_value(a, _piece_at(piece, x, y), d / self.delta)
+        return a
+
     def gradient(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         _, gx, gy = self._blend(x, y)
         return gx, gy
@@ -567,6 +589,38 @@ class NormalProfile:
     def alpha_e(self) -> float:
         """alpha at the anchor, ``α_e`` of the chain."""
         return float(self.alpha(np.zeros(1))[0])
+
+    def alpha_function(self, segment: int) -> Callable[[float], float]:
+        """``η ↦ alpha(η, segment)`` in floats, the march's right-hand side (E4.4).
+
+        A constant piece is its value; the smooth band goes through
+        ``SmoothBand.alpha_at`` and any other piece through its own
+        ``alpha``, at ``point``'s arithmetic, so the function is ``alpha(η,
+        segment)`` to rounding at a few microseconds a call.
+        """
+        piece = self.pieces[segment]
+        if isinstance(piece, Constant2D):
+            value = float(piece.value)
+            return lambda eta: value
+        at = piece.alpha_at if isinstance(piece, SmoothBand) else _point_alpha(piece)
+        x0, y0, nx, ny, scale = self.x0, self.y0, self.nx, self.ny, self.scale
+
+        def alpha(eta: float) -> float:
+            step = scale * eta
+            return at(x0 + step * nx, y0 + step * ny)
+
+        return alpha
+
+
+def _piece_at(piece: Piece2D, x: float, y: float) -> float:
+    """One piece's alpha at one point; a constant without the array call."""
+    if isinstance(piece, Constant2D):
+        return float(piece.value)
+    return float(piece.alpha(np.array([x]), np.array([y]))[0])
+
+
+def _point_alpha(piece: Piece2D) -> Callable[[float, float], float]:
+    return lambda x, y: _piece_at(piece, x, y)
 
 
 # --- domains ----------------------------------------------------------------

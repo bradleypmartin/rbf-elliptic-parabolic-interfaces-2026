@@ -631,6 +631,24 @@ def test_normal_profile_stops_are_the_1d_marchs_stops_bit_for_bit(delta):
     assert np.array_equal(p.alpha(eta), case1_in_y(delta).alpha(y_e + h_s * eta))
 
 
+@pytest.mark.parametrize("delta", (0.0, *DELTAS))
+@pytest.mark.parametrize("inside", [Constant2D(0.2), SineProduct(0.2, 0.1)])
+def test_alpha_function_is_the_profiles_alpha_per_segment(delta, inside):
+    # E4.4's march reads alpha through this float path, a thousand calls per
+    # stencil; it must be the array path's value, one-sided at δ = 0.
+    band = Band(FlatLine(0.6), FlatLine(0.8), inside, Constant2D(1.0))
+    m = SmoothBand(band, delta)
+    p = m.normal_profile(0, 0.37, 0.5896, 0.08)
+    eta = np.concatenate([np.linspace(-8.0, 8.0, 1601), p.stops])
+    for k in range(p.stops.size + 1):
+        f = p.alpha_function(k)
+        scalar = np.array([f(float(t)) for t in eta])
+        np.testing.assert_allclose(scalar, p.alpha(eta, segment=k), rtol=2e-16, atol=0)
+    px, py = p.point(eta)
+    at = np.array([m.alpha_at(float(x), float(y)) for x, y in zip(px, py, strict=True)])
+    np.testing.assert_allclose(at, m.alpha(px, py), rtol=2e-16, atol=0)
+
+
 def test_normal_profile_refuses_curved_interfaces_for_now():
     for case in (case2, case3):
         m = SmoothBand(case().material, 0.01)
