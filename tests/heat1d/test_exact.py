@@ -16,6 +16,7 @@ from heat_interfaces.heat1d.exact import (
     chebyshev_equilibrium,
     chebyshev_lobatto,
     chebyshev_parabolic,
+    edge_resistance_deficit,
     equilibrium_exact,
     equilibrium_flux,
     inverse_alpha_integral,
@@ -214,7 +215,7 @@ def test_the_smooth_medium_at_delta_zero_passes_the_jump_closed_form():
 
 def test_a_smooth_edge_below_the_grid_keeps_the_jump_limit_to_first_order():
     # F_δ(1) - F_0(1) → -c δ past the edge (stiff note §1.7); the sign and the
-    # order are what this pins, the constant is E3.3's.
+    # order are what this pins, the constant is edge_resistance_deficit's.
     jump = matlab_alpha()
     f0 = float(inverse_alpha_integral(jump, np.array(1.0)))
     gaps = [
@@ -225,6 +226,31 @@ def test_a_smooth_edge_below_the_grid_keeps_the_jump_limit_to_first_order():
     np.testing.assert_allclose(
         np.array(gaps[:-1]) / np.array(gaps[1:]), 10.0, rtol=1e-6
     )
+
+
+def test_edge_resistance_deficit_is_the_closed_form_of_the_quadrature_gap():
+    # c = (a - b) ln(a/b) / (2ab): 8.789 for 1/9 | 1, 10.36 for 1 | 0.1 (E3.3,
+    # #28); symmetric, positive, zero without a contrast.
+    c = edge_resistance_deficit(1 / 9, 1.0)
+    assert c == pytest.approx((1 / 9 - 1) * np.log(1 / 9) / (2 / 9), rel=1e-14)
+    assert c == pytest.approx(8.788898, abs=1e-6)
+    assert edge_resistance_deficit(1.0, 0.1) == pytest.approx(10.361633, abs=1e-6)
+    assert edge_resistance_deficit(1.0, 1 / 9) == pytest.approx(c, rel=1e-14)
+    assert edge_resistance_deficit(0.7, 0.7) == 0.0
+    with pytest.raises(ValueError):
+        edge_resistance_deficit(1.0, 0.0)
+    # On constant pieces the gap is c δ to rounding at every δ of the study,
+    # in both directions of the contrast.
+    for left, right in ((1 / 9, 1.0), (1.0, 0.01)):
+        jump = jump_alpha(left, right, x0=0.3)
+        f0 = float(inverse_alpha_integral(jump, np.array(1.0)))
+        for delta in (0.04, 0.0025, 1e-4):
+            f_delta = float(
+                inverse_alpha_integral(SmoothEdges(jump, delta), np.array(1.0))
+            )
+            assert (f0 - f_delta) / delta == pytest.approx(
+                edge_resistance_deficit(left, right), rel=1e-11
+            )
 
 
 def test_parabolic_reference_round_trips_through_the_cache(tmp_path):

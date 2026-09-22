@@ -89,6 +89,29 @@ def inverse_alpha_integral(
     return at_cuts[np.searchsorted(cuts, x.ravel())].reshape(x.shape)
 
 
+def edge_resistance_deficit(left: float, right: float) -> float:
+    """``c`` in ``F_δ(x) − F₀(x) → −c δ`` past a tanh edge between two constants.
+
+    Stiff note §1.7: with ``s(z) = ½ (1 + tanh z)`` and ``a | b`` the two
+    constants (``left | right``),
+    ``c = ∫_ℝ [1/α₀(z) − 1/(a + (b − a) s(z))] dz`` has the closed
+    form ``(a − b) ln(a/b) / (2ab)``, from the antiderivative
+    ``z/a + (a − b)/(2ab) ln(a + b e^{2z})`` of the blended integrand. It is
+    symmetric in ``a ↔ b`` and positive (``1/α`` is convex, so the blend's
+    resistance is below the jump's): 8.789 for ``1/9 | 1`` and 10.36 for
+    ``1 | 0.1``. On constant pieces the tails are exponentially small, so
+    ``F₀(1) − F_δ(1) = c δ`` to rounding at every δ of the study; on pieces
+    that vary across the edge (eq. 75's sinusoid, ``α′/α = 25`` where it
+    meets the layer's edges) the ratio approaches ``c`` only as δ → 0.
+    """
+    a, b = float(left), float(right)
+    if a <= 0.0 or b <= 0.0:
+        raise ValueError("both sides of the edge must be positive")
+    if a == b:
+        return 0.0
+    return (a - b) * np.log(a / b) / (2.0 * a * b)
+
+
 def equilibrium_flux(
     medium: Medium1D, u_left: float, u_right: float, n_gauss: int = 24
 ) -> float:
