@@ -3708,8 +3708,13 @@ error below.
   `alpha_at`. The frame stays `nearest_interface`, the E4.4 breadcrumb's open
   decision taken on purpose: on case 2's 0.2-thick band a 30-node stencil
   crosses one curve at most, and on every crossing stencil of the 2500-node
-  set (over 400, at δ = 0 and 0.0025) it picks the curve E2.3 frames on. The
-  circles of case 3 are still refused, naming E4.8.
+  set (over 400, at δ = 0 and 0.0025) it picks the curve E2.3 frames on. A
+  line that would reach toward the curve's focal distance is refused before
+  anything is marched (`FOOT_CURVATURE`: `κ_max (|d_e| + 2 h_s) < 0.8`, which
+  case 2 meets at 0.37 on its widths and 0.68 at δ = 0.04 on 1250 nodes), the
+  crossing's Newton iteration raises rather than return an unconverged root,
+  and `--amplitude` is validated at 0.02 only (the /spar review's MEDIUM).
+  The circles of case 3 are still refused, naming E4.8.
 - *The product-grid reference* (plan D4, revised: Brad chose it for every δ,
   the jump included, with E2.6's run as its check). `exact.ShearMap`,
   `y = η + a sin(kx) β(η)` with the cubic `β(0) = β(1) = 0`,
@@ -4016,15 +4021,16 @@ pieces' `alpha_at`, the curved normal profile at δ = 0 and three widths with
 both pieces (each curve crossed once, the foot curve at the foot point, the
 flanks in each curve's own distance, α along the line the medium's to
 2e-13, one-sided at δ = 0), the flat foot line carrying no foot distance, and
-the ring's refusal. `tests/heat2d/test_seeds.py`: the curved seeds equal the
+the ring's refusal, the focal-distance guard on a sine ten times as curved,
+and the crossing's refusal of an unconverged root. `tests/heat2d/test_seeds.py`: the curved seeds equal the
 flat seeds of the same local stencil to 1e-12 on a stencil tilted 7°, and
 `nearest_interface` picks E2.3's curve on every crossing stencil of case 2 at
 δ = 0 and 0.0025. `tests/heat2d/test_exact.py`: the Fourier derivative exact
 on its trigonometric polynomials, the shear straightening the pair, the
 product grid equal to the separable reference on a flat band (three widths,
 both problems, 2e-11), resolved on case 2 (3e-11 under both refinements),
-E2.3's 2500-node error against it within 1 % of E2.6's 1.247e-5, and the
-refusals. `tests/test_heat2d_stiff.py`: the geometries' keys and caches,
+E2.3's 2500-node error against it within 1 % of E2.6's 1.247e-5, the
+refusals, and the shear's inverse refusing an unconverged point. `tests/test_heat2d_stiff.py`: the geometries' keys and caches,
 the curved sweep at 900 and 1250 nodes (route (a) 3.804e-4 and the
 construction 3.059e-5 at 1250, the probe stalling on the seeds' crossing
 rows and falling on E2.3's, the cache round trip), the curved reference

@@ -86,6 +86,19 @@ def _as_float(*arrays: np.ndarray) -> tuple[np.ndarray, ...]:
 NEWTON_STEPS = 12
 """Newton iterations of the foot-point and crossing searches (quadratic at once)."""
 
+FOOT_REACH, FOOT_CURVATURE = 2.0, 0.8
+"""Route (a)'s geometric guard (``SmoothBand.normal_profile``, E4.7).
+
+The march reads the foot point's normal line out to about one stencil radius
+beyond the anchor; ``κ_max (|d_e| + FOOT_REACH h_s)`` must stay below
+``FOOT_CURVATURE``, with ``κ_max`` the curve's largest curvature
+(``curvature_bound``), so that the whole line stays inside the curve's focal
+distance with a margin of 1.25: there the foot point does not move along the
+line (``NormalProfile.foot``) and the line meets the curve once. Case 2 at
+amplitude 0.02 reaches 0.37 at δ ≤ 0.01 and 0.68 at δ = 0.04 on 1250 nodes; a
+tighter curve, or a coarser set, is refused rather than marched.
+"""
+
 
 class _Graph:
     """``y = c(x)`` with ``c`` 1-periodic; ``s`` is ``x`` itself.
@@ -107,6 +120,10 @@ class _Graph:
     def height_at(self, x: float) -> float:
         """``height`` at one point in floats; subclasses override the array call."""
         return float(self.height(np.array([x]))[0])
+
+    def curvature_bound(self) -> float:
+        """The largest ``|curvature|`` anywhere on the curve (route (a)'s guard)."""
+        raise NotImplementedError
 
     def slope_at(self, x: float) -> float:
         return float(self.slope(np.array([x]))[0])
@@ -202,6 +219,9 @@ class FlatLine(_Graph):
     def height_at(self, x: float) -> float:
         return float(self.c)
 
+    def curvature_bound(self) -> float:
+        return 0.0
+
     def slope_at(self, x: float) -> float:
         return 0.0
 
@@ -243,6 +263,10 @@ class SineGraph(_Graph):
 
     def height_at(self, x: float) -> float:
         return self.c + self.amplitude * sin(self.wavenumber * x)
+
+    def curvature_bound(self) -> float:
+        """``|a| k²``, at the crests, where the slope vanishes."""
+        return abs(self.amplitude) * self.wavenumber**2
 
     def slope_at(self, x: float) -> float:
         return self.amplitude * self.wavenumber * cos(self.wavenumber * x)
@@ -600,12 +624,30 @@ class SmoothBand:
         ``_line_crossing``), and its flanks are ``EDGE_STOP δ`` in its own
         normal distance to first order, which is all a restart point needs;
         on a curved foot curve the profile also carries the anchor's
-        distance to it (``NormalProfile.foot``), exact along the line. The
-        ring's circles are E4.8's (#39), marched as widths.
+        distance to it (``NormalProfile.foot``), exact along the line, and a
+        line that would reach toward the curve's focal distance is refused
+        (``FOOT_CURVATURE``). The ring's circles are E4.8's (#39), marched as
+        widths.
         """
+        if not all(isinstance(c, _Graph) for c in self.interfaces):
+            raise NotImplementedError(
+                "normal profiles cross graphs only; the ring's circles are "
+                "E4.8 (#39), marched as widths from the outer radius"
+            )
         curve = self.interfaces[j]
         s = curve.closest(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
         nx, ny = (float(c) for c in curve.normal(s))
+        foot = None
+        if not isinstance(curve, FlatLine):
+            d_e = curve.signed_distance_at(float(x), float(y))
+            reach = curve.curvature_bound() * (abs(d_e) + FOOT_REACH * scale)
+            if reach >= FOOT_CURVATURE:
+                raise ValueError(
+                    f"route (a)'s normal line reaches {reach:.2f} of the curve's "
+                    f"focal distance, past FOOT_CURVATURE = {FOOT_CURVATURE}: the "
+                    "foot point is not fixed along it"
+                )
+            foot = (j, d_e)
         flanks = (-EDGE_STOP * self.delta, 0.0, EDGE_STOP * self.delta)
         stops = []
         for other in self.interfaces:
@@ -613,11 +655,6 @@ class SmoothBand:
                 for f in flanks if self.delta > 0.0 else (0.0,):
                     stops.append(((other.c + f) - float(y)) / (scale * ny))
                 continue
-            if not isinstance(other, _Graph):
-                raise NotImplementedError(
-                    "normal profiles cross graphs only; the ring's circles are "
-                    "E4.8 (#39), marched as widths from the outer radius"
-                )
             centre = _line_crossing(other, float(x), float(y), nx, ny, scale)
             px = float(x) + scale * centre * nx
             ox, oy = (float(c) for c in other.normal(np.array(px % PERIOD)))
@@ -625,9 +662,6 @@ class SmoothBand:
             for f in flanks if self.delta > 0.0 else (0.0,):
                 stops.append(centre + f / (scale * cosine))
         stops = np.unique(stops)
-        foot = None
-        if not isinstance(curve, FlatLine):
-            foot = (j, curve.signed_distance_at(float(x), float(y)))
         line = NormalProfile(float(x), float(y), nx, ny, float(scale), stops, (), foot)
         if self.delta > 0.0:
             pieces = (self,) * (stops.size + 1)
@@ -649,7 +683,8 @@ def _line_crossing(
     graph's value at ``x0``, the level's derivative along the line being
     ``scale (ny − c′ nx)``. A normal line of a case-2 curve is within 7.2°
     of vertical, so it meets each sine graph once and the iteration is
-    quadratic from the first step.
+    quadratic from the first step; one that has not settled to 1e-12 in
+    ``NEWTON_STEPS`` is refused rather than returned.
     """
     eta = (curve.height_at(x0) - y0) / (scale * ny)
     for _ in range(NEWTON_STEPS):
@@ -658,6 +693,11 @@ def _line_crossing(
         eta -= step
         if abs(step) < 1e-15:
             break
+    if abs(step) > 1e-12:
+        raise RuntimeError(
+            f"the normal line's crossing did not converge in {NEWTON_STEPS} "
+            f"Newton steps (last step {step:.1e})"
+        )
     return eta
 
 

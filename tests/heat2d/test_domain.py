@@ -744,3 +744,35 @@ def test_a_flat_foot_line_carries_no_foot_distance():
     # for bit, never the foot formula.
     p = SmoothBand(case1().material, 0.01).normal_profile(0, 0.37, 0.5896, 0.08)
     assert p.foot is None
+
+
+def test_the_normal_profile_refuses_a_line_that_reaches_the_focal_distance():
+    # Route (a)'s guard (FOOT_CURVATURE): case 2's lines pass with room to
+    # spare, even 0.6 off a curve at a coarse stencil radius; a sine graph ten
+    # times as curved is refused before anything is marched.
+    m = SmoothBand(case2().material, 0.01)
+    x_e = 0.3
+    lower = m.interfaces[0]
+    for offset in (-0.012, -0.6):
+        m.normal_profile(0, x_e, float(lower.height(np.array(x_e))) + offset, 0.09)
+    tight = Band(
+        SineGraph(0.6, 0.1, 4 * np.pi),
+        SineGraph(0.8, 0.1, 4 * np.pi),
+        Constant2D(0.2),
+        Constant2D(1.0),
+    )
+    assert tight.lower.curvature_bound() == pytest.approx(0.1 * (4 * np.pi) ** 2)
+    with pytest.raises(ValueError, match="FOOT_CURVATURE"):
+        SmoothBand(tight, 0.01).normal_profile(0, 0.3, 0.59, 0.08)
+
+
+def test_the_crossing_refuses_to_return_an_unconverged_root(monkeypatch):
+    from heat_interfaces.heat2d import domain
+
+    curve = SineGraph(0.6)
+    eta = domain._line_crossing(curve, 0.0, 0.55, 0.1, np.sqrt(0.99), 0.08)
+    px, py = 0.0 + 0.08 * eta * 0.1, 0.55 + 0.08 * eta * np.sqrt(0.99)
+    assert abs(float(curve.level(np.array(px), np.array(py)))) < 1e-15
+    monkeypatch.setattr(domain, "NEWTON_STEPS", 1)
+    with pytest.raises(RuntimeError, match="did not converge"):
+        domain._line_crossing(curve, 0.0, 0.55, 0.1, np.sqrt(0.99), 0.08)

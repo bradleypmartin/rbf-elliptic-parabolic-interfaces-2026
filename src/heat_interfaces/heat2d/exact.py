@@ -334,6 +334,10 @@ sine and the edge's width moves by 5 % along it.
 """
 
 
+SHEAR_NEWTON_STEPS = 30
+"""Newton iterations of ``ShearMap.eta`` (quadratic; five or six are used)."""
+
+
 @dataclass(frozen=True)
 class ShearMap:
     """``y = η + a sin(k x) β(η)``: the strip with two sine graphs made straight.
@@ -383,14 +387,25 @@ class ShearMap:
         return 1.0 + self.amplitude * np.sin(self.wavenumber * x) * self.beta_prime(eta)
 
     def eta(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
-        """The inverse at fixed ``x``: Newton on the cubic from ``η = y``."""
+        """The inverse at fixed ``x``: Newton on the cubic from ``η = y``.
+
+        Monotone in ``η`` (``__post_init__``), so the iteration converges from
+        any point of the strip; ``SHEAR_NEWTON_STEPS`` without settling to
+        1e-12 is refused rather than returned.
+        """
         x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
         eta = np.array(y, dtype=float, copy=True)
-        for _ in range(30):
+        step = np.full_like(eta, np.inf)
+        for _ in range(SHEAR_NEWTON_STEPS):
             step = (self.y(x, eta) - y) / self.y_eta(x, eta)
             eta -= step
             if np.all(np.abs(step) < 1e-15):
                 break
+        if np.abs(step).max(initial=0.0) > 1e-12:
+            raise RuntimeError(
+                f"the shear's inverse did not converge in {SHEAR_NEWTON_STEPS} "
+                "Newton steps"
+            )
         return eta
 
 

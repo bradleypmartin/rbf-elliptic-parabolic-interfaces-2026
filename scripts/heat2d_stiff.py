@@ -2344,7 +2344,8 @@ def main(argv: Sequence[str] | None = None) -> dict:
         "--amplitude",
         type=float,
         default=0.0,
-        help="the sine pair's amplitude (0: flat lines; case 2 is 0.02)",
+        help="the sine pair's amplitude (0: flat lines; case 2 is 0.02, the only"
+        " one validated: any other needs its own accuracy check first)",
     )
     parser.add_argument(
         "--inside",

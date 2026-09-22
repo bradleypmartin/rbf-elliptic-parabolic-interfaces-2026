@@ -432,3 +432,14 @@ def test_the_product_grid_refuses_curves_it_cannot_straighten():
     for band in (tilted, ring):
         with pytest.raises(ValueError, match="parallel sine graphs"):
             ProductGridReference(band)
+
+
+def test_the_shear_inverse_refuses_to_return_an_unconverged_point(monkeypatch):
+    from heat_interfaces.heat2d import exact
+
+    shear = ShearMap(0.02, 2 * np.pi, 0.6, 0.8)
+    x, y = np.array([0.25, 0.3]), np.array([0.61, 0.7])
+    shear.eta(x, y)
+    monkeypatch.setattr(exact, "SHEAR_NEWTON_STEPS", 1)
+    with pytest.raises(RuntimeError, match="did not converge"):
+        shear.eta(x, y)
