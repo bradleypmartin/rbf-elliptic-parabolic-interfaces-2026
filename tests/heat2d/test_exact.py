@@ -4,8 +4,10 @@ import pytest
 from heat_interfaces.heat1d.domain import OnInterval, SmoothEdges
 from heat_interfaces.heat2d.domain import (
     Band,
+    Circle,
     Constant2D,
     FlatLine,
+    SineGraph,
     SineProduct,
     SmoothBand,
     build_node_set,
@@ -17,11 +19,14 @@ from heat_interfaces.heat2d.exact import (
     REFERENCE_MAX_WIDTH,
     REFERENCE_N_CHEB,
     LayeredExact,
+    ProductGridReference,
     RingMode,
     SeparableReference,
+    ShearMap,
     case1_exact,
     case1_reference,
     control_exact,
+    fourier_derivative,
     profile_medium,
     ring_exact,
     separable_reference,
@@ -339,3 +344,91 @@ def test_the_delta_zero_reference_through_the_solver_is_e25s_case1_error():
     assert err == pytest.approx(
         rms_error(u, case1_exact()(nodes.x, nodes.y)), abs=1e-12
     )
+
+
+# --- the product grid (E4.7, #38) ---------------------------------------------------
+
+RNG = np.random.default_rng(11)
+PX, PY = RNG.uniform(0.0, 1.0, 2000), RNG.uniform(0.0, 1.0, 2000)
+
+
+def test_fourier_derivative_is_exact_on_the_grids_trigonometric_polynomials():
+    n = 9
+    x = np.arange(n) / n
+    d = fourier_derivative(n)
+    for m in range(1, (n - 1) // 2 + 1):
+        u = np.sin(2 * np.pi * m * x) + 0.3 * np.cos(2 * np.pi * m * x)
+        du = (
+            2
+            * np.pi
+            * m
+            * (np.cos(2 * np.pi * m * x) - 0.3 * np.sin(2 * np.pi * m * x))
+        )
+        np.testing.assert_allclose(d @ u, du, atol=1e-12)
+    with pytest.raises(ValueError, match="odd"):
+        fourier_derivative(8)
+
+
+def test_the_shear_straightens_the_sine_pair():
+    shear = ShearMap(0.02, 2 * np.pi, 0.6, 0.8)
+    x = np.linspace(0.0, 1.0, 50, endpoint=False)
+    for c in (0.6, 0.8):
+        np.testing.assert_allclose(
+            shear.y(x, np.full_like(x, c)), SineGraph(c).height(x), atol=2e-16
+        )
+    for c in (0.0, 1.0):
+        assert np.array_equal(shear.y(x, np.full_like(x, c)), np.full_like(x, c))
+    y = RNG.uniform(0.0, 1.0, x.size)
+    np.testing.assert_allclose(shear.y(x, shear.eta(x, y)), y, atol=1e-15)
+    with pytest.raises(ValueError, match="folds"):
+        ShearMap(0.2, 2 * np.pi, 0.6, 0.8)
+
+
+@pytest.mark.parametrize("delta", (0.0, 0.0025, 0.01))
+@pytest.mark.parametrize("growth", (0.0, 1.0))
+def test_the_product_grid_on_a_flat_band_is_the_separable_reference(delta, growth):
+    # Amplitude 0 and constant pieces: the same elements in η, and the sin 2πx
+    # mode exact on the Fourier grid, so the two agree to the collocation's
+    # own round-off (3.5e-13, 5.8e-12, 3.0e-12 at the three widths).
+    ref = ProductGridReference(SmoothBand(case1().material, delta), growth)
+    sep = case1_reference(delta, growth)
+    for t in (0.0, 0.1):
+        np.testing.assert_allclose(ref(PX, PY, t), sep(PX, PY, t), rtol=0, atol=2e-11)
+    assert ref.boundary_values()[0] == 0.0
+    np.testing.assert_allclose(ref.top(X, 1.0, 0.1), sep.top(X, 1.0, 0.1), atol=1e-15)
+
+
+@pytest.mark.parametrize("delta", (0.0, 0.0025))
+def test_the_case2_product_grid_is_resolved(delta):
+    # Plan D4's reference must be well below the 1e-9 the sweep resolves: the
+    # grid in x and the elements in η each move it by ~1e-11 (stiff note §4.6).
+    material = SmoothBand(case2().material, delta)
+    base = ProductGridReference(material)
+    finer_x = ProductGridReference(material, n_x=65)
+    finer_eta = ProductGridReference(material, n_cheb=24, max_width=0.05)
+    u = base(PX, PY)
+    assert np.abs(finer_x(PX, PY) - u).max() < 3e-11
+    assert np.abs(finer_eta(PX, PY) - u).max() < 3e-11
+
+
+def test_the_case2_product_grid_is_e23s_limit_at_delta_zero():
+    # E2.6's curved line at 2500 nodes was 1.247e-5 against its 160,000-node
+    # reference, whose own error is 4e-9 against this one: the two references
+    # must see the same interface-aware solution.
+    domain = case2()
+    ref = ProductGridReference(domain.material)
+    nodes = build_node_set(domain, 2500)
+    stencils = build_stencils(nodes, domain, interface=BOUNDARY)
+    op = interface_aware_operator(nodes, domain.material, stencils)
+    u = solve_equilibrium(op, nodes, ref.boundary_values())
+    assert abs(rms_error(u, ref(nodes.x, nodes.y)) / 1.247e-5 - 1.0) < 0.01
+
+
+def test_the_product_grid_refuses_curves_it_cannot_straighten():
+    tilted = Band(
+        SineGraph(0.6), SineGraph(0.8, 0.03), Constant2D(0.2), Constant2D(1.0)
+    )
+    ring = Band(Circle(0.3), Circle(0.35), Constant2D(0.2), Constant2D(1.0))
+    for band in (tilted, ring):
+        with pytest.raises(ValueError, match="parallel sine graphs"):
+            ProductGridReference(band)

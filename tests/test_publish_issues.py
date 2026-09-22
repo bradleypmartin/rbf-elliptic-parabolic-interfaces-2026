@@ -123,4 +123,4 @@ def test_the_real_plan_is_fully_published():
     epics = parse_plan(plan.read_text())
     numbers = [x.number for e in epics for x in (e, *e.tickets)]
     assert None not in numbers
-    assert len(numbers) == len(set(numbers)) == 51
+    assert len(numbers) == len(set(numbers)) == 52

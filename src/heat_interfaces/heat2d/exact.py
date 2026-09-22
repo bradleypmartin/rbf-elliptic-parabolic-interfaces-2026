@@ -24,14 +24,23 @@ at the cooling circle is 1e7 and the reading measured that, not the ring.)
 alone the same separation holds, and ``v`` is E3.2's Chebyshev-element
 collocation in ``y`` on the band's 1-D medium (``profile_medium``), cut at
 the ``EDGE_CUTS`` of each tanh edge.
+
+``ProductGridReference`` is plan D4's Fourier × Chebyshev product grid for
+the bands that do not separate (E4.7, stiff note §4.6): case 2's sine pair,
+at any edge width including the jump, with either piece. A shear ``ShearMap``
+makes both curves coordinate lines, so the elements in the new coordinate
+are E3.2's again and the reference is spectral in both directions.
 """
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import numpy as np
+import scipy.sparse as sp
+from scipy.sparse.linalg import spsolve
 
 from ..heat1d.domain import (
     Constant,
@@ -40,7 +49,12 @@ from ..heat1d.domain import (
     PiecewiseAlpha,
     SmoothEdges,
 )
-from ..heat1d.exact import ChebyshevPieces, chebyshev_profile
+from ..heat1d.exact import (
+    ChebyshevPieces,
+    chebyshev_lobatto,
+    chebyshev_profile,
+    split_elements,
+)
 from .domain import (
     CASE3_S,
     TWO_PI,
@@ -49,6 +63,7 @@ from .domain import (
     Band,
     Constant2D,
     FlatLine,
+    SineGraph,
     SmoothBand,
     case1,
     ring_radii,
@@ -307,6 +322,299 @@ def case1_reference(
     """Case 1 with tanh edges of width ``delta``; ``case1_exact`` at δ = 0 to 4e-13."""
     band = SmoothBand(case1().material, delta)
     return separable_reference(band, growth, n_cheb, max_width)
+
+
+PRODUCT_N_X = 49
+"""Fourier points in ``x`` of the product-grid reference; odd, so no Nyquist mode.
+
+On case 2 at δ ∈ {0, 0.0025, 0.005, 0.01} the 33-point grid is 8e-12 from
+the 49- and 65-point ones and those two agree to below that (stiff note §4.6),
+so 49 carries a margin; the material's x-variation is a few harmonics of the
+sine and the edge's width moves by 5 % along it.
+"""
+
+
+@dataclass(frozen=True)
+class ShearMap:
+    """``y = η + a sin(k x) β(η)``: the strip with two sine graphs made straight.
+
+    ``β(η) = η (1 − η)(A + B η)`` is the cubic with ``β(0) = β(1) = 0`` and
+    ``β(c₁) = β(c₂) = 1``, so the rows ``y = 0`` and ``y = 1`` are ``η = 0``
+    and ``η = 1`` and the graphs ``c_k + a sin kx`` of case 2's band are the
+    lines ``η = c_k``, whatever ``x``. A signed distance to either graph
+    therefore vanishes on ``η = c_k`` exactly, and a tanh edge in it is a
+    tanh in ``η − c_k`` whose width moves with ``x`` only through the metric
+    (by ±5 % at ``a = 0.02``): E3.2's elements cut at ``c_k ± EDGE_CUTS δ``
+    resolve it. The map is monotone in ``η`` while ``|a β′| < 1`` (0.17 at
+    ``a = 0.02``), which ``__post_init__`` checks. ``a = 0`` is the identity.
+    """
+
+    amplitude: float
+    wavenumber: float
+    lower: float
+    upper: float
+    coefficients: tuple[float, float] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        c = np.array([self.lower, self.upper])
+        m = np.column_stack([c * (1.0 - c), c**2 * (1.0 - c)])
+        a, b = np.linalg.solve(m, np.ones(2))
+        object.__setattr__(self, "coefficients", (float(a), float(b)))
+        eta = np.linspace(0.0, 1.0, 1001)
+        if abs(self.amplitude) * np.abs(self.beta_prime(eta)).max() >= 1.0:
+            raise ValueError("the shear folds the strip: |a β′| must stay below 1")
+
+    def beta(self, eta: np.ndarray) -> np.ndarray:
+        a, b = self.coefficients
+        return eta * (1.0 - eta) * (a + b * eta)
+
+    def beta_prime(self, eta: np.ndarray) -> np.ndarray:
+        a, b = self.coefficients
+        return a + 2.0 * (b - a) * eta - 3.0 * b * eta**2
+
+    def y(self, x: np.ndarray, eta: np.ndarray) -> np.ndarray:
+        return eta + self.amplitude * np.sin(self.wavenumber * x) * self.beta(eta)
+
+    def y_x(self, x: np.ndarray, eta: np.ndarray) -> np.ndarray:
+        k = self.wavenumber
+        return self.amplitude * k * np.cos(k * x) * self.beta(eta)
+
+    def y_eta(self, x: np.ndarray, eta: np.ndarray) -> np.ndarray:
+        return 1.0 + self.amplitude * np.sin(self.wavenumber * x) * self.beta_prime(eta)
+
+    def eta(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """The inverse at fixed ``x``: Newton on the cubic from ``η = y``."""
+        x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        eta = np.array(y, dtype=float, copy=True)
+        for _ in range(30):
+            step = (self.y(x, eta) - y) / self.y_eta(x, eta)
+            eta -= step
+            if np.all(np.abs(step) < 1e-15):
+                break
+        return eta
+
+
+def fourier_derivative(n: int) -> np.ndarray:
+    """``d/dx`` on ``n`` (odd) equispaced points of the period ``[0, 1)``.
+
+    Trefethen, *Spectral Methods in MATLAB*, eq. (3.10) for odd ``n``:
+    ``½ (−1)^{i−j} csc(π (i − j)/n)`` off the diagonal, times ``2π`` for the
+    unit period; exact on the trigonometric polynomials of degree ``(n−1)/2``.
+    """
+    if n < 3 or n % 2 == 0:
+        raise ValueError("the Fourier grid needs an odd number of points, 3 or more")
+    k = np.arange(n)
+    diff = k[:, None] - k[None, :]
+    off = diff != 0
+    d = np.zeros((n, n))
+    d[off] = 0.5 * (-1.0) ** diff[off] / np.sin(np.pi * diff[off] / n)
+    return 2.0 * np.pi * d
+
+
+def shear_of(material: Band | SmoothBand) -> ShearMap:
+    """The ``ShearMap`` that straightens ``material``'s two graphs.
+
+    Both interfaces must be graphs of one shape: two ``FlatLine``s (the
+    identity) or two ``SineGraph``s of equal amplitude and wavenumber, as
+    case 2's are; anything else has no such shear and is refused.
+    """
+    lower, upper = material.interfaces
+    if isinstance(lower, FlatLine) and isinstance(upper, FlatLine):
+        return ShearMap(0.0, TWO_PI, lower.c, upper.c)
+    if (
+        isinstance(lower, SineGraph)
+        and isinstance(upper, SineGraph)
+        and lower.amplitude == upper.amplitude
+        and lower.wavenumber == upper.wavenumber
+    ):
+        return ShearMap(lower.amplitude, lower.wavenumber, lower.c, upper.c)
+    raise ValueError(
+        "a product-grid reference needs two flat lines or two parallel sine graphs"
+    )
+
+
+@dataclass(frozen=True)
+class ProductGridReference:
+    """``u = e^{ct} U(x, y)`` through a band of sine graphs, by a product grid.
+
+    Plan D4 and stiff note §4.6 (E4.7, #38). ``U`` solves
+    ``∇·(α ∇U) − c U = 0`` on the strip with ``U = 0`` on ``y = 0`` and
+    ``U = sin κx`` on ``y = 1``, so ``e^{ct} U`` solves ``u_t = ∇·(α ∇u)``
+    with ``e^{ct} sin κx`` on the top row, exactly in ``t``: the elliptic
+    problem at ``c = 0`` and E2.5's parabolic one at ``c = 1``, with BD4's
+    analytic history at ``t < 0`` for free, as ``SeparableReference`` has it
+    on a flat band. In the ``ShearMap`` coordinates ``(x, η)``, with
+    ``J = y_η``,
+
+        ∇·(α ∇U) = (1/J) [∂_x F_x + ∂_η F_η],
+        F_x = J α U_x − α y_x U_η,   F_η = −α y_x U_x + α (1 + y_x²)/J U_η,
+
+    collocated on ``n_x`` Fourier points in ``x`` (``fourier_derivative``)
+    times E3.2's Chebyshev elements in ``η`` (``n_cheb`` nodes per element,
+    the separable reference's cuts about ``η = c_k`` and ``max_width``
+    splits), the flux form differentiated as it stands. At the elements'
+    shared ends ``U`` and ``F_η`` — the flux through ``η = const``, which is
+    the normal flux through the curve there — are matched, with each
+    element's own α: one-sided at a jump, so δ = 0 is the same solver with
+    the band's pieces on their elements. The rows are equilibrated before
+    SuperLU's ``NATURAL`` ordering factors the banded matrix: unscaled, the
+    rows span seven decades (Dirichlet, continuity, flux, interior) and
+    partial pivoting leaves 1e-7 of spurious modes at δ = 0.0025 where the
+    exact answer has none. The solution is read at any point spectrally:
+    ``η`` from ``ShearMap.eta``, barycentric Lagrange in its element, the
+    trigonometric interpolant in ``x``. At ``a = 0`` with constant pieces
+    it is ``SeparableReference`` to 2e-12 (stiff note §4.6).
+    """
+
+    material: Band | SmoothBand
+    growth: float = 0.0
+    n_x: int = PRODUCT_N_X
+    n_cheb: int = REFERENCE_N_CHEB
+    max_width: float | None = REFERENCE_MAX_WIDTH
+    wavenumber: float = TWO_PI
+    shear: ShearMap = field(init=False, repr=False, compare=False)
+    edges: np.ndarray = field(init=False, repr=False, compare=False)
+    eta: np.ndarray = field(init=False, repr=False, compare=False)
+    values: np.ndarray = field(init=False, repr=False, compare=False)
+    seconds: float = field(init=False, repr=False, compare=False)
+    _modes: np.ndarray = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        t0 = time.perf_counter()
+        shear = shear_of(self.material)
+        band = (
+            self.material.band
+            if isinstance(self.material, SmoothBand)
+            else (self.material)
+        )
+        delta = self.material.delta if isinstance(self.material, SmoothBand) else 0.0
+        stand_in = Band(
+            FlatLine(shear.lower),
+            FlatLine(shear.upper),
+            Constant2D(1.0),
+            Constant2D(1.0),
+        )
+        edges, _ = split_elements(
+            *profile_medium(SmoothBand(stand_in, delta)).elements(), self.max_width
+        )
+        cheb, d, _ = chebyshev_lobatto(self.n_cheb)
+        width = self.n_cheb + 1
+        count = len(edges) - 1
+        lo, hi = edges[:-1, None], edges[1:, None]
+        eta = ((lo + hi) / 2 + (hi - lo) / 2 * cheb[None, :]).ravel()
+        n_x = self.n_x
+        x = np.arange(n_x) / n_x
+        xx, ee = np.meshgrid(x, eta)
+        yy = shear.y(xx, ee)
+        y_x, jac = shear.y_x(xx, ee), shear.y_eta(xx, ee)
+        if delta > 0.0:
+            alpha = self.material.alpha(xx, yy)
+        else:
+            mid = np.repeat(0.5 * (edges[:-1] + edges[1:]), width)
+            region = (mid > shear.lower).astype(int) + (mid > shear.upper)
+            alpha = np.empty_like(xx)
+            for r in (0, 1, 2):
+                rows = region == r
+                alpha[rows] = band.region_piece(r).alpha(xx[rows], yy[rows])
+        size = eta.size * n_x
+        d_eta = sp.block_diag(
+            [sp.csr_array(2.0 / (edges[k + 1] - edges[k]) * d) for k in range(count)],
+            format="csr",
+        )
+        u_x = sp.kron(sp.identity(eta.size), sp.csr_array(fourier_derivative(n_x)))
+        u_eta = sp.kron(d_eta, sp.identity(n_x))
+
+        def diag(a: np.ndarray) -> sp.dia_array:
+            return sp.diags_array(a.ravel())
+
+        f_x = diag(jac * alpha) @ u_x - diag(alpha * y_x) @ u_eta
+        f_eta = (
+            -diag(alpha * y_x) @ u_x + diag(alpha * (1.0 + y_x**2) / jac) @ u_eta
+        ).tocsr()
+        operator = (u_x @ f_x + u_eta @ f_eta - self.growth * diag(jac)).tocsr()
+
+        def rows_at(p: int) -> np.ndarray:
+            return p * n_x + np.arange(n_x)
+
+        starts = np.arange(count) * width
+        ends = starts + self.n_cheb
+        eye = sp.identity(size, format="csr")
+        placed = [(rows_at(starts[0]), eye[rows_at(starts[0])])]
+        for k in range(count - 1):
+            left, right = rows_at(ends[k]), rows_at(starts[k + 1])
+            placed.append((left, eye[left] - eye[right]))
+            placed.append((right, f_eta[left] - f_eta[right]))
+        placed.append((rows_at(ends[-1]), eye[rows_at(ends[-1])]))
+        target = np.concatenate([t for t, _ in placed])
+        keep = np.ones(size)
+        keep[target] = 0.0
+        stacked = sp.vstack([m for _, m in placed], format="csr")
+        put = sp.csr_array(
+            (np.ones(target.size), (target, np.arange(target.size))),
+            shape=(size, target.size),
+        )
+        matrix = (sp.diags_array(keep) @ operator + put @ stacked).tocsr()
+        rhs = np.zeros(size)
+        rhs[rows_at(ends[-1])] = np.sin(self.wavenumber * x)
+        scale = 1.0 / np.abs(matrix).max(axis=1).toarray().ravel()
+        matrix = sp.diags_array(scale) @ matrix
+        u = spsolve(sp.csc_array(matrix), scale * rhs, permc_spec="NATURAL")
+        values = np.asarray(u).reshape(eta.size, n_x)
+        object.__setattr__(self, "shear", shear)
+        object.__setattr__(self, "edges", edges)
+        object.__setattr__(self, "eta", eta)
+        object.__setattr__(self, "values", values)
+        object.__setattr__(self, "_modes", np.fft.rfft(values, axis=1) / n_x)
+        object.__setattr__(self, "seconds", time.perf_counter() - t0)
+
+    @property
+    def elements(self) -> int:
+        return len(self.edges) - 1
+
+    @property
+    def unknowns(self) -> int:
+        return int(self.values.size)
+
+    def steady(self, x: np.ndarray, y: np.ndarray, chunk: int = 4096) -> np.ndarray:
+        """``U(x, y)``: ``η`` by the shear's inverse, then the spectral interpolant."""
+        x, y = np.broadcast_arrays(*(np.asarray(v, dtype=float) for v in (x, y)))
+        flat_x, flat_y = x.ravel(), y.ravel()
+        eta = self.shear.eta(flat_x, flat_y)
+        cheb, _, weights = chebyshev_lobatto(self.n_cheb)
+        width = self.n_cheb + 1
+        element = np.clip(
+            np.searchsorted(self.edges[1:-1], eta, side="right"), 0, self.elements - 1
+        )
+        lo, hi = self.edges[element], self.edges[element + 1]
+        t = (2.0 * eta - (lo + hi)) / (hi - lo)
+        m = np.arange(self._modes.shape[1])
+        factor = np.where(m == 0, 1.0, 2.0)
+        out = np.empty(flat_x.size)
+        for start in range(0, flat_x.size, chunk):
+            part = slice(start, start + chunk)
+            gap = t[part, None] - cheb[None, :]
+            hit = gap == 0.0
+            gap[hit] = 1.0
+            w = weights[None, :] / gap
+            w /= w.sum(axis=1, keepdims=True)
+            on = hit.any(axis=1)
+            w[on] = hit[on]
+            rows = element[part, None] * width + np.arange(width)[None, :]
+            modes = np.einsum("pj,pjm->pm", w, self._modes[rows])
+            waves = np.exp(2j * np.pi * m[None, :] * flat_x[part, None])
+            out[part] = np.einsum("pm,pm->p", factor * modes, waves).real
+        return out.reshape(x.shape)
+
+    def __call__(self, x: np.ndarray, y: np.ndarray, t: float = 0.0) -> np.ndarray:
+        return np.exp(self.growth * t) * self.steady(x, y)
+
+    def top(self, x: np.ndarray, y: np.ndarray, t: float = 0.0) -> np.ndarray:
+        """The Dirichlet row at ``y = 1``: ``e^{ct} sin κx``, as the grid imposes it."""
+        return np.exp(self.growth * t) * np.sin(self.wavenumber * np.asarray(x))
+
+    def boundary_values(self) -> tuple[float, Callable[..., np.ndarray]]:
+        """``(0, top)`` for ``STRIP``'s Dirichlet curves, as the separable one's."""
+        return 0.0, self.top
 
 
 @dataclass(frozen=True)

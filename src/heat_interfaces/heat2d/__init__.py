@@ -14,8 +14,9 @@ interfaces with curvature and the multi-interface chain (dissertation §5.3,
 EABE §2.2.3) and ``operators.interface_aware_operator``; ``solve``: the
 SuperLU equilibrium solve; ``exact``: the separable piecewise-exponential
 solutions of the control and of case 1 (EABE eq. 34), the Chebyshev
-separable reference through a smooth flat band (E4.2) and the harmonic
-mode through case 3's ring (E2.7's resampling check), with the warped
+separable reference through a smooth flat band (E4.2), the Fourier ×
+Chebyshev product grid through case 2's sine pair at any edge width (E4.7)
+and the harmonic mode through case 3's ring (E2.7's resampling check), with the warped
 Gaussians of EABE §2.2.4 (``interface.Warp``) on by default; ``march``:
 ``march_parabolic``, BD4 on the node set (the 1-D marcher behind the
 Dirichlet mask, dissertation §5.4), the analytic-history start of a
@@ -27,8 +28,9 @@ cross an interface, and the cached ``Reference`` runs of the cases without
 an analytic solution (E2.6); ``precondition``: the diagonal dominance ratio
 and Appendix B's row-recombination preconditioner, with ``solve``'s reduced
 interior system, ``gmres`` / ``bicgstab`` and ``spilu`` (E2.8); ``seeds``: the
-15 scalar seeds of a stencil through a smooth flat edge, marched as one
-44-state chain along the normal from the evaluation node, with the warp
+15 scalar seeds of a stencil through a smooth edge, marched as one
+44-state chain along the normal from the evaluation node (route (a) on a
+curved one, E4.7), with the warp
 coordinate and the moment conditions' right-hand side (E4.4), and the seed
 rows themselves, warped or plain (``seed_weights``, E4.5), which
 ``operators.seed_operator`` puts into the global matrix on the stencils that
@@ -72,17 +74,22 @@ from .domain import (
     with_smooth_edges,
 )
 from .exact import (
+    PRODUCT_N_X,
     REFERENCE_MAX_WIDTH,
     REFERENCE_N_CHEB,
     LayeredExact,
+    ProductGridReference,
     RingMode,
     SeparableReference,
+    ShearMap,
     case1_exact,
     case1_reference,
     control_exact,
+    fourier_derivative,
     profile_medium,
     ring_exact,
     separable_reference,
+    shear_of,
 )
 from .fd4 import cartesian_grid, fd4_dx, fd4_dy, fd4_operator, grid_size
 from .interface import (
@@ -225,6 +232,7 @@ __all__ = [
     "OPERATORS",
     "PERIOD",
     "REFERENCE_MAX_WIDTH",
+    "PRODUCT_N_X",
     "REFERENCE_N_CHEB",
     "RING",
     "ROW",
@@ -251,7 +259,9 @@ __all__ = [
     "Row",
     "SineGraph",
     "SineProduct",
+    "ProductGridReference",
     "SeparableReference",
+    "ShearMap",
     "SmoothBand",
     "Solution",
     "StencilGroup",
@@ -305,12 +315,14 @@ __all__ = [
     "polynomial_count",
     "polynomial_exponents",
     "polynomial_rhs",
+    "fourier_derivative",
     "profile_medium",
     "rbf_fd_weights",
     "restriction_matrix",
     "ring_exact",
     "ring_radii",
     "separable_reference",
+    "shear_of",
     "rms_error",
     "row_count",
     "solve_equilibrium",

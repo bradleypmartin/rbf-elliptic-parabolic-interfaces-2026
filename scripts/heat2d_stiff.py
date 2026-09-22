@@ -88,6 +88,22 @@ weight solves and not marches); and H4's δ = 0 regression, where the seed
 rows *are* E2.3's and the line must be port notes §2.4–2.5's.
 Figure: ``heat2d_stiff_seeds.png``.
 
+``--amplitude`` and ``--inside`` (E4.7, #38; stiff note §3.5 and H9, §4.6
+records) move the same sweep onto another band: ``--amplitude 0.02`` is
+case 2's sine pair with its ``0.2 + 0.1 sin 2πx sin 2πy`` inside (EABE eq.
+35), and ``--inside constant`` on the curves or ``--inside sine`` on flat lines
+split case 2's two departures from case 1, the curvature and the tangential
+variation of alpha. The seeds are route (a) (the flat seeds along the foot
+point's true normal), the widths default to ``CURVED_DELTAS``, the reference
+is the sheared product grid (``ProductGridReference``) at every δ, and the
+numbers go to their own ``CURVED_CACHE``. Beside E4.6's tables: H9's
+truncation probe (each line's rows on the equilibrium reference, over the
+seeded, crossing and bulk rows; case 1 prints it too for entries built since
+E4.7) and each line's curved error over case 1's at equal (δ, n), from
+``KNEE_CACHE``. ``--mode references --amplitude 0.02`` checks the product grid
+against finer grids in both directions and, at δ = 0, E2.6's 160,000-node run
+against it. Figure: ``heat2d_stiff_seeds_<tag>.png``.
+
     uv run python scripts/heat2d_stiff.py              # 2.5 min cold, 21 s cached
     uv run python scripts/heat2d_stiff.py --mode naive \
         --counts 1250 2500 5000 10000 20000 40000 80000 160000   # 58 min once
@@ -100,6 +116,15 @@ Figure: ``heat2d_stiff_seeds.png``.
     uv run python scripts/heat2d_stiff.py --mode seeds --deltas 0 \
         --operators naive construction seeds \
         --counts 1250 2500 5000 10000 20000 40000 80000 160000  # H4 to the end
+    uv run python scripts/heat2d_stiff.py --mode references --amplitude 0.02  # 67 s
+    uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
+        --counts 1250 2500 5000 10000 20000 40000               # case 2, once
+    uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
+        --inside constant --deltas 0 0.0025 --operators naive construction seeds \
+        --counts 1250 2500 5000 10000 20000 40000               # the curvature alone
+    uv run python scripts/heat2d_stiff.py --mode seeds --inside sine \
+        --deltas 0 0.0025 --operators naive construction seeds \
+        --counts 1250 2500 5000 10000 20000 40000               # alpha along the edge
 """
 
 from __future__ import annotations
@@ -108,7 +133,7 @@ import argparse
 import json
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from math import comb
 from pathlib import Path
 
@@ -129,16 +154,24 @@ from heat_interfaces.heat2d import (  # noqa: E402
     BOUNDARY,
     GA_SHAPE,
     INTERFACE_KIND,
+    INTERIOR_KIND,
+    PRODUCT_N_X,
     PRODUCT_ORDERING,
     REFERENCE_MAX_WIDTH,
     REFERENCE_N_CHEB,
     ROW_OFFSETS,
+    STRIP,
     Band,
     Constant2D,
+    Domain,
     FlatLine,
     NodeSet,
+    ProductGridReference,
+    Reference,
     Row,
     SeedBasis,
+    SineGraph,
+    SineProduct,
     SmoothBand,
     Stencils,
     augmented_solve,
@@ -214,12 +247,21 @@ matrix as the seeds with the marched rows taken out, which is what separates
 the seed rows from their smaller stencil), and the seeds with the warp on and
 off (H7). ``naive`` and ``construction`` are E4.3's cached entries, reread."""
 
+EXTRA_LABELS = ("construction-flat",)
+"""Lines ``--operators`` offers beyond the default six: E2.3 with its interface
+expansion off (``curvature=False``, EABE Fig. 10's "linear interface"), which is
+``construction`` bit for bit on flat lines and the δ = 0 limit route (a) is
+measured against on a curved one (E4.7, §4.6)."""
+
 SEEDS_PLAIN = "#7fb3d5"
 """The seeds' ablation: the same blue as the seeds, lighter (``plotting``'s key,
 and ``heat2d_stiff_eigenvalues.py``'s)."""
 
 DIRECT_REACH = "#bcbcbc"
 """The direct operator on the seeds' stencils: the same grey, lighter."""
+
+CONSTRUCTION_FLAT = "#c2a5cf"
+"""E2.3 with the flat interface: the construction's purple, lighter."""
 
 STYLE = {
     "naive": (NAIVE, "o"),
@@ -228,6 +270,7 @@ STYLE = {
     "direct-reach": (DIRECT_REACH, "*"),
     "seeds": (AWARE, "^"),
     "seeds-plain": (SEEDS_PLAIN, "v"),
+    "construction-flat": (CONSTRUCTION_FLAT, "x"),
 }
 """Colour and marker per line, E4.5's driver's."""
 
@@ -274,6 +317,113 @@ RESIDUAL_HALF = 6
 
 THIN = Band(FlatLine(0.6), FlatLine(0.62), Constant2D(0.2), Constant2D(1.0))
 """A band one spacing thick at 2500 nodes: its stencils reach all three regions."""
+
+INSIDE = {"constant": Constant2D(0.2), "sine": SineProduct(0.2, 0.1)}
+"""The band's piece: case 1's constant, or case 2's ``0.2 + 0.1 sin 2πx sin 2πy``."""
+
+CASE2_AMPLITUDE = 0.02
+"""Case 2's sine pair ``c + 0.02 sin 2πx`` (EABE eq. 35)."""
+
+CURVED_DELTAS = (0.0, 0.01, 0.005, 0.0025)
+"""The curved sweep's widths (plan E4.7): the jump and E4.3's three narrowest."""
+
+CURVED_CACHE = "heat2d_stiff_curved.json"
+CURVED_CACHE_META = {
+    "study": "E4.7 sine bands with tanh edges against the product-grid references",
+    "version": 1,
+    "reference": ["product grid", PRODUCT_N_X, REFERENCE_N_CHEB, REFERENCE_MAX_WIDTH],
+    "naive_ordering": PRODUCT_ORDERING,
+}
+"""Its own file, so that nothing here can move E4.3's and E4.6's case-1 entries."""
+
+CASE2_REFERENCE = "heat2d_case2_reference_n160000_seed0.npz"
+"""E2.6's cached 160,000-node jump-aware run, which the δ = 0 product grid checks."""
+
+CHECK_N_X = 65
+"""The finer Fourier grid the product-grid reference is checked against."""
+
+
+@dataclass(frozen=True)
+class Geometry:
+    """The band a sweep runs on: flat or sine interfaces, and which piece inside.
+
+    ``Geometry()`` is case 1 (flat lines, the constant 0.2) and keeps
+    everything E4.3–E4.6 built: the separable references, ``KNEE_CACHE`` and
+    its keys, the straddling-row diagnostics. ``Geometry(0.02, "sine")`` is
+    case 2 (EABE eq. 35), and the two mixed ones split case 2's two
+    departures from case 1 (stiff note §4.6): the sine pair with the constant
+    piece (the curvature alone) and the flat lines with case 2's piece (the
+    tangential variation of alpha alone). Every geometry but case 1 is read
+    against the product grid and cached in ``CURVED_CACHE`` under its
+    ``tag``.
+    """
+
+    amplitude: float = 0.0
+    inside: str = "constant"
+
+    def __post_init__(self) -> None:
+        if self.inside not in INSIDE:
+            raise ValueError(f"inside must be one of {sorted(INSIDE)}")
+        if not self.amplitude >= 0.0:
+            raise ValueError("the amplitude must be non-negative")
+
+    @property
+    def is_case1(self) -> bool:
+        return self.amplitude == 0.0 and self.inside == "constant"
+
+    @property
+    def tag(self) -> str:
+        return "" if self.is_case1 else f"a{self.amplitude:g} {self.inside}"
+
+    @property
+    def name(self) -> str:
+        if self.is_case1:
+            return "case 1"
+        if self.amplitude == CASE2_AMPLITUDE and self.inside == "sine":
+            return "case 2"
+        curves = (
+            "flat lines"
+            if self.amplitude == 0.0
+            else f"sine pair a = {self.amplitude:g}"
+        )
+        return f"{curves}, {self.inside} inside"
+
+    def domain(self) -> Domain:
+        if self.is_case1:
+            return case1()
+        if self.amplitude == 0.0:
+            curves = (FlatLine(0.6), FlatLine(0.8))
+        else:
+            curves = (SineGraph(0.6, self.amplitude), SineGraph(0.8, self.amplitude))
+        band = Band(*curves, INSIDE[self.inside], Constant2D(1.0))
+        return Domain(band, band.interfaces, STRIP)
+
+    def reference(self, delta: float, growth: float):
+        """The separable reference on case 1, the product grid elsewhere; memoised."""
+        key = (self, delta, growth)
+        if key not in _REFERENCES:
+            if self.is_case1:
+                _REFERENCES[key] = case1_reference(delta, growth)
+            else:
+                medium = SmoothBand(self.domain().material, delta)
+                _REFERENCES[key] = ProductGridReference(medium, growth)
+        return _REFERENCES[key]
+
+    def cache(self) -> tuple[str, dict]:
+        return (
+            (KNEE_CACHE, KNEE_CACHE_META)
+            if self.is_case1
+            else (
+                CURVED_CACHE,
+                CURVED_CACHE_META,
+            )
+        )
+
+
+_REFERENCES: dict = {}
+"""A run's references by (geometry, δ, c): a product grid costs a second or two."""
+
+CASE1 = Geometry()
 
 
 # --- E4.2: the references ---------------------------------------------------------
@@ -335,6 +485,88 @@ def print_references(rows: list[dict[str, float]]) -> None:
             f"{r['unknowns']:8d}  {r['ms']:5.1f}  {r['agreement']:9.1e}  "
             f"{r['distance']:9.3e}  {ratio:>12}  {r['plateau']:12.2e}"
         )
+
+
+def curved_reference_rows(
+    geometry: Geometry,
+    deltas: Sequence[float],
+    growth: Sequence[float],
+    outputs: Path,
+    points: int = 4000,
+) -> list[dict[str, float]]:
+    """E4.7's reference checks per (δ, c), on ``points`` random points of the strip.
+
+    The product grid's elements, unknowns and build time; its agreement with
+    the ``CHECK_N_X``-point Fourier grid and with ``CHECK_N_CHEB`` nodes on
+    ``CHECK_MAX_WIDTH``-wide elements (max difference); its distance from
+    the δ = 0 grid, the floor the δ = 0 construction sits on; and at δ = 0,
+    ``c = 0`` on case 2, the distance of E2.6's cached 160,000-node
+    jump-aware run from it at that run's own nodes (``CASE2_REFERENCE``,
+    skipped if it is not under ``outputs``), which measures that run's error.
+    """
+    rng = np.random.default_rng(0)
+    px, py = rng.uniform(0.0, 1.0, points), rng.uniform(0.0, 1.0, points)
+    material = geometry.domain().material
+    rows = []
+    for c in growth:
+        base = geometry.reference(0.0, c)(px, py)
+        for delta in deltas:
+            ref = geometry.reference(delta, c)
+            medium = SmoothBand(material, delta)
+            u = ref(px, py)
+            fine_x = ProductGridReference(medium, c, n_x=CHECK_N_X)
+            fine_eta = ProductGridReference(
+                medium, c, n_cheb=CHECK_N_CHEB, max_width=CHECK_MAX_WIDTH
+            )
+            row = {
+                "delta": delta,
+                "growth": c,
+                "elements": ref.elements,
+                "unknowns": ref.unknowns,
+                "seconds": ref.seconds,
+                "n_x": float(np.abs(fine_x(px, py) - u).max()),
+                "elements_check": float(np.abs(fine_eta(px, py) - u).max()),
+                "distance": float(np.abs(u - base).max()),
+            }
+            path = outputs / CASE2_REFERENCE
+            if (
+                delta == 0.0
+                and c == 0.0
+                and geometry.name == "case 2"
+                and path.exists()
+            ):
+                run = Reference.load(path)
+                gap = run.u - ref(run.nodes.x, run.nodes.y)
+                row["e26_rms"] = float(np.sqrt(np.mean(gap**2)))
+                row["e26_max"] = float(np.abs(gap).max())
+            rows.append(row)
+    return rows
+
+
+def print_curved_references(rows: list[dict[str, float]], geometry: Geometry) -> None:
+    print(
+        f"{geometry.name}: the product-grid reference (sheared Fourier × Chebyshev"
+        f" elements), {PRODUCT_N_X} points in x, {REFERENCE_N_CHEB} nodes per element,"
+        f" elements <= {REFERENCE_MAX_WIDTH}"
+    )
+    print(
+        f"  checks: max difference against {CHECK_N_X} points in x and against"
+        f" {CHECK_N_CHEB} nodes on {CHECK_MAX_WIDTH}-wide elements; distance ="
+        " max |u − u at δ = 0|"
+    )
+    print("        δ    c  elements  unknowns      s   vs n_x   vs elements   distance")
+    for r in rows:
+        print(
+            f"  {r['delta']:7.4f}  {r['growth']:3.1f}  {r['elements']:8d}"
+            f"  {r['unknowns']:8d}  {r['seconds']:5.2f}  {r['n_x']:7.1e}"
+            f"  {r['elements_check']:12.1e}  {r['distance']:9.3e}"
+        )
+    for r in rows:
+        if "e26_rms" in r:
+            print(
+                "  E2.6's 160,000-node jump-aware run against the δ = 0 grid at its"
+                f" own nodes: RMS {r['e26_rms']:.3e}, max {r['e26_max']:.3e}"
+            )
 
 
 # --- E4.3: the diagnostics on the straddling rows ------------------------------------
@@ -424,27 +656,37 @@ def knee_key(
     seed: int,
     iterations: int,
     t_end: float,
+    tag: str = "",
 ) -> str:
-    """The cache key of one line's numbers at one (problem, δ, n)."""
+    """The cache key of one line's numbers at one (problem, δ, n).
+
+    ``tag`` is a non-case-1 geometry's (``Geometry.tag``); case 1's keys are
+    E4.3's, unchanged.
+    """
     d = "-" if delta is None else f"{delta:g}"
     t = f" t{t_end:g}" if PROBLEMS[problem] else ""
-    return f"{problem}{t} d{d} n{n} s{seed} i{iterations} {label}"
+    key = f"{problem}{t} d{d} n{n} s{seed} i{iterations} {label}"
+    return f"{tag} {key}" if tag else key
 
 
-def load_knee_cache(outputs: Path) -> dict[str, dict[str, float]]:
+def load_knee_cache(outputs: Path, geometry: Geometry = CASE1) -> dict[str, dict]:
     """The cached numbers; empty when the file is missing or from another study."""
-    path = outputs / KNEE_CACHE
+    name, meta = geometry.cache()
+    path = outputs / name
     if not path.exists():
         return {}
     data = json.loads(path.read_text())
-    if data.get("meta") != KNEE_CACHE_META:
+    if data.get("meta") != meta:
         return {}
     return dict(data["entries"])
 
 
-def save_knee_cache(outputs: Path, cache: dict[str, dict[str, float]]) -> None:
-    data = {"meta": KNEE_CACHE_META, "entries": dict(sorted(cache.items()))}
-    (outputs / KNEE_CACHE).write_text(json.dumps(data, indent=1) + "\n")
+def save_knee_cache(
+    outputs: Path, cache: dict[str, dict], geometry: Geometry = CASE1
+) -> None:
+    name, meta = geometry.cache()
+    data = {"meta": meta, "entries": dict(sorted(cache.items()))}
+    (outputs / name).write_text(json.dumps(data, indent=1) + "\n")
 
 
 def top_row(growth: float):
@@ -525,6 +767,7 @@ def sweep_operators(
     medium: SmoothBand,
     groups: dict[str, Stencils],
     reach: float = TANH_REACH,
+    domain: Domain | None = None,
 ) -> dict[str, tuple[sp.csr_array, str | None, dict[str, float]]]:
     """``{label: (L, SuperLU's ordering, the readings of the build)}``, built once.
 
@@ -534,7 +777,8 @@ def sweep_operators(
     would double the sweep. ``groups`` carries the plain and crossing
     stencils of this node set; the reach group depends on δ and is built
     here. The readings are the rows the method recomputes and the seconds
-    the build took, which the tables quote.
+    the build took, which the tables quote. ``domain`` is the geometry's
+    (case 1 by default); only its material is replaced.
     """
     warps = [w for w in (True, False) if seed_label(w, reach) in labels]
     built: dict[str, tuple[sp.csr_array, str | None, dict[str, float]]] = {}
@@ -543,9 +787,9 @@ def sweep_operators(
     def stencils_of_the_rule() -> Stencils:
         """The reach group of this δ, built once: what the seed operator wants."""
         if not seed_group:
-            domain = replace(case1(), material=medium)
+            smooth = replace(domain or case1(), material=medium)
             seed_group.append(
-                build_stencils(nodes, domain, interface=BOUNDARY, reach=reach)
+                build_stencils(nodes, smooth, interface=BOUNDARY, reach=reach)
             )
         return seed_group[0]
 
@@ -572,8 +816,11 @@ def sweep_operators(
             stencils = stencils_of_the_rule()
             op = direct_operator(nodes, medium, stencils)
             rows = seeded_count(stencils)
-        elif label == "construction":
-            op = interface_aware_operator(nodes, medium, groups["crossing"])
+        elif label in ("construction", "construction-flat"):
+            curvature = label == "construction"
+            op = interface_aware_operator(
+                nodes, medium, groups["crossing"], curvature=curvature
+            )
             rows = int(
                 sum(
                     interface_crossings(nodes, medium, g.index).sum()
@@ -582,7 +829,8 @@ def sweep_operators(
                 )
             )
         else:
-            raise ValueError(f"unknown line {label!r}; one of {SWEEP_LABELS}")
+            known = (*SWEEP_LABELS, *EXTRA_LABELS)
+            raise ValueError(f"unknown line {label!r}; one of {known}")
         built[label] = (op, permc, {"rows": rows, "seconds": time.perf_counter() - t0})
     if warps:
         t0 = time.perf_counter()
@@ -599,6 +847,57 @@ def sweep_operators(
     return built
 
 
+def probe_masks(
+    nodes: NodeSet, domain: Domain, crossing: Stencils, reach: float = TANH_REACH
+) -> dict[str, np.ndarray]:
+    """The row sets of the truncation probe at one (n, δ) (stiff note §4.6).
+
+    ``seeded``: the rows the seed rule marches, the same set for every line
+    (for the others, the rows the seeds would rebuild, the companion's
+    convention); ``crossing``: E2.3's rows, whose 30 nodes straddle a curve;
+    ``bulk``: the reach stencils' interior group, 42 / 5 rows that neither see
+    an edge nor sit in the boundary zone, so that the set holds one kind of
+    row at every (n, δ) (empty where 20 δ covers the strip).
+    """
+    medium = domain.material
+    stencils = build_stencils(nodes, domain, interface=BOUNDARY, reach=reach)
+    seeded = np.zeros(nodes.n, dtype=bool)
+    bulk = np.zeros(nodes.n, dtype=bool)
+    for g in stencils.groups:
+        if g.kind == INTERFACE_KIND:
+            seeded[g.rows[seeded_rows(nodes, medium, g.index, reach)]] = True
+        elif g.kind == INTERIOR_KIND:
+            bulk[g.rows] = True
+    across = np.zeros(nodes.n, dtype=bool)
+    for g in crossing.groups:
+        if g.kind == INTERFACE_KIND:
+            across[g.rows[interface_crossings(nodes, medium, g.index)]] = True
+    return {"seeded": seeded, "crossing": across, "bulk": bulk}
+
+
+def truncation_probe(
+    op: sp.sparray, u: np.ndarray, masks: dict[str, np.ndarray]
+) -> dict[str, float]:
+    """RMS of ``L u`` per row set, ``u`` the equilibrium reference at the nodes.
+
+    ``L u = 0`` exactly, so each row's value is its local truncation error on
+    the true solution: H9's probe. Absolute, since there is no rate to divide
+    by; the tables set the seeded rows against the bulk rows of the same
+    operator.
+    """
+    r = op @ u
+    return {
+        f"probe_{name}": float(np.sqrt(np.mean(r[mask] ** 2))) if mask.any() else 0.0
+        for name, mask in masks.items()
+    }
+
+
+def rms_and_max(ref, u: np.ndarray, nodes: NodeSet, t: float) -> dict[str, float]:
+    """The two readings of ``edge_diagnostics`` that do not assume a separable mode."""
+    exact = ref(nodes.x, nodes.y, t)
+    return {"rms": rms_error(u, exact), "max": float(np.abs(u - exact).max())}
+
+
 def knee_sweep(
     counts: Sequence[int],
     deltas: Sequence[float],
@@ -610,6 +909,7 @@ def knee_sweep(
     labels: Sequence[str] = OPERATORS,
     reach: float = TANH_REACH,
     save: Callable[[], None] | None = None,
+    geometry: Geometry = CASE1,
 ) -> dict[str, dict[float, list[dict]]]:
     """``results[problem][δ]``: one row per count, the ``labels``, floor and uniform.
 
@@ -625,15 +925,24 @@ def knee_sweep(
     both problems. ``save`` is called after each count that computed
     something, so that a sweep interrupted at 40,000 nodes keeps the hours
     below it.
+
+    ``geometry`` other than case 1 (E4.7) reads the product grid instead of
+    the separable reference, keeps only the RMS and max errors (the
+    straddling-row readings assume the separable mode), and keys its entries
+    by its ``tag``. Every operator built here also carries the truncation
+    probe on the elliptic entry (``probe_seeded``, ``probe_crossing``,
+    ``probe_bulk``); case-1 entries cached before E4.7 have none.
     """
-    domain = case1()
+    domain = geometry.domain()
     results: dict[str, dict[float, list[dict]]] = {
         p: {d: [] for d in deltas} for p in problems
     }
     for n in counts:
 
         def key(problem, delta, label, n=n):
-            return knee_key(problem, delta, n, label, seed, iterations, t_end)
+            return knee_key(
+                problem, delta, n, label, seed, iterations, t_end, geometry.tag
+            )
 
         needed = [key(p, None, "uniform") for p in problems] + [
             key(p, d, label)
@@ -657,13 +966,13 @@ def knee_sweep(
                     cache[k] = {"rms": rms_error(u, ref(nodes.x, nodes.y, t))}
             for delta in deltas:
                 medium = SmoothBand(domain.material, delta)
-                refs = {p: case1_reference(delta, PROBLEMS[p]) for p in problems}
+                refs = {p: geometry.reference(delta, PROBLEMS[p]) for p in problems}
                 for problem in problems:
                     k = key(problem, delta, "floor")
                     if k not in cache:
                         c = PROBLEMS[problem]
                         t = t_end if c else 0.0
-                        base = case1_reference(0.0, c)
+                        base = geometry.reference(0.0, c)
                         cache[k] = {
                             "h": nodes.h,
                             "floor": rms_error(
@@ -678,14 +987,33 @@ def knee_sweep(
                 pending = {label: p for label, p in pending.items() if p}
                 if not pending:
                     continue
-                built = sweep_operators(list(pending), nodes, medium, groups, reach)
+                built = sweep_operators(
+                    list(pending), nodes, medium, groups, reach, domain
+                )
+                if "elliptic" in problems:
+                    smooth = replace(domain, material=medium)
+                    masks = probe_masks(nodes, smooth, groups["crossing"], reach)
+                    steady = refs["elliptic"](nodes.x, nodes.y)
                 for label, left in pending.items():
                     op, permc, readings = built[label]
+                    probe = (
+                        truncation_probe(op, steady, masks)
+                        if "elliptic" in left
+                        else {}
+                    )
                     for problem in left:
                         u, t = _solve(problem, op, nodes, refs[problem], t_end, permc)
+                        if geometry.is_case1:
+                            diagnostics = edge_diagnostics(
+                                nodes, medium, refs[problem], u, t
+                            )
+                        else:
+                            diagnostics = rms_and_max(refs[problem], u, nodes, t)
+                        extra = probe if problem == "elliptic" else {}
                         cache[key(problem, delta, label)] = {
-                            **edge_diagnostics(nodes, medium, refs[problem], u, t),
+                            **diagnostics,
                             **readings,
+                            **extra,
                         }
             print(f"  (n = {n}: {time.perf_counter() - t0:.1f} s)", flush=True)
             if save is not None:
@@ -1571,6 +1899,7 @@ def plot_seeds(
     seeds: str,
     plain: str,
     path: Path,
+    title: str | None = None,
 ) -> None:
     """Top: the lines at three widths; bottom: the seeds, the rule, and the warp.
 
@@ -1711,14 +2040,138 @@ def plot_seeds(
             )
         )
     fig.legend(handles=handles, loc="lower center", ncol=6, fontsize=8)
-    fig.tight_layout(rect=(0, 0.075, 1, 1))
+    top = 1.0
+    if title is not None:
+        fig.suptitle(title, fontsize=11)
+        top = 0.96
+    fig.tight_layout(rect=(0, 0.075, 1, top))
     fig.savefig(path, dpi=150)
     plt.close(fig)
 
 
+def _probe_cells(rows: list[dict], name: str) -> list[str]:
+    """``_with_rates`` for the probe, where an empty row set reads 0: "-" there."""
+    cells = []
+    for i, r in enumerate(rows):
+        value = r.get(name, 0.0)
+        if value == 0.0:
+            cells.append("-")
+            continue
+        before = rows[i - 1].get(name, 0.0) if i else 0.0
+        rate = f" ({_rate(rows[i - 1], r, name):5.2f})" if before > 0.0 else ""
+        cells.append(f"{value:.2e}{rate}")
+    return cells
+
+
+def print_probe(
+    results: dict[float, list[dict]], labels: Sequence[str], seeds: str, title: str
+) -> None:
+    """H9's probe: each line's rows applied to the equilibrium reference at the nodes.
+
+    RMS of ``L u`` over the rows the seeds rebuild, over E2.3's crossing rows
+    and over the bulk, per δ, with the order per halving of h; the seeds'
+    seeded rows over their bulk rows last. A consistent row converges; one
+    that is not stalls at a size set by what it gets wrong. An empty row set
+    (no bulk at all where 20 δ covers the strip) prints "-".
+    """
+    print(f"\n{title}")
+    shown = [label for label in (seeds, "construction", "naive") if label in labels]
+    for delta, rows in results.items():
+        if f"{seeds}/probe_seeded" not in rows[0]:
+            continue
+        name = "δ = 0 (jump)" if delta == 0.0 else f"δ = {delta:g}"
+        print(f"  {name}")
+        header = "       n |"
+        for label in shown:
+            header += f" {label}: seeded       crossing          |"
+        print(header + f" {seeds}: bulk            seeded ÷ bulk")
+        cells = {
+            (label, q): _probe_cells(rows, f"{label}/probe_{q}")
+            for label in shown
+            for q in ("seeded", "crossing")
+        }
+        bulk = _probe_cells(rows, f"{seeds}/probe_bulk")
+        for i, r in enumerate(rows):
+            line = f"  {r['n']:6d} |"
+            for label in shown:
+                seeded, across = cells[(label, "seeded")], cells[(label, "crossing")]
+                line += f" {seeded[i]:<16} {across[i]:<16} |"
+            below = r[f"{seeds}/probe_bulk"]
+            ratio = r[f"{seeds}/probe_seeded"] / below if below else None
+            cell = "       -" if ratio is None else f"{ratio:8.1f}"
+            print(line + f" {bulk[i]:<16} {cell}")
+
+
+def flat_comparison(
+    results: dict[str, dict[float, list[dict]]],
+    labels: Sequence[str],
+    outputs: Path,
+    seed: int,
+    iterations: int,
+    t_end: float,
+) -> list[dict]:
+    """The curved lines over case 1's at equal (δ, n), from E4.3–E4.6's cache.
+
+    The ticket's "curved numbers compared with the flat ones at equal δ":
+    every line of ``labels`` that case 1's cache holds at the same count,
+    seed and repulsion steps; a missing entry is skipped.
+    """
+    flat = load_knee_cache(outputs)
+    rows = []
+    for problem, lines in results.items():
+        for delta, entries in lines.items():
+            for r in entries:
+                row = {"problem": problem, "delta": delta, "n": r["n"]}
+                for label in labels:
+                    k = knee_key(problem, delta, r["n"], label, seed, iterations, t_end)
+                    if k in flat and f"{label}/rms" in r:
+                        row[f"flat/{label}"] = flat[k]["rms"]
+                        row[f"curved/{label}"] = r[f"{label}/rms"]
+                rows.append(row)
+    return rows
+
+
+def print_flat_comparison(
+    rows: list[dict], labels: Sequence[str], problem: str, title: str
+) -> None:
+    print(f"\n{title}")
+    shown = [label for label in labels if any(f"flat/{label}" in r for r in rows)]
+    if not shown:
+        print("  (case 1's cache holds none of these lines at these counts)")
+        return
+    print(
+        "      δ       n |"
+        + "".join(f" {label + ': flat':>20}  curved  ÷ |" for label in shown)
+    )
+    for r in rows:
+        if r["problem"] != problem:
+            continue
+        line = f"  {r['delta']:6.4f}  {r['n']:6d} |"
+        for label in shown:
+            if f"flat/{label}" in r:
+                f, c = r[f"flat/{label}"], r[f"curved/{label}"]
+                line += f" {f:20.2e} {c:8.2e} {c / f:5.0f} |"
+            else:
+                line += f" {'-':>20} {'-':>8} {'-':>5} |"
+        print(line)
+
+
+def figure_name(geometry: Geometry) -> str:
+    """``heat2d_stiff_seeds.png`` for case 1, the geometry's tag in it otherwise."""
+    if geometry.is_case1:
+        return "heat2d_stiff_seeds.png"
+    return f"heat2d_stiff_seeds_{geometry.tag.replace(' ', '_')}.png"
+
+
 def run_seeds(args) -> dict:
-    """E4.6's tables and figure: the seeds against E4.3's lines at every (n, δ)."""
+    """E4.6's tables and figure: the seeds against E4.3's lines at every (n, δ).
+
+    On another geometry than case 1 (E4.7) the same sweep against the product
+    grid, without E4.3's straddling-row readings, with H9's truncation probe
+    and the curved lines over case 1's at equal (δ, n).
+    """
     t0 = time.perf_counter()
+    geometry = args.geometry
     reach = args.seed_reach
     labels = [
         seed_label(label == "seeds", reach) if label.startswith("seeds") else label
@@ -1727,7 +2180,7 @@ def run_seeds(args) -> dict:
     seeds, plain = seed_label(True, reach), seed_label(False, reach)
     if seeds not in labels:
         raise ValueError(f"the sweep needs the {seeds!r} line; got {labels}")
-    cache = load_knee_cache(args.outputs)
+    cache = load_knee_cache(args.outputs, geometry)
     results = knee_sweep(
         args.counts,
         args.deltas,
@@ -1737,10 +2190,22 @@ def run_seeds(args) -> dict:
         args.t_end,
         labels=labels,
         reach=reach,
-        save=lambda: save_knee_cache(args.outputs, cache),
+        save=lambda: save_knee_cache(args.outputs, cache, geometry),
+        geometry=geometry,
     )
-    save_knee_cache(args.outputs, cache)
+    save_knee_cache(args.outputs, cache, geometry)
     tables: dict = {"sweep": results}
+    where = (
+        "case 1's tanh edges"
+        if geometry.is_case1
+        else f"the tanh edges of {geometry.name} (route (a))"
+    )
+    against = "the separable reference" if geometry.is_case1 else "the product grid"
+    if not geometry.is_case1:
+        comparison = flat_comparison(
+            results, labels, args.outputs, args.seed, args.iterations, args.t_end
+        )
+        tables["flat"] = comparison
     for problem, lines in results.items():
         what = (
             "equilibrium"
@@ -1750,8 +2215,8 @@ def run_seeds(args) -> dict:
         print_sweep(
             lines,
             labels,
-            f"the seeds against E4.3's lines through case 1's tanh edges, {what}:"
-            " RMS error (order per halving of h) against the separable reference,"
+            f"the seeds against E4.3's lines through {where}, {what}:"
+            f" RMS error (order per halving of h) against {against},"
             f" seed rows where the 30 nodes see the edge within {reach:g} δ",
         )
         ratios = sweep_ratios(lines, labels, seeds)
@@ -1762,14 +2227,15 @@ def run_seeds(args) -> dict:
             f"the seeds over each line at every (δ, n), {what}; the seeded rows,"
             " their share of N, and the march per row",
         )
-        print_seed_diagnostics(
-            lines,
-            seeds,
-            f"what the seeded solution says on the straddling rows, {what}:"
-            " profile = |error of the row's sin 2πx coefficient| at ±h/2"
-            " (absolute); flux, jump = one-sided α ∂_y at ±h/2 and its jump"
-            " across the pair, error / |α v′ at the curve|",
-        )
+        if geometry.is_case1:
+            print_seed_diagnostics(
+                lines,
+                seeds,
+                f"what the seeded solution says on the straddling rows, {what}:"
+                " profile = |error of the row's sin 2πx coefficient| at ±h/2"
+                " (absolute); flux, jump = one-sided α ∂_y at ±h/2 and its jump"
+                " across the pair, error / |α v′ at the curve|",
+            )
         resolved = resolved_rows(lines, ratios, seeds)
         tables[f"resolved/{problem}"] = resolved
         if resolved:
@@ -1793,12 +2259,42 @@ def run_seeds(args) -> dict:
                 lines,
                 seeds,
                 f"H4 at δ = 0, {what}: the seed operator is the construction there"
-                " (E2.3's rows), so the line is port notes §2.4–2.5's",
+                " (E2.3's rows), so the line is port notes §2.4–2.5's"
+                if geometry.is_case1
+                else f"route (a) at δ = 0 against the curved construction, {what}:"
+                " E2.3 carries the curvature and alpha's Taylor table, the frozen"
+                " profile neither",
+            )
+        if problem == "elliptic":
+            print_probe(
+                lines,
+                labels,
+                seeds,
+                "H9's probe: RMS of L u over each row set, u the equilibrium"
+                f" reference at the nodes ({against}); seeded = the rows the seed"
+                " rule marches, crossing = E2.3's rows, bulk = the interior 42 / 5"
+                " rows off the edges and the boundary zone (order per halving of h)",
+            )
+        if not geometry.is_case1:
+            print_flat_comparison(
+                comparison,
+                labels,
+                problem,
+                f"{geometry.name} over case 1 at equal (δ, n), {what}: RMS error"
+                " flat (E4.3–E4.6's cache), curved, and curved ÷ flat",
             )
     args.outputs.mkdir(parents=True, exist_ok=True)
-    plot_seeds(results, labels, seeds, plain, args.outputs / "heat2d_stiff_seeds.png")
+    plot_seeds(
+        results,
+        labels,
+        seeds,
+        plain,
+        args.outputs / figure_name(geometry),
+        None if geometry.is_case1 else f"{geometry.name}: route (a) seeds",
+    )
+    cache_name, _ = geometry.cache()
     print(
-        f"\nseed sweep {time.perf_counter() - t0:.1f} s; figure and {KNEE_CACHE}"
+        f"\nseed sweep {time.perf_counter() - t0:.1f} s; figure and {cache_name}"
         f" in {args.outputs}/"
     )
     return tables
@@ -1811,7 +2307,13 @@ def main(argv: Sequence[str] | None = None) -> dict:
         choices=("all", "references", "naive", "stencils", "seeds"),
         default="all",
     )
-    parser.add_argument("--deltas", type=float, nargs="+", default=list(STUDY_DELTAS))
+    parser.add_argument(
+        "--deltas",
+        type=float,
+        nargs="+",
+        default=None,
+        help="edge widths (default: E4.3's on case 1, CURVED_DELTAS elsewhere)",
+    )
     parser.add_argument("--growth", type=float, nargs="+", default=list(GROWTH))
     parser.add_argument("--counts", type=int, nargs="+", default=list(KNEE_COUNTS))
     parser.add_argument("--t-end", type=float, default=T_END)
@@ -1828,7 +2330,7 @@ def main(argv: Sequence[str] | None = None) -> dict:
     parser.add_argument(
         "--operators",
         nargs="+",
-        choices=SWEEP_LABELS,
+        choices=(*SWEEP_LABELS, *EXTRA_LABELS),
         default=list(SWEEP_LABELS),
         help="the lines of the seed sweep; naive and construction are E4.3's cache",
     )
@@ -1838,8 +2340,29 @@ def main(argv: Sequence[str] | None = None) -> dict:
         default=TANH_REACH,
         help="how many δ a stencil sees the edge over (the seeded-row rule, §3.3)",
     )
+    parser.add_argument(
+        "--amplitude",
+        type=float,
+        default=0.0,
+        help="the sine pair's amplitude (0: flat lines; case 2 is 0.02)",
+    )
+    parser.add_argument(
+        "--inside",
+        choices=sorted(INSIDE),
+        default=None,
+        help="the band's piece (default: constant on flat lines, sine on curves)",
+    )
     parser.add_argument("--outputs", type=Path, default=Path("outputs"))
     args = parser.parse_args(argv)
+    inside = args.inside or ("constant" if args.amplitude == 0.0 else "sine")
+    try:
+        args.geometry = Geometry(args.amplitude, inside)
+    except ValueError as err:
+        parser.error(str(err))
+    if args.deltas is None:
+        args.deltas = list(STUDY_DELTAS if args.geometry.is_case1 else CURVED_DELTAS)
+    if not args.geometry.is_case1 and args.mode not in ("references", "seeds"):
+        parser.error("another geometry than case 1 runs --mode references or seeds")
     if args.mode in ("all", "naive", "seeds"):
         if any(n < 300 for n in args.counts) or list(args.counts) != sorted(
             set(args.counts)
@@ -1852,8 +2375,14 @@ def main(argv: Sequence[str] | None = None) -> dict:
     args.outputs.mkdir(parents=True, exist_ok=True)
     tables: dict = {}
     if args.mode in ("all", "references"):
-        tables["references"] = reference_rows(args.deltas, args.growth)
-        print_references(tables["references"])
+        if args.geometry.is_case1:
+            tables["references"] = reference_rows(args.deltas, args.growth)
+            print_references(tables["references"])
+        else:
+            tables["references"] = curved_reference_rows(
+                args.geometry, args.deltas, args.growth, args.outputs
+            )
+            print_curved_references(tables["references"], args.geometry)
     if args.mode in ("all", "naive"):
         tables.update(run_naive(args))
     if args.mode in ("all", "stencils"):

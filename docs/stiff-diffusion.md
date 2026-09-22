@@ -10,8 +10,9 @@ results (E3.2, #27, to E3.6, #31, which closes it in §2.5); §3 is the
 2-D design (E4.1, #32) and §4–5 hold the 2-D results, from the smooth
 flat band and its references (E4.2, #33, §4.1), the naive baseline
 through it (E4.3, #34, §4.2), the scalar seeds on one stencil (E4.4,
-#35, §4.3) and in the matrix (E4.5, #36, §4.4) to the flat δ sweep
-(E4.6, #37, §4.5) and on to E4.10 (#41). The port
+#35, §4.3) and in the matrix (E4.5, #36, §4.4), the flat δ sweep
+(E4.6, #37, §4.5) and the curved feature (E4.7, #38, §4.6), on to E4.10
+(#41). The port
 of the 2016 methods this builds on is in
 `docs/port-notes.md`.
 
@@ -1963,6 +1964,20 @@ which carry α's full Taylor table, do not have this term. It is the
 diffusion twin of the companion's oblique-incidence question and is
 measured, not predicted, in H9.
 
+*Both halves of that paragraph are wrong at an unresolved edge (E4.7,
+§4.6).* The geometric error is not a fraction of the edge profile to be
+read against δ: moving a tanh edge by `Δ = κ x′²/2` changes the seed
+values beyond it by `Δ` times the jump in the flux-carrying slope,
+whatever δ is, so it is an `O(κ h²)` error in value, and in a row whose
+weights are `O(h⁻²)`, an `O(κ)` truncation error that does not converge.
+At δ = 0 route (a) is E2.3's `curvature=False` construction, EABE Fig.
+10's first-order flat line. And §1.4's argument covers a smooth
+perturbation of the space, not this one: a tangential variation of α
+across an unresolved edge changes the flux ratio the seeds impose from
+node to node, a kinked correction outside the seed span, so it too is an
+`O(1)` truncation error. §4.6 splits and measures the two; E4.11 (plan
+R7) builds the tangential chain the last paragraph below names.
+
 **If route (a) is not enough.** The first step is not route (b) but the
 companion's route (a′): keep the marches, evaluate each seed at the
 node's true `(arclength, normal distance)` instead of its tangent
@@ -2068,7 +2083,7 @@ radial quadratic on the ring.
 | H6 | **Spectra** (P9's twin): the seed operator's eigenvalues at 4900 nodes on case 1 sit where the warped aware operator's do (max Re −7.27, `h² min Re` −13.2, `h² max |Im|` ≤ 0.4, every eigenvalue within ±700 of the origin real), at every δ; the slowest mode is the physical −7.27 and BD4's largest root modulus 0.897 at `dt = h`; no positive eigenvalue with the warp on. With plain Gaussians the crossing rows' complex loop of port notes §2.5 (`h² max |Im|` 1.49) returns and on the ring positive eigenvalues may (E2.9: 50–87 at s = 10¹¹ on 1250–4000 nodes). | `interior_eigenvalues` per operator and δ, the Fig. 5-6 twin with a seeds panel | E4.5 |
 | H7 | **The warp is worth on seeds what it is worth on polynomials** (the E2.4 breadcrumb): seeds with the `φ₀₁`-warp against seeds with plain Gaussians on case 1, 2.3–6.9× at 1250–20,000 nodes at δ = 0 (E2.4's numbers, since H2 makes the two operators equal there) and a comparable factor at δ > 0; the chain-rule right-hand side equals `α_e Δ_{ξη̃} G + α_ξ G_ξ` at the anchor to rounding; at δ = 0 the warp coordinate equals `Warp.apply` bit for bit. | the Fig. 11 twin with two seed lines; a unit test on the cancellation | E4.5, E4.6 |
 | H8 | **The rule needs no δ**: seeded rows are those that see the edge (reach 20δ), the seed operator needs no threshold to be switched off, and the resolved-edge penalty at δ = 0.04 (every row seeded) is ≤ 1.2× the direct operator's error (P4: the seed weights tend to the standard ones as δ/h grows; §1.4's different-space remark bounds the rest). | the δ = 0.04 column of the flat sweep, seeded vs direct | E4.6 |
-| H9 | **Route (a) reproduces the flat numbers** at δ ≥ 0.005 for n ≥ 5000 and shows its geometric floor `κ r²/2` (§3.5's table) at δ = 0.0025 on the coarse sets as a factor ≤ 1.5 above the flat line; the seed rows' residual on the true curved solution (E4.7's probe) converges at the bulk rows' rate; the tangential-α term of case 2's inside piece changes the constant, not the order. Route (a′) is built only if the probe's residual stalls. | the curved sweep against the flat one at equal δ; the residual probe | E4.7 |
+| H9 | **Route (a) reproduces the flat numbers** at δ ≥ 0.005 for n ≥ 5000 and shows its geometric floor `κ r²/2` (§3.5's table) at δ = 0.0025 on the coarse sets as a factor ≤ 1.5 above the flat line; the seed rows' residual on the true curved solution (E4.7's probe) converges at the bulk rows' rate; the tangential-α term of case 2's inside piece changes the constant, not the order. Route (a′) is built only if the probe's residual stalls. *Fails (§4.6): the probe stalls on both terms; E4.11.* | the curved sweep against the flat one at equal δ; the residual probe | E4.7 |
 | H10 | **The 2-D knee** (P2's twin, measured first): naive `Dx A Dx + Dy A Dy` on scattered nodes is first order while `h ≳ δ` and fourth order once `h ≲ δ`, elliptic and parabolic; the δ = 0 construction sits on an O(δ) floor (the two references' difference, exact from the separable solves) for `h ≳ 2δ` and grows once the grid resolves the edge (§2.2); what separates resolved from unresolved most sharply is the flux jump across the edge read from the discrete solution. Watch the naive operator's coarse-set growing mode (+847 at 900 nodes, +17.7 at 1250) before quoting a parabolic naive number. | the naive and construction lines of the flat sweep | E4.3, E4.6 |
 | H11 | **The ring**: the seed march through both edges reproduces E2.9's s = 10³ line at δ = 0 (the Fig. 19 twin) and the matched radial residual stays at or below port notes §2.9's worst-stencil line at every s (the fit `1.5e-18 s`, not the single s = 10¹¹ point 1.4e-7), with no `O(s κ² scale)` term; the raw seed block conditions like `s w/h_s` (one column) and O(1) column-scaled; the march floor of §3.3 is the first limit to appear, at the largest s and smallest δ, and the stored width's 8e-8 the second. | `matched_residual` per (s, δ); Fig. 20's twin with a seeds line | E4.8 |
 | H12 | **The comparators** (P10's twin): the disc harmonic and arithmetic means and the widened edge cap the naive operator at second order once `h ≲ δ/4` and are first order while the edge is unresolved; T0 is the worst, sitting on the widened floor; there is no conservative scheme on scattered nodes, so T1-FV has no twin and the strongest low-order comparator is the two-cell disc harmonic mean; the seeds are 3–4 orders below every treatment at δ ≤ h/4 on the parabolic problem. The ranking is quoted in the RMS norm with the max norm beside it. | the comparator tables per δ, elliptic and parabolic | E4.9 |
@@ -3657,3 +3672,364 @@ the δ-independence (every width within a factor 2 of the jump's error), the
 rule's row counts (every row at δ = 0.04, the crossing rows at δ = 0), H8's
 penalty (`÷ direct` below 1.2 with every row seeded), H7's sign, and the
 cache's round trip.
+
+### 4.6 The curved feature: route (a), the product grid, and what a frozen profile cannot carry (E4.7, #38)
+
+![the curved sweep](figures/heat2d_stiff_seeds_a0.02_sine.png)
+
+`scripts/heat2d_stiff.py --mode seeds --amplitude 0.02` puts §4.5's sweep on
+case 2: the sine pair `0.6, 0.8 + 0.02 sin 2πx` with its inside piece
+`0.2 + 0.1 sin 2πx sin 2πy` (EABE eq. 35), each curve a tanh edge of width δ
+in its signed normal distance (`SmoothBand`, which blended curved bands since
+E4.2), case 2's own node sets (seed 0, 100 repulsion steps, E2.6's), the six
+lines at δ ∈ {0, 0.01, 0.005, 0.0025} (`CURVED_DELTAS`, the plan's), the two
+problems, the RMS over all nodes. What changes is the seeds (route (a)), the
+reference (a product grid), and two tables (a truncation probe and the curved
+numbers over the flat ones). `--inside constant` on the curves and `--amplitude
+0 --inside sine` on flat lines split case 2's two departures from case 1, the
+curvature and the tangential variation of alpha; they are what locates the
+error below.
+
+**What is built.**
+
+- *Route (a), as §3.5 specified it.* `SmoothBand.normal_profile` crosses a sine
+  graph by Newton on its level along the line (`domain._line_crossing`,
+  quadratic from the flat estimate; a case-2 normal is within 7.2° of vertical
+  and meets each graph once); a flat line keeps E4.2's formula, so case 1 is
+  untouched. The flanks are `± EDGE_STOP δ` in each curve's own normal
+  distance, exact for the curve the line is normal to and to first order (its
+  cosine with the other curve's normal) for the other, which is all a restart
+  point needs. Along the foot curve's normal the distance to it is
+  `d_e + h_s η` exactly (the foot point does not move inside the radius of
+  curvature), so `NormalProfile.foot` hands it to `SmoothBand.alpha_at` and
+  the march pays a foot-point Newton only for the other curve; the curves
+  have float `signed_distance_at` (`closest` and `signed_distance` step for
+  step, 1.1e-16 from the array path, 3 µs a call) and `SineProduct` a float
+  `alpha_at`. The frame stays `nearest_interface`, the E4.4 breadcrumb's open
+  decision taken on purpose: on case 2's 0.2-thick band a 30-node stencil
+  crosses one curve at most, and on every crossing stencil of the 2500-node
+  set (over 400, at δ = 0 and 0.0025) it picks the curve E2.3 frames on. The
+  circles of case 3 are still refused, naming E4.8.
+- *The product-grid reference* (plan D4, revised: Brad chose it for every δ,
+  the jump included, with E2.6's run as its check). `exact.ShearMap`,
+  `y = η + a sin(kx) β(η)` with the cubic `β(0) = β(1) = 0`,
+  `β(0.6) = β(0.8) = 1`, makes both curves the lines `η = 0.6, 0.8` and keeps
+  the Dirichlet rows at `η = 0, 1`; a signed distance to either curve vanishes
+  on its line exactly, so a tanh edge is centred on E3.2's element cuts at
+  every x and only its width moves with x, by ±5 % through the metric.
+  `ProductGridReference` collocates `∇·(α∇U) − cU = 0` in the flux form,
+  `(1/J)[∂_x F_x + ∂_η F_η]`, on 49 Fourier points in x times the separable
+  reference's Chebyshev elements in η (20 nodes, cuts at `c ± {1, 3, 9, 27} δ`,
+  elements ≤ 0.1), matches `U` and the flux through `η = const` — the normal
+  flux through the curve on its line — at every shared element end with each
+  element's own α (one-sided at a jump, so δ = 0 is the same solver), and
+  solves the banded system with SuperLU's `NATURAL` ordering after scaling each
+  row by its largest entry. Unscaled, the rows span seven decades, and in a
+  scratch check on a flat band, where the exact answer is the single mode
+  `sin 2πx`, partial pivoting left 2e-7 of other Fourier modes at
+  δ = 0.0025; scaled, 2e-12. `e^{ct} U` solves
+  the parabolic problem with the top row `e^{ct} sin 2πx` exactly in t, so
+  E2.5's `c = 1` mode needs no time integrator and BD4 keeps its analytic
+  history, as on case 1. It is read at any point spectrally (η by Newton on
+  the cubic, barycentric Lagrange in the element, the trigonometric
+  interpolant in x), which is why E4.7 needs no seed-aware resampling; that
+  stays E4.8's, for a fine seed run on the ring.
+- *The probe* (H9's "the seed rows' residual on the true curved solution").
+  Every operator the sweep builds is applied to the equilibrium reference at
+  the nodes; since `L u = 0` each row's value is its local truncation error.
+  Three row sets per (n, δ): `seeded` (the rows the seed rule marches — for
+  the other lines, the rows the seeds would rebuild), `crossing` (E2.3's rows,
+  whose 30 nodes straddle a curve) and `bulk` (the reach stencils' interior
+  42 / 5 group: rows that neither see an edge nor sit in the boundary zone,
+  the same kind of row at every (n, δ)). It rides in the elliptic cache entry
+  (`probe_seeded`, `probe_crossing`, `probe_bulk`).
+- *The driver.* `Geometry(amplitude, inside)` carries the band, its reference
+  and its cache: case 1 keeps `heat2d_stiff_knee.json` and its keys to the
+  byte, every other geometry goes to `heat2d_stiff_curved.json` under its tag
+  (`a0.02 sine`), so nothing here can move E4.3's and E4.6's numbers. The
+  straddling-row readings are dropped off case 1 (they read the separable
+  mode's `sin 2πx` profile and its flux); `construction-flat`, E2.3 with the
+  interface expansion off, is an extra line `--operators` offers.
+
+**The reference.** `--mode references --amplitude 0.02` (67 s), max
+differences over 4000 random points of the strip:
+
+| δ | c | elements | unknowns | build | vs 65 points in x | vs 24 nodes on 0.05 | distance from δ = 0 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 10 | 10,290 | 0.84 s | 9.9e-14 | 2.9e-13 | — |
+| 0.01 | 0 | 21 | 21,609 | 1.75 s | 5.3e-13 | 2.3e-12 | 2.51e-02 |
+| 0.005 | 0 | 21 | 21,609 | 1.75 s | 1.8e-12 | 3.2e-12 | 1.45e-02 |
+| 0.0025 | 0 | 23 | 23,667 | 1.90 s | 5.4e-12 | 5.6e-12 | 7.73e-03 |
+| 0 | 1 | 10 | 10,290 | 0.84 s | 1.2e-13 | 5.7e-13 | — |
+| 0.01 | 1 | 21 | 21,609 | 1.76 s | 1.3e-12 | 2.2e-12 | 2.58e-02 |
+| 0.005 | 1 | 21 | 21,609 | 1.76 s | 1.5e-12 | 2.1e-12 | 1.50e-02 |
+| 0.0025 | 1 | 23 | 23,667 | 1.90 s | 5.9e-12 | 6.6e-12 | 7.99e-03 |
+
+So the reference is good to 1e-11 at every width, three decades below the
+finest error the sweep resolves, in two seconds, and it is not cached. On
+flat lines with constant pieces it is `SeparableReference` to 3.5e-13
+(δ = 0), 5.8e-12 (δ = 0.0025) and 3.0e-12 (δ = 0.01), both problems (a
+test). **E2.6's 160,000-node jump-aware run**, read at its own nodes, is
+4.32e-9 RMS and 3.46e-8 max from the δ = 0 grid: port notes §2.6's
+Richardson estimate (about 3e-9) had the size right, and E2.6's curved line
+against the grid is 3.06e-5, 1.25e-5, 6.25e-6, 7.03e-7, 1.79e-7, 5.29e-8 at
+1250–40,000 nodes, the 40,000-node point 9 % above the 4.87e-8 E2.6 read
+against the fine run (the pointer is now in port notes §2.6).
+
+**At the jump, route (a) is the flat-interface construction.** Case 2 at
+δ = 0, elliptic, RMS error against the product grid (E2.3's two lines are the
+port's own, E2.6's `curved` and `flat`, now read against an exact reference):
+
+| n | E2.3 curved | E2.3 flat | route (a) | route (a) ÷ curved |
+| --- | --- | --- | --- | --- |
+| 1250 | 3.06e-05 | 6.97e-04 | 3.80e-04 | 12 |
+| 2500 | 1.25e-05 | 3.89e-04 | 1.82e-04 | 15 |
+| 5000 | 6.25e-06 | 2.62e-04 | 1.19e-04 | 19 |
+| 10000 | 7.03e-07 | 1.77e-04 | 7.69e-05 | 109 |
+| 20000 | 1.79e-07 | 1.22e-04 | 5.27e-05 | 294 |
+| 40000 | 5.29e-08 | 8.18e-05 | 3.56e-05 | 673 |
+| fit | 3.89 | 1.21 | 1.33 | |
+
+(Parabolic, `t = 0.1`: 3.12e-5 → 5.63e-8, fit 3.80; 5.07e-4 → 5.16e-5, 1.29;
+3.18e-4 → 3.27e-5, 1.30.) Route (a) is first order and sits at 0.4–0.55 of
+the flat construction, the line EABE Fig. 10 drew to show what the
+curvature terms are worth; the curved construction is 12× below it at 1250
+nodes and 670× at 40,000.
+
+**The two departures, split.** The same sweep on the sine pair with the
+constant piece (*A*, `--inside constant`: the curvature alone) and on flat
+lines with case 2's piece (*B*, `--amplitude 0 --inside sine`: the
+tangential variation alone), at δ = 0 and 0.0025, elliptic:
+
+| n | A: curved | A: flat | A: route (a) | B: E2.3 | B: route (a) | A: route (a), δ = 0.0025 | B: route (a), δ = 0.0025 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1250 | 2.17e-05 | 7.62e-04 | 7.62e-04 | 1.77e-05 | 4.20e-04 | 7.91e-04 | 4.30e-04 |
+| 2500 | 4.54e-06 | 4.10e-04 | 4.10e-04 | 4.05e-06 | 3.02e-04 | 4.22e-04 | 3.25e-04 |
+| 5000 | 2.55e-06 | 2.86e-04 | 2.86e-04 | 8.66e-07 | 2.15e-04 | 2.97e-04 | 2.34e-04 |
+| 10000 | 3.30e-07 | 1.95e-04 | 1.95e-04 | 2.70e-07 | 1.52e-04 | 1.94e-04 | 1.50e-04 |
+| 20000 | 7.83e-08 | 1.37e-04 | 1.37e-04 | 6.09e-08 | 1.08e-04 | 1.08e-04 | 7.08e-05 |
+| 40000 | 2.21e-08 | 9.31e-05 | 9.31e-05 | 1.20e-08 | 7.57e-05 | 2.57e-05 | 8.34e-06 |
+| fit | 4.05 | 1.18 | 1.18 | 4.17 | 1.00 | 1.80 | 2.06 |
+
+- *Each departure alone is enough.* With constant pieces (A) route (a) *is*
+  E2.3's flat construction: the two errors agree to 2e-10 … 2e-8 relative at
+  every count (the elliptic solves' rounding; ≤ 5e-12 parabolic), the H2
+  identity of §4.3 in the tangent frame, since both put the kink on the
+  tangent line with the same polynomials either side of it. On flat lines
+  (B), where the curvature is zero, route (a) is first order to the second
+  digit (fit 1.00) against E2.3's 4.17: the foot point's flux ratio alone
+  costs what the curvature costs.
+- *A resolved edge forgives both.* At δ = 0.0025 the route (a) lines are
+  within 10 % of their δ = 0 values while `h ≳ 4δ`, fall 20–35 % below them at
+  `h ≈ 3δ` and drop 4.2× (A) and 8.5× (B) from 20,000 to 40,000 nodes, where
+  `h/δ` reaches 2.1: once the edge is smooth on the stencil the misplacement
+  and the ratio's variation are smooth perturbations and §1.4's argument
+  holds.
+
+**Why the frozen profile fails, twice.** §3.2's ansatz is exact where α
+depends on the normal coordinate alone within a stencil, and §3.5 predicted
+two departures on case 2 with a size read against δ. Both are larger, and
+neither is a matter of δ.
+
+- *Curvature.* A node at tangential offset `x′` sits `Δ = κ x′²/2` from the
+  curve in the direction the seeds do not see, so the seeds put the edge on
+  the tangent line and the true edge is `Δ` beyond it. Moving an edge by `Δ`
+  changes a flux-carrying profile beyond it by `Δ` times the jump in its
+  slope (`φ₀₁` by `Δ (1 − α_e/α_far)`, whatever the width of the edge), so
+  the seed values are wrong by `O(κ h²)` in value at the outer nodes of every
+  stencil that straddles the edge, and a row with `O(h⁻²)` weights carries an
+  `O(κ)` truncation error that does not converge. On constant pieces at
+  δ = 0 route (a) and E2.3 with its interface expansion off (the "linear
+  interface" line of EABE Fig. 10, which E2.6 measured at first order, fit
+  1.18) both put the kink on the tangent line, and (A) above measures them
+  together.
+- *The tangential variation of α.* Case 2's piece varies by 25 % along a
+  1250-node stencil. The seeds' far-side profile uses the flux ratio of the
+  foot point at every node, where the true solution's changes with the
+  tangential position: across the jump its slope ratio is
+  `α_e / α_far(ξ) = r₀ + r₁ ξ + …`. The missing term `r₁ ξ (η − η_c)₊` is a
+  slope on the far side alone, while every seed profile at that level of `ξ`
+  (`1` and `φ₀₁`, in `φ₁₀` and `φ₁₁`) carries the foot point's ratio `r₀`
+  between its two sides, so no combination of seeds contains it. §1.4's
+  argument absorbs a *smooth* perturbation of the space into the lower
+  seeds; this one is kinked, and the row error is again `O(1)`. Once the
+  grid resolves the edge (`h ≲ 2δ`) the variation is smooth on the stencil
+  and the argument holds again, which is (B)'s drop at 40,000 nodes on the
+  0.0025 edge.
+
+**Through a smooth edge: still the best line on case 2, and far behind the
+flat one.** The documented sweep, elliptic RMS error at 40,000 nodes with
+each line's fit over 1250–40,000 in brackets (§4.5's layout; route (a)'s
+parabolic errors are 0.66–0.92 of these at every δ and count):
+
+| δ | h/δ at 40,000 | naive | construction | direct | direct-reach | route (a) | route (a), plain |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | jump | 6.26e-04 (1.32) | **5.29e-08 (3.89)** | 4.32e-02 (0.00) | 4.32e-02 (0.00) | 3.56e-05 (1.33) | 1.77e-03 (0.92) |
+| 0.01 | 0.53 | 5.23e-06 (3.85) | 3.54e-03 (0.05) | 2.22e-05 (3.75) | 1.44e-05 (3.93) | **1.09e-06 (3.07)** | 1.01e-06 (4.69) |
+| 0.005 | 1.05 | 5.99e-05 (2.78) | 1.50e-03 (0.09) | 5.34e-04 (2.29) | 4.25e-04 (2.43) | **8.15e-06 (2.40)** | 7.44e-06 (4.38) |
+| 0.0025 | 2.11 | 9.80e-05 (2.16) | 8.78e-04 (0.02) | 6.68e-03 (1.25) | 5.95e-03 (1.30) | **1.81e-05 (1.71)** | 1.73e-04 (1.83) |
+
+and the curved lines over case 1's at equal (δ, n) (§4.5's numbers from
+`heat2d_stiff_knee.json`):
+
+| δ | line | 1250 | 2500 | 5000 | 10000 | 20000 | 40000 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | route (a) ÷ flat seeds | 24 | 48 | 195 | 529 | 2741 | 6742 |
+| 0 | curved ÷ flat construction | 1.9 | 3.3 | 10 | 4.8 | 9.3 | 10 |
+| 0.01 | route (a) ÷ flat seeds | 17 | 30 | 37 | 128 | 102 | 130 |
+| 0.005 | route (a) ÷ flat seeds | 31 | 61 | 210 | 266 | 313 | 924 |
+| 0.0025 | route (a) ÷ flat seeds | 30 | 62 | 248 | 610 | 2314 | 2262 |
+
+- *Route (a) beats every other line on case 2 at every δ > 0 and every
+  count but its own plain-Gaussian twin* (which edges it by up to 1.45× at
+  the resolved counts): 0.04–0.39 of the naive product, 0.0003–0.46 of the
+  δ = 0 construction, 0.003–0.05 of the direct operator. The construction, which
+  wins at δ = 0 by 12–670×, reads a smooth edge as a jump and sits on its
+  O(δ) floor (fits 0.02–0.09) exactly as on case 1. So the seeds keep their
+  ranking where the edge is smooth and lose it where it is a jump.
+- *But the order follows the resolution of the edge, not the seeds.* The
+  fits fall from 3.07 (δ = 0.01, resolved from 5000 nodes on) through 2.40 to
+  1.71 (δ = 0.0025, `h/δ` never below 2.1), and on the narrowest edge the
+  line is δ = 0's first-order one to within 10 % up to 10,000 nodes (4.18e-4,
+  1.94e-4, 1.26e-4, 7.66e-5 against 3.80e-4, 1.82e-4, 1.19e-4, 7.69e-5), as
+  the split geometries showed. Even resolved (δ = 0.01 at 40,000,
+  `h = 0.53 δ`) route (a) is 130× the flat seeds: the misplacement and the
+  ratio's variation are then smooth, the order comes back (4.87 and 3.66 per
+  halving over the last two counts), and the constant does not.
+- *What the curvature costs a method that carries it.* At δ = 0 E2.3's
+  curved construction sits 1.9–10× above its case-1 line with no trend in
+  n, the gap EABE Fig. 7 and 10 show between the two cases; route (a)'s gap
+  grows from 24 to 6742, like `h^{-3.3}`, the difference between its order
+  and the flat seeds'.
+
+*H8 on case 2* (the one resolved column, δ = 0.01 at 20,000 and 40,000,
+`δ/h` = 1.34 and 1.90, 62 % of the rows seeded): route (a) is 0.048 and 0.049
+of the direct operator, 0.059 and 0.076 of `direct-reach`, and 0.150 and
+0.209 of the naive product. *H7 on case 2*, rerun as the E4.6 breadcrumb
+asked: the plain rows are 22–50× the warped ones at δ = 0 (case 1: 2.3–6.9×)
+and 13–33× at δ = 0.0025 to 20,000 nodes (9.6 at 40,000), and the factor
+turns where the grid resolves the edge, between `h ≈ 1.5 δ` and `h ≈ δ` for
+both δ = 0.005 (1.34 → 0.91) and δ = 0.01 (1.33 → 0.69), where case 1
+turned at `h ≈ 2δ`; past the turn the two are within 0.7–1.2× of each
+other. The warp is worth more on the wrong seeds than on the right ones;
+the sweep does not say why, and a first-order method's ablation is not
+worth a theory.
+
+**H9's probe: the crossing rows on the true solution.** RMS of `L u` over
+E2.3's crossing rows, `u` the equilibrium reference at the nodes (the
+separable one on case 1, the product grid elsewhere), with the fit over the
+counts shown; case 1's are the rows E4.7 rebuilt, to 10,000 nodes:
+
+| geometry | δ | rows | 1250 | 2500 | 5000 | 10000 | 20000 | 40000 | fit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| case 1 | 0 | seeds (= E2.3) | 5.17e-03 | 1.40e-03 | 4.77e-04 | 1.70e-04 | | | 3.31 |
+| case 1 | 0.0025 | seeds | 4.69e-03 | 1.20e-03 | 3.78e-04 | 1.25e-04 | | | 3.52 |
+| case 2 | 0 | E2.3 curved | 1.10e-02 | 5.64e-03 | 2.06e-03 | 6.69e-04 | 2.43e-04 | 9.24e-05 | 2.86 |
+| case 2 | 0 | route (a) | 6.44e-02 | 5.23e-02 | 4.53e-02 | 3.91e-02 | 3.58e-02 | 3.33e-02 | **0.38** |
+| case 2 | 0.0025 | route (a) | 6.58e-02 | 5.47e-02 | 4.92e-02 | 4.13e-02 | 3.08e-02 | 2.24e-02 | 0.61 |
+| case 2 | 0.01 | route (a) | 5.68e-02 | 3.16e-02 | 2.01e-02 | 9.71e-03 | 4.40e-03 | 1.81e-03 | 1.99 |
+| A | 0 | E2.3 curved | 6.45e-03 | 2.52e-03 | 8.51e-04 | 3.18e-04 | 1.02e-04 | 4.03e-05 | 2.99 |
+| A | 0 | route (a) (= E2.3 flat) | 4.54e-02 | 3.48e-02 | 3.06e-02 | 2.74e-02 | 2.54e-02 | 2.36e-02 | **0.36** |
+| B | 0 | E2.3 | 8.43e-03 | 1.38e-03 | 8.33e-04 | 2.91e-04 | 1.09e-04 | 3.48e-05 | 3.00 |
+| B | 0 | route (a) | 4.17e-02 | 3.73e-02 | 3.48e-02 | 3.27e-02 | 3.13e-02 | 3.03e-02 | **0.18** |
+
+The bulk rows (the reach stencils' interior 42 / 5 group, the same kind of
+row at every (n, δ)) converge at 3.7–3.8 from 5000 nodes on in both cases
+(δ = 0: case 1 3.96e-5 → 1.09e-5, case 2 1.10e-4 → 2.10e-6); below 5000 the
+narrow widths' interior group gains the band's middle rows as the stencils
+shrink, on case 1 as on case 2, which is the one −4 to −5 rate each table
+prints at 2500 nodes. So H9's statement is read on the crossing rows against
+the bulk rate:
+
+- *On flat edges the seeded rows converge at the bulk rows' rate* (3.3 and
+  3.5 against 3.7), the local `O(h³)` of §1.6 with the scattered set's
+  scatter, at the jump and through the edge alike: what H9 expected on the
+  curve.
+- *On case 2 they stall*: route (a)'s crossing rows fall by 1.9× over a
+  32-fold increase in N at δ = 0 (fit 0.38), where E2.3's fall by 120× (2.86)
+  on the same rows. At δ = 0.0025 the same stall to 10,000 nodes, and at
+  δ = 0.01, the edge resolved on the finer sets, order two. Each split
+  geometry stalls alone at δ = 0 (0.36 with the curvature, 0.18 with the
+  tangential α), each with an E2.3 row that converges at 3.0 beside it.
+- *Three kinds of row, told apart without the error.* E2.3's crossing rows
+  converge, route (a)'s stall at 0.02–0.07 on every geometry where α varies
+  along the edge, and the naive product's rows on the same set grow (from
+  4.3–5.3 at 1250 nodes to 20–21 at 40,000 on case 2, A and B). The probe
+  needs only a reference solution at the nodes, which is why E4.11 can use
+  it as its acceptance test.
+
+**H9, answered: it fails, and the error is located.** Route (a) does not
+reproduce the flat numbers at any δ or count on these node sets (17–6742×
+the flat seeds); the probe's crossing rows stall at every width the grid does
+not resolve, where §3.5 expected them to converge at the bulk rows' rate; and
+the tangential variation of α changes the order, not the constant. The error
+is not route (a)'s `κ r²/2` read against δ: it is two `O(1)` truncation
+terms, one from the curvature (the kink on the tangent line; route (a) at
+δ = 0 on constant pieces *is* EABE Fig. 10's flat-interface construction)
+and one from any tangential variation of α at an unresolved edge (the foot
+point's flux ratio at every node), each enough alone to make the line first
+order, and both forgiven only once `h ≲ 2δ`. §3.5 and H9 are corrected in
+place. What the ticket's done-when asked is met — the curved numbers against
+the flat ones at equal δ, the geometry's error located — and the seeds are
+not yet the method for a curved feature: that is E4.11 (#81, plan R7).
+
+**What E4.11 inherits.**
+
+- *The fix is §3.5's last paragraph, both halves, in the curve's own
+  coordinates*: the seeds evaluated at each node's (arclength, normal
+  distance) from the foot point, the metric `1 − κ d` inside the chain, and
+  α's and the metric's variation along the curve expanded in ξ with the
+  levels coupled. A scratch run on 2026-09-22 (two concentric circles, radii
+  0.25 and 0.35, constant pieces 0.2 | 1, `RingMode` exact; the script is on
+  #81) measured the rungs on the crossing rows' truncation: route (a) 4.9e-1
+  → 2.4e-1 at 2500–40,000 nodes (E2.3's flat construction again); the
+  companion's route (a′) as §3.5 described it, the same march evaluated at
+  the curvilinear coordinates with the metric in the right-hand sides only,
+  9.2e-2 → 2.4e-2, first order; the osculating-circle chain, the metric
+  inside the march (`g′ = ψ/(α m)`, `ψ′ = m α_e S g − (α/m) Λ g`), 3.6e-3 →
+  3.3e-5, order 3.4 and 5–6.5× *below* E2.3's 1.8e-2 → 2.1e-4. On case 2's
+  sine pair the osculating chain alone is first order (the curvature varies
+  along the curve), and with case 2's piece it does not converge: the
+  ξ-expansion is the rest. At degree 4 the coupled chain is about 55 levels
+  (110 states), not 44, since the expansion couples the parities.
+- *The instruments*: the probe (the acceptance test H9 asked for, now
+  measured), the two split geometries (A isolates the curvature, B the
+  tangential α, each with an exact δ = 0 comparator in E2.3), the product
+  grid for all three, and the cached curved sweep, to which the new line is
+  one label.
+- *For E4.8 (#39)*: case 3's ring has both terms (κ = 2.86 and a sine
+  product inside the ring), so the plan now puts E4.11 first; its circles are
+  concentric, so the curvature half is the osculating chain, exact there.
+
+**Cost.** A seeded row of case 2 costs 1.7–2× a flat one: on a quiet machine
+at 10,000 nodes, 400 rows timed per width, the median `seed_basis` is 4.1,
+9.4 and 9.0 ms at δ = 0, 0.0025 and 0.01 against case 1's 2.0, 5.4 and
+5.2 ms. Every α sample on the line pays one foot-point Newton for the other
+curve (3 µs in floats); the foot curve's distance is the linear formula. The
+documented sweep took 34 min once (18 min of it at 40,000 nodes) and the two
+split geometries 9.6 and 7.5 min, all with three other runs on the machine;
+`--mode references` 67 s; everything is seconds cached.
+
+**Tests.** `tests/heat2d/test_domain.py`: `signed_distance_at` against
+`signed_distance` on the five test curves (a flat line bit for bit), the
+pieces' `alpha_at`, the curved normal profile at δ = 0 and three widths with
+both pieces (each curve crossed once, the foot curve at the foot point, the
+flanks in each curve's own distance, α along the line the medium's to
+2e-13, one-sided at δ = 0), the flat foot line carrying no foot distance, and
+the ring's refusal. `tests/heat2d/test_seeds.py`: the curved seeds equal the
+flat seeds of the same local stencil to 1e-12 on a stencil tilted 7°, and
+`nearest_interface` picks E2.3's curve on every crossing stencil of case 2 at
+δ = 0 and 0.0025. `tests/heat2d/test_exact.py`: the Fourier derivative exact
+on its trigonometric polynomials, the shear straightening the pair, the
+product grid equal to the separable reference on a flat band (three widths,
+both problems, 2e-11), resolved on case 2 (3e-11 under both refinements),
+E2.3's 2500-node error against it within 1 % of E2.6's 1.247e-5, and the
+refusals. `tests/test_heat2d_stiff.py`: the geometries' keys and caches,
+the curved sweep at 900 and 1250 nodes (route (a) 3.804e-4 and the
+construction 3.059e-5 at 1250, the probe stalling on the seeds' crossing
+rows and falling on E2.3's, the cache round trip), the curved reference
+table, and the modes a curved geometry refuses. The case-1 regression the
+E4.6 breadcrumb asked for is a rebuild, not a cached reread: 1250–10,000
+nodes at δ ∈ {0, 0.0025, 0.04}, the construction and both seed lines, both
+problems, rebuilt from scratch with E4.7's code equal E4.6's cached errors
+and readings in all 368 values, bit for bit.

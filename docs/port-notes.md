@@ -999,7 +999,12 @@ by 6 %. So the fourth-order line has to bend once `N` passes about 10⁵, the
 80,000-node marker sits where the bend begins (its true error is nearer
 1e-8 than 7.5e-9), and the 40,000-node one is inside the trustworthy range. EABE Fig. 10 and 11 plotted the same
 seven counts against the same 160,000-node reference, so their last marker
-carries the same caveat.
+carries the same caveat. *Measured since (E4.7, stiff note §4.6):* the
+sheared Fourier × Chebyshev product grid solves case 2 to 1e-11, and the
+160,000-node reference is 4.3e-9 RMS from it (3.5e-8 max) at its own nodes,
+the estimate's size; against it the curved line reads 3.06e-5, 1.25e-5,
+6.25e-6, 7.03e-7, 1.79e-7, 5.29e-8 at 1250–40,000, the 40,000-node point
+9 % above the 4.87e-8 read against the fine run.
 
 **FD4** (`heat2d.fd4`). The Cartesian baseline is the MATLAB `FDheat1.m`'s
 form, dissertation eq. 76 in 2-D (plan D3): `m` columns at `x = i/m`

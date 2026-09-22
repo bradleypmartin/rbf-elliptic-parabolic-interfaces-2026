@@ -649,8 +649,98 @@ def test_alpha_function_is_the_profiles_alpha_per_segment(delta, inside):
     np.testing.assert_allclose(at, m.alpha(px, py), rtol=2e-16, atol=0)
 
 
-def test_normal_profile_refuses_curved_interfaces_for_now():
-    for case in (case2, case3):
-        m = SmoothBand(case().material, 0.01)
-        with pytest.raises(NotImplementedError, match="E4.7"):
-            m.normal_profile(0, 0.3, 0.6, 0.08)
+def test_normal_profile_refuses_the_ring_for_now():
+    # Sine graphs are route (a)'s (E4.7); the ring's circles are marched as
+    # widths from the outer radius, E4.8's.
+    m = SmoothBand(case3().material, 0.01)
+    with pytest.raises(NotImplementedError, match="E4.8"):
+        m.normal_profile(0, 0.3, 0.6, 0.08)
+
+
+# --- route (a): the normal profile of a curved interface (E4.7) --------------
+
+
+@pytest.mark.parametrize("curve", CURVES)
+def test_signed_distance_at_is_signed_distance(curve):
+    # The float path of the seed march; a flat line's is its level, bit for bit.
+    rng = np.random.default_rng(7)
+    x, y = rng.uniform(0.0, 1.0, 500), rng.uniform(0.0, 1.0, 500)
+    if isinstance(curve, Circle):
+        x, y = 0.5 + 0.4 * (x - 0.5), 0.5 + 0.4 * (y - 0.5)
+    at = np.array(
+        [
+            curve.signed_distance_at(float(a), float(b))
+            for a, b in zip(x, y, strict=True)
+        ]
+    )
+    expected = curve.signed_distance(x, y)
+    if isinstance(curve, FlatLine):
+        assert np.array_equal(at, expected)
+    np.testing.assert_allclose(at, expected, rtol=0, atol=4e-16)
+
+
+def test_alpha_at_of_the_pieces_is_their_alpha():
+    rng = np.random.default_rng(8)
+    x, y = rng.uniform(0.0, 1.0, 300), rng.uniform(0.0, 1.0, 300)
+    for piece in (Constant2D(0.37), SineProduct(0.2, 0.1)):
+        at = np.array(
+            [piece.alpha_at(float(a), float(b)) for a, b in zip(x, y, strict=True)]
+        )
+        np.testing.assert_allclose(at, piece.alpha(x, y), rtol=2e-16, atol=0)
+
+
+@pytest.mark.parametrize("delta", (0.0, *DELTAS))
+@pytest.mark.parametrize("inside", [Constant2D(0.2), SineProduct(0.2, 0.1)])
+def test_normal_profile_crosses_the_sine_graphs_by_newton(delta, inside):
+    # Route (a) (stiff note §3.5): the line along the foot point's normal, the
+    # crossings on the curves, alpha the medium's along the line.
+    band = Band(SineGraph(0.6), SineGraph(0.8), inside, Constant2D(1.0))
+    m = SmoothBand(band, delta)
+    lower = band.lower
+    x_e = 0.3
+    y_e = float(lower.height(np.array(x_e))) - 0.012
+    h_s = 0.08
+    p = m.normal_profile(0, x_e, y_e, h_s)
+    d_e = float(lower.signed_distance(np.array([x_e]), np.array([y_e]))[0])
+    assert p.foot is not None and p.foot[0] == 0
+    np.testing.assert_allclose(p.foot[1], d_e, rtol=0, atol=1e-16)
+    # The line is tilted with the curve: the foot point's normal.
+    s = lower.closest(np.array(x_e), np.array(y_e))
+    assert (p.nx, p.ny) == tuple(float(c) for c in lower.normal(s))
+    assert p.nx != 0.0
+    flanks = (-EDGE_STOP, 0.0, EDGE_STOP) if delta > 0 else (0.0,)
+    assert p.stops.size == 2 * len(flanks)
+    # Each curve is crossed at exactly one stop, the foot curve at the foot point.
+    px, py = p.point(p.stops)
+    centres = [p.stops[np.abs(c.level(px, py)) < 1e-15] for c in band.interfaces]
+    assert [c.size for c in centres] == [1, 1]
+    np.testing.assert_allclose(centres[0][0], -d_e / h_s, rtol=0, atol=1e-13)
+    if delta > 0:
+        # The flanks are EDGE_STOP δ in each curve's own normal distance: exactly
+        # for the foot curve, to first order (the line's cosine) for the other.
+        for curve, (c,) in zip(band.interfaces, centres, strict=True):
+            cx, _ = p.point(np.array([c]))
+            nx, ny = (float(v[0]) for v in curve.normal(cx))
+            cosine = abs(p.nx * nx + p.ny * ny)
+            want = c + np.array([-EDGE_STOP, EDGE_STOP]) * delta / (h_s * cosine)
+            gaps = np.abs(p.stops[:, None] - want[None, :]).min(axis=0)
+            assert gaps.max() < 1e-13, gaps
+    # The distances agree to ~1e-17 (``closest``'s batched Newton stops on the
+    # whole batch, the float one on its point), which a 0.0025 edge turns into
+    # up to 1.6e-13 of alpha: |α_z| / α Δd / δ with α_z ≤ ½ (1 − 0.2).
+    eta = np.concatenate([np.linspace(-2.0, 4.0, 601), p.stops])
+    px, py = p.point(eta)
+    np.testing.assert_allclose(p.alpha(eta), m.alpha(px, py), rtol=2e-13, atol=0)
+    for k in range(p.stops.size + 1):
+        f = p.alpha_function(k)
+        scalar = np.array([f(float(t)) for t in eta])
+        np.testing.assert_allclose(scalar, p.alpha(eta, segment=k), rtol=2e-13, atol=0)
+    if delta == 0.0:
+        assert p.pieces == (band.outside, band.inside, band.outside)
+
+
+def test_a_flat_foot_line_carries_no_foot_distance():
+    # Case 1's march keeps E4.4's arithmetic: its distance is the level, bit
+    # for bit, never the foot formula.
+    p = SmoothBand(case1().material, 0.01).normal_profile(0, 0.37, 0.5896, 0.08)
+    assert p.foot is None

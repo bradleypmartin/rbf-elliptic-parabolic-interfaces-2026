@@ -19,11 +19,13 @@ from heat_interfaces.heat2d.domain import (
     Band,
     Constant2D,
     FlatLine,
+    SineGraph,
     SineProduct,
     SmoothBand,
     build_node_set,
     case1,
     case2,
+    case3,
 )
 from heat_interfaces.heat2d.exact import profile_medium
 from heat_interfaces.heat2d.interface import interface_stencil, stencil_weights
@@ -488,10 +490,69 @@ def test_the_basis_refuses_what_it_cannot_build(nodes):
         seed_basis(xy[:, :1], band)
     with pytest.raises(ValueError, match="coincide"):
         seed_basis(np.vstack([xy, xy[3:4]]), band)
-    with pytest.raises(NotImplementedError, match="E4.7"):
-        seed_basis(xy, SmoothBand(case2().material, 0.01))
+    with pytest.raises(NotImplementedError, match="E4.8"):
+        seed_basis(xy, SmoothBand(case3().material, 0.01))
     sb = seed_basis(xy, band)
     with pytest.raises(ValueError, match="1-D"):
         seed_profiles(sb.profile, sb.eta[None, :])
     with pytest.raises(ValueError, match="15 seeds"):
         seed_weights(xy[:14], band)
+
+
+# --- route (a): curved features (E4.7, #38) -----------------------------------------
+
+
+@pytest.fixture(scope="module")
+def curved_nodes():
+    return build_node_set(case2(), N)
+
+
+def test_curved_seeds_are_the_flat_seeds_of_the_same_local_stencil(curved_nodes):
+    # Route (a) (stiff note §3.5): along the foot point's normal the blend is
+    # the tanh in that curve's distance, so a curved stencil's seeds are the
+    # flat seeds of its own local coordinates. The companion's test, here on
+    # a real case-2 stencil tilted with the lower sine, the upper curve far
+    # beyond 20 δ (alpha is the piece there to the bit).
+    delta = 0.002
+    band = Band(SineGraph(0.6), SineGraph(0.8), Constant2D(0.2), Constant2D(1.0))
+    xy = stencil(curved_nodes, 0.6 + 0.02 * np.sin(2 * np.pi * 0.03) - 0.01, x=0.03)
+    sb = seed_basis(xy, SmoothBand(band, delta))
+    assert sb.interface == 0 and abs(sb.profile.nx) > 0.1
+    d_e = float(band.lower.signed_distance(xy[:1, 0], xy[:1, 1])[0])
+    flat = Band(FlatLine(0.6), FlatLine(0.8), Constant2D(0.2), Constant2D(1.0))
+    twin = np.column_stack([0.5 + sb.scale * sb.xi, 0.6 + d_e + sb.scale * sb.eta])
+    tb = seed_basis(twin, SmoothBand(flat, delta))
+    np.testing.assert_allclose(tb.xi, sb.xi, atol=1e-13)
+    np.testing.assert_allclose(tb.eta, sb.eta, atol=1e-13)
+    scale = np.abs(sb.block).max(axis=0)
+    assert np.abs(sb.block - tb.block).max(axis=0).__truediv__(scale).max() < 1e-12
+    np.testing.assert_allclose(sb.rhs, tb.rhs, atol=1e-12)
+
+
+@pytest.mark.parametrize("delta", (0.0, 0.0025))
+def test_the_seed_frame_is_e23s_on_every_crossing_stencil_of_case2(curved_nodes, delta):
+    # The E4.4 breadcrumb's decision: ``nearest_interface`` frames on the curve
+    # nearest the anchor, E2.3 on the curve bordering its region. On case 2's
+    # 0.2-thick band a 30-node stencil crosses one curve at most, and the two
+    # rules pick the same curve for every crossing stencil.
+    from heat_interfaces.heat2d.operators import (
+        INTERFACE_KIND,
+        build_stencils,
+        interface_crossings,
+    )
+    from heat_interfaces.heat2d.rbf import BOUNDARY
+    from heat_interfaces.heat2d.seeds import nearest_interface
+
+    domain = case2()
+    band = domain.material
+    stencils = build_stencils(curved_nodes, domain, interface=BOUNDARY)
+    (group,) = [g for g in stencils.groups if g.kind == INTERFACE_KIND]
+    index = group.index[interface_crossings(curved_nodes, band, group.index)]
+    medium = SmoothBand(band, delta)
+    mismatched = 0
+    for idx in index:
+        xy = curved_nodes.xy[idx]
+        st = interface_stencil(xy, band, 4)
+        e23 = st.regions[st.anchor].frame
+        mismatched += nearest_interface(medium, *xy[0]) != e23
+    assert len(index) > 400 and mismatched == 0
