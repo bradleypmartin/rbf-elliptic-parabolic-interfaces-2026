@@ -1,8 +1,9 @@
 """The 2-D heat operator ``div(alpha grad)`` on the x-periodic strip, Dirichlet rows.
 
 ``domain``: curves (flat and sine graphs, circles), the closed-band
-materials of the three 2016 cases, the case geometries and the node sets
-with straddling rows (dissertation §5.4, EABE §3); ``neighbors``: nearest
+materials of the three 2016 cases and their smooth-edged ``SmoothBand``
+(E4.2), the case geometries and the node sets with straddling rows
+(dissertation §5.4, EABE §3); ``neighbors``: nearest
 neighbours periodic in x only; ``rbf``: Gaussian RBF-FD weights with
 polynomial augmentation, batched over stencils (EABE eq. 2, 31);
 ``operators``: stencil groups (42 / degree 5 inside, 30 / degree 4 near a
@@ -12,7 +13,8 @@ Dirichlet rows; ``interface``: the translated polynomial bases across
 interfaces with curvature and the multi-interface chain (dissertation §5.3,
 EABE §2.2.3) and ``operators.interface_aware_operator``; ``solve``: the
 SuperLU equilibrium solve; ``exact``: the separable piecewise-exponential
-solutions of the control and of case 1 (EABE eq. 34) and the harmonic
+solutions of the control and of case 1 (EABE eq. 34), the Chebyshev
+separable reference through a smooth flat band (E4.2) and the harmonic
 mode through case 3's ring (E2.7's resampling check), with the warped
 Gaussians of EABE §2.2.4 (``interface.Warp``) on by default; ``march``:
 ``march_parabolic``, BD4 on the node set (the 1-D marcher behind the
@@ -47,10 +49,12 @@ from .domain import (
     Domain,
     FlatLine,
     NodeSet,
+    NormalProfile,
     Piece2D,
     Row,
     SineGraph,
     SineProduct,
+    SmoothBand,
     build_node_set,
     case1,
     case2,
@@ -59,13 +63,20 @@ from .domain import (
     row_count,
     step_delta,
     straddle_count,
+    with_smooth_edges,
 )
 from .exact import (
+    REFERENCE_MAX_WIDTH,
+    REFERENCE_N_CHEB,
     LayeredExact,
     RingMode,
+    SeparableReference,
     case1_exact,
+    case1_reference,
     control_exact,
+    profile_medium,
     ring_exact,
+    separable_reference,
 )
 from .fd4 import cartesian_grid, fd4_dx, fd4_dy, fd4_operator, grid_size
 from .interface import (
@@ -187,6 +198,8 @@ __all__ = [
     "ITERATIVE",
     "OPERATORS",
     "PERIOD",
+    "REFERENCE_MAX_WIDTH",
+    "REFERENCE_N_CHEB",
     "RING",
     "ROW",
     "ROW_OFFSETS",
@@ -204,6 +217,7 @@ __all__ = [
     "LayeredExact",
     "LocalInterface",
     "NodeSet",
+    "NormalProfile",
     "Piece2D",
     "Region",
     "RingMode",
@@ -211,6 +225,8 @@ __all__ = [
     "Row",
     "SineGraph",
     "SineProduct",
+    "SeparableReference",
+    "SmoothBand",
     "Solution",
     "StencilGroup",
     "StencilSpec",
@@ -224,6 +240,7 @@ __all__ = [
     "build_stencils",
     "case1",
     "case1_exact",
+    "case1_reference",
     "case2",
     "case3",
     "coefficient_dx",
@@ -262,10 +279,12 @@ __all__ = [
     "polynomial_count",
     "polynomial_exponents",
     "polynomial_rhs",
+    "profile_medium",
     "rbf_fd_weights",
     "restriction_matrix",
     "ring_exact",
     "ring_radii",
+    "separable_reference",
     "rms_error",
     "row_count",
     "solve_equilibrium",
@@ -278,6 +297,7 @@ __all__ = [
     "translated_basis",
     "translation_matrix",
     "vector_to_table",
+    "with_smooth_edges",
     "wrap_x",
     "InterfaceStencil",
     "Reference",

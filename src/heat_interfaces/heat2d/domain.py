@@ -8,6 +8,9 @@ graph ``y = c(x)`` (flat, or case 2's ``c ± 0.02 sin 2πx``) or a circle
 between two interfaces and another outside it (eq. 84, EABE eq. 32, 35,
 38). Which piece a point belongs to is decided by the exact sign of the
 curve's level function, never by a tolerance (port notes §1.6).
+``SmoothBand`` is the stiff-edge medium of ``docs/stiff-diffusion.md`` §3.1
+(E4.2): the same band with each interface a tanh edge of width δ in the
+signed normal distance, the jump's region data kept.
 
 Node sets follow the MATLAB ``ExeprepRBFHeatLaplace4.m``: rows of fixed
 nodes straddle each interface in a hexagonal layout (three rows a side, the
@@ -21,12 +24,14 @@ innermost pair (EABE Fig. 12b).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import factorial, sqrt
 from typing import Literal, Protocol
 
 import numpy as np
 
+from ..heat1d.domain import edge_blend
+from ..heat1d.stiff import EDGE_STOP
 from .neighbors import PERIOD, knn, offsets, periodic_dx, wrap_x
 
 Y_MIN, Y_MAX = 0.0, 1.0
@@ -376,6 +381,194 @@ class Band:
         return self.inside if region == 1 else self.outside
 
 
+@dataclass(frozen=True)
+class SmoothBand:
+    """``band`` with each interface replaced by a tanh edge of width ``delta``.
+
+    ``docs/stiff-diffusion.md`` §3.1 (E4.2, #33): with ``d₁``, ``d₂`` the
+    signed distances to the lower and upper curves (``Curve.signed_distance``,
+    positive on the ``level > 0`` side) and ``s(z) = ½ (1 + tanh z)``, the
+    edges are folded in from the outside piece as ``heat1d.domain.SmoothEdges``
+    folds them in from the left,
+
+        alpha ← (1 − s(d₁/δ)) outside + s(d₁/δ) inside,
+        alpha ← (1 − s(d₂/δ)) alpha   + s(d₂/δ) outside,
+
+    each step ``heat1d.domain.edge_blend``, so on case 1 ``alpha`` and
+    ``gradient``'s y component are E3.2's 1-D medium in ``y`` bit for bit,
+    beyond ``TANH_REACH`` δ from both curves alpha is the piece bit for bit,
+    and a band thinner than its edges gets the product profile
+    ``outside + (inside − outside) s(d₁/δ) (1 − s(d₂/δ))``. The pieces keep
+    their own variation through the blend; ``gradient`` is the blend's, with
+    ``∇d`` the unit normal at the foot point.
+
+    Everything else is the jump's (stiff note §3.8, decision 1):
+    ``region_index``, ``region_piece``, ``piece_index``, ``interfaces`` and the
+    pieces' ``taylor`` tables, so the naive operator, the δ = 0 construction
+    (``interface_aware_operator`` on this medium) and every 2016 driver run
+    on it unchanged. ``delta = 0`` is the ``band`` itself, bit for bit.
+    """
+
+    band: Band
+    delta: float
+
+    def __post_init__(self) -> None:
+        if not (np.isfinite(self.delta) and self.delta >= 0.0):
+            raise ValueError("the edge width delta must be finite and non-negative")
+        if isinstance(self.band, SmoothBand):
+            raise TypeError("smooth a jump Band, not a SmoothBand")
+
+    @property
+    def lower(self) -> Curve:
+        return self.band.lower
+
+    @property
+    def upper(self) -> Curve:
+        return self.band.upper
+
+    @property
+    def inside(self) -> Piece2D:
+        return self.band.inside
+
+    @property
+    def outside(self) -> Piece2D:
+        return self.band.outside
+
+    @property
+    def interfaces(self) -> tuple[Curve, Curve]:
+        return self.band.interfaces
+
+    @property
+    def pieces(self) -> tuple[Piece2D, Piece2D]:
+        return self.band.pieces
+
+    def piece_index(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        return self.band.piece_index(x, y)
+
+    def region_index(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        return self.band.region_index(x, y)
+
+    def region_piece(self, region: int) -> Piece2D:
+        return self.band.region_piece(region)
+
+    def taylor(self, side: Side, x0: float, y0: float, degree: int) -> np.ndarray:
+        """The pieces' tables, the jump's data (the smooth alpha's are O(δ⁻ᵏ))."""
+        return self.band.taylor(side, x0, y0, degree)
+
+    def alpha(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        return self._blend(x, y)[0]
+
+    def gradient(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        _, gx, gy = self._blend(x, y)
+        return gx, gy
+
+    def _blend(
+        self, x: np.ndarray, y: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if self.delta == 0.0:
+            return self.band.alpha(x, y), *self.band.gradient(x, y)
+        x, y = np.broadcast_arrays(*_as_float(x, y))
+        a = self.outside.alpha(x, y)
+        ax, ay = self.outside.gradient(x, y)
+        for curve, piece in ((self.lower, self.inside), (self.upper, self.outside)):
+            b = piece.alpha(x, y)
+            bx, by = piece.gradient(x, y)
+            z = curve.signed_distance(x, y) / self.delta
+            value, ds = edge_blend(a, b, z)
+            gx, _ = edge_blend(ax, bx, z)
+            gy, _ = edge_blend(ay, by, z)
+            nx, ny = curve.normal(curve.closest(x, y))
+            k = (ds / self.delta) * (b - a)
+            a, ax, ay = value, gx + k * nx, gy + k * ny
+        return a, ax, ay
+
+    def normal_profile(self, j: int, x: float, y: float, scale: float) -> NormalProfile:
+        """The material along interface ``j``'s normal through the anchor ``(x, y)``.
+
+        Stiff note §3.2–3.3: the line through the anchor along the unit
+        normal at interface ``j``'s foot point nearest it (``frame_at``'s
+        ``y'``, into ``level > 0``), in units of the stencil radius
+        ``scale``; the stops are both curves' crossings of the line and, at
+        δ > 0, their ``± EDGE_STOP δ`` flanks (``heat1d.stiff``'s, formed as
+        its ``_stops`` forms them, so a flat edge is the 1-D march's stops
+        bit for bit). Flat interfaces only: the crossings of a curved one
+        are route (a)'s Newton iteration, E4.7 (#38), and the ring's widths
+        E4.8 (#39).
+        """
+        curve = self.interfaces[j]
+        s = curve.closest(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
+        nx, ny = (float(c) for c in curve.normal(s))
+        flanks = (-EDGE_STOP * self.delta, 0.0, EDGE_STOP * self.delta)
+        stops = []
+        for other in self.interfaces:
+            if not isinstance(other, FlatLine):
+                raise NotImplementedError(
+                    "normal profiles cross flat interfaces only; curved crossings "
+                    "are E4.7 (#38), the ring's E4.8 (#39)"
+                )
+            for f in flanks if self.delta > 0.0 else (0.0,):
+                stops.append(((other.c + f) - float(y)) / (scale * ny))
+        stops = np.unique(stops)
+        line = NormalProfile(float(x), float(y), nx, ny, float(scale), stops, ())
+        if self.delta > 0.0:
+            pieces = (self,) * (stops.size + 1)
+        else:
+            probes = np.concatenate(
+                [[stops[0] - 1.0], 0.5 * (stops[:-1] + stops[1:]), [stops[-1] + 1.0]]
+            )
+            regions = self.region_index(*line.point(probes))
+            pieces = tuple(self.region_piece(int(r)) for r in regions)
+        return replace(line, pieces=pieces)
+
+
+@dataclass(frozen=True)
+class NormalProfile:
+    """alpha on the normal line of one stencil, in its stencil coordinate η.
+
+    Stiff note §3.2–3.3, what E4.4's march samples: the line is ``(x0, y0) +
+    scale η (nx, ny)``, ``stops`` (increasing) are where the march restarts,
+    and ``pieces[k]`` supplies alpha on segment ``k``, between ``stops[k −
+    1]`` and ``stops[k]`` (unbounded at either end): at δ = 0 the piece of
+    the region the segment lies in, so alpha is one-sided at a jump as
+    ``Medium1D.elements`` makes it in 1-D, and at δ > 0 the smooth medium on
+    every segment. Made by ``SmoothBand.normal_profile``.
+    """
+
+    x0: float
+    y0: float
+    nx: float
+    ny: float
+    scale: float
+    stops: np.ndarray
+    pieces: tuple[Piece2D | SmoothBand, ...]
+
+    def point(self, eta: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        step = self.scale * np.asarray(eta, dtype=float)
+        return self.x0 + step * self.nx, self.y0 + step * self.ny
+
+    def segment(self, eta: np.ndarray) -> np.ndarray:
+        """The segment of each η; a point on a stop is in the segment above it."""
+        return np.searchsorted(self.stops, np.asarray(eta, dtype=float), side="right")
+
+    def alpha(self, eta: np.ndarray, segment: int | None = None) -> np.ndarray:
+        """alpha at ``eta``, from ``pieces[segment]`` or each point's own segment."""
+        eta = np.asarray(eta, dtype=float)
+        if segment is not None:
+            return self.pieces[segment].alpha(*self.point(eta))
+        flat = eta.ravel()
+        seg = self.segment(flat)
+        out = np.empty_like(flat)
+        for k in np.unique(seg):
+            mask = seg == k
+            out[mask] = self.pieces[k].alpha(*self.point(flat[mask]))
+        return out.reshape(eta.shape)
+
+    @property
+    def alpha_e(self) -> float:
+        """alpha at the anchor, ``α_e`` of the chain."""
+        return float(self.alpha(np.zeros(1))[0])
+
+
 # --- domains ----------------------------------------------------------------
 
 
@@ -389,7 +582,7 @@ class Domain:
     the curves whose ``level < 0`` side is outside the domain.
     """
 
-    material: Band
+    material: Band | SmoothBand
     straddle: tuple[Curve, ...]
     dirichlet: tuple[Curve, ...]
     holes: tuple[Curve, ...] = ()
@@ -470,6 +663,19 @@ def case3(s: float = CASE3_S) -> Domain:
 
 
 CASES = {1: case1, 2: case2, 3: case3}
+
+
+def with_smooth_edges(domain: Domain, delta: float) -> Domain:
+    """``domain`` with its band's interfaces tanh edges of width ``delta``.
+
+    The material becomes ``SmoothBand`` over the domain's jump band (its
+    own band if it is smooth already, so δ is replaced, not compounded); the
+    geometry is untouched, so the straddling rows, Dirichlet rows and holes
+    stay where the jump put them and ``build_node_set`` makes the same nodes.
+    """
+    material = domain.material
+    band = material.band if isinstance(material, SmoothBand) else material
+    return replace(domain, material=SmoothBand(band, delta))
 
 
 # --- node sets --------------------------------------------------------------

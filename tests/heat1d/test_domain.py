@@ -7,12 +7,14 @@ from heat_interfaces.heat1d.domain import (
     TANH_REACH,
     Constant,
     Grid1D,
+    OnInterval,
     PiecewiseAlpha,
     Sinusoid,
     Smooth,
     SmoothEdges,
     dissertation_alpha,
     eabe_alpha,
+    edge_blend,
     equispaced_grid,
     grid_for,
     jump_alpha,
@@ -242,3 +244,54 @@ def test_smooth_edges_rejects_a_negative_or_infinite_width():
         SmoothEdges(matlab_alpha(), -0.1)
     with pytest.raises(ValueError, match="delta"):
         SmoothEdges(matlab_alpha(), np.inf)
+
+
+def test_edge_blend_is_the_logistic_blend_from_the_near_side():
+    z = np.linspace(-25.0, 25.0, 2001)
+    a, b = np.full_like(z, 0.2), np.full_like(z, 1.0)
+    value, ds = edge_blend(a, b, z)
+    s = 0.5 * (1.0 + np.tanh(z))
+    np.testing.assert_allclose(value, 0.2 + 0.8 * s, rtol=1e-15)
+    np.testing.assert_allclose(ds, 0.5 / np.cosh(z) ** 2, rtol=1e-13, atol=0)
+    # The far side's share rounds away: exactly each value at |z| >= 20.
+    assert np.all(value[z >= 20.0] == 1.0) and np.all(value[z <= -20.0] == 0.2)
+
+
+def test_on_interval_clips_the_elements_and_keeps_the_material():
+    # Case 1's profile in y (E4.2): 1 | 0.2 | 1 at 0.6 and 0.8, on [0, 1].
+    jump = PiecewiseAlpha(
+        (0.6, 0.8), (Constant(1.0), Constant(0.2), Constant(1.0)), ("right", "left")
+    )
+    m = OnInterval(jump, 0.0, 1.0)
+    edges, pieces = m.elements()
+    assert edges.tolist() == [0.0, 0.6, 0.8, 1.0] and pieces == jump.pieces
+    x = np.linspace(0.0, 1.0, 101)
+    assert np.array_equal(m.alpha(x), jump.alpha(x))
+    assert m.interfaces == jump.interfaces
+    assert np.array_equal(m.taylor(1, "left", 3), jump.taylor(1, "left", 3))
+    for delta in (0.04, 0.01, 0.0025):
+        smooth = OnInterval(SmoothEdges(jump, delta), 0.0, 1.0)
+        edges, pieces = smooth.elements()
+        full, _ = smooth.medium.elements()
+        assert edges[0] == 0.0 and edges[-1] == 1.0
+        assert set(edges[1:-1]) == {e for e in full if delta / 2 < e < 1 - delta / 2}
+        assert pieces == (smooth.medium,) * (len(edges) - 1)
+        assert np.all(np.diff(edges) > delta / 2)
+
+
+def test_on_interval_drops_a_smooth_cut_within_half_a_width_of_an_end():
+    # 0.2 − 27δ = 0.003 < δ/2 from 0: that cut goes; 0.2 − 9δ stays.
+    delta = 0.197 / 27
+    m = OnInterval(SmoothEdges(jump_alpha(1.0, 0.2, 0.2), delta), 0.0, 1.0)
+    edges, _ = m.elements()
+    assert edges[0] == 0.0 and edges[1] == pytest.approx(0.2 - 9 * delta)
+    assert np.all(np.diff(edges) > delta / 2)
+
+
+def test_on_interval_refuses_an_interface_outside_or_a_bad_interval():
+    with pytest.raises(ValueError, match="strictly inside"):
+        OnInterval(dissertation_alpha(), 0.0, 1.0)  # an interface at 0
+    with pytest.raises(ValueError, match="interval"):
+        OnInterval(matlab_alpha(), 0.5, -0.5)
+    with pytest.raises(ValueError, match="interval"):
+        OnInterval(matlab_alpha(), -1.5, 1.0)

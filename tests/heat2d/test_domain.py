@@ -1,6 +1,13 @@
 import numpy as np
 import pytest
 
+from heat_interfaces.heat1d.domain import (
+    TANH_REACH,
+    Constant,
+    PiecewiseAlpha,
+    SmoothEdges,
+)
+from heat_interfaces.heat1d.stiff import EDGE_STOP, _stops
 from heat_interfaces.heat2d.domain import (
     DIRICHLET,
     FREE,
@@ -12,6 +19,7 @@ from heat_interfaces.heat2d.domain import (
     FlatLine,
     SineGraph,
     SineProduct,
+    SmoothBand,
     build_node_set,
     case1,
     case2,
@@ -20,6 +28,7 @@ from heat_interfaces.heat2d.domain import (
     row_count,
     step_delta,
     straddle_count,
+    with_smooth_edges,
 )
 from heat_interfaces.heat2d.neighbors import nearest_spacing, periodic_dx
 
@@ -373,3 +382,257 @@ def test_fewer_rows_per_side_and_the_refusals():
 def test_band_rejects_nothing_but_reports_its_pieces():
     b = Band(FlatLine(0.2), FlatLine(0.4), Constant2D(3.0), Constant2D(1.0))
     assert b.alpha(0.5, 0.3) == 3.0 and b.alpha(0.5, 0.5) == 1.0
+
+
+# --- the smooth band (E4.2) -------------------------------------------------
+
+DELTAS = (0.04, 0.01, 0.0025)
+"""Three of the study's edge widths (stiff note §3.1): resolved to sub-grid."""
+
+
+def logistic(d, delta):
+    return 0.5 * (1.0 + np.tanh(d / delta))
+
+
+def case1_in_y(delta):
+    """E3.2's 1-D medium over ``1 | 0.2 | 1`` at 0.6, 0.8, built by hand."""
+    jump = PiecewiseAlpha(
+        (0.6, 0.8), (Constant(1.0), Constant(0.2), Constant(1.0)), ("right", "left")
+    )
+    return SmoothEdges(jump, delta)
+
+
+def sample_points(n=4001):
+    rng = np.random.default_rng(3)
+    x = rng.uniform(0.0, 1.0, n)
+    y = rng.uniform(0.0, 1.0, n)
+    # Points on both of case 1's and case 2's interfaces, and just off them.
+    xs = np.linspace(0.0, 1.0, 9, endpoint=False)
+    on = [(xs, np.full_like(xs, c)) for c in (0.6, 0.8)]
+    on += [(xs, SineGraph(c).height(xs)) for c in (0.6, 0.8)]
+    on += [(xs, np.nextafter(np.full_like(xs, c), 1.0)) for c in (0.6, 0.8)]
+    for px, py in on:
+        x, y = np.concatenate([x, px]), np.concatenate([y, py])
+    return x, y
+
+
+@pytest.mark.parametrize("case", [case1, case2, case3])
+def test_smooth_band_at_delta_zero_is_the_band_bit_for_bit(case):
+    band = case().material
+    m = SmoothBand(band, 0.0)
+    x, y = sample_points()
+    assert np.array_equal(m.alpha(x, y), band.alpha(x, y))
+    for got, want in zip(m.gradient(x, y), band.gradient(x, y), strict=True):
+        assert np.array_equal(got, want)
+    assert np.array_equal(m.piece_index(x, y), band.piece_index(x, y))
+    assert np.array_equal(m.region_index(x, y), band.region_index(x, y))
+    assert m.interfaces == band.interfaces and m.pieces == band.pieces
+    assert (m.lower, m.upper, m.inside, m.outside) == (
+        band.lower,
+        band.upper,
+        band.inside,
+        band.outside,
+    )
+    for r in (0, 1, 2):
+        assert m.region_piece(r) is band.region_piece(r)
+    for side in ("inside", "outside"):
+        assert np.array_equal(
+            m.taylor(side, 0.3, 0.7, 4), band.taylor(side, 0.3, 0.7, 4)
+        )
+
+
+@pytest.mark.parametrize("delta", DELTAS)
+def test_smooth_band_on_case1_is_the_1d_medium_in_y_bit_for_bit(delta):
+    # Stiff note §3.1: the same edge_blend steps in the same order, with the
+    # flat lines' signed distance y − c and normal (0, 1).
+    m = SmoothBand(case1().material, delta)
+    x, y = sample_points()
+    one_d = case1_in_y(delta)
+    gx, gy = m.gradient(x, y)
+    assert np.array_equal(m.alpha(x, y), one_d.alpha(y))
+    assert np.array_equal(gy, one_d.alpha_x(y))
+    assert np.all(gx == 0.0)
+    # The jump's protocol is untouched: the band is still closed at 0.6 and 0.8.
+    edge = np.array([0.6, 0.8])
+    assert np.array_equal(m.piece_index(np.full(2, 0.4), edge), [1, 1])
+
+
+def test_a_smooth_flat_edge_is_the_tanh_blend_to_rounding():
+    delta = 0.0025
+    m = SmoothBand(case1().material, delta)
+    y = np.linspace(0.55, 0.65, 4001)
+    x = np.full_like(y, 0.37)
+    s = logistic(y - 0.6, delta)
+    np.testing.assert_allclose(m.alpha(x, y), 1.0 - 0.8 * s, rtol=1e-15, atol=1e-17)
+    np.testing.assert_allclose(
+        m.gradient(x, y)[1],
+        -0.8 / (2 * delta) / np.cosh((y - 0.6) / delta) ** 2,
+        rtol=1e-13,
+        atol=1e-12,
+    )
+    assert float(m.alpha(0.37, 0.6)) == pytest.approx(0.6)
+
+
+@pytest.mark.parametrize("case", [case1, case2, case3])
+@pytest.mark.parametrize("delta", DELTAS[1:])  # at 0.04 the reach covers the strip
+def test_smooth_band_tails_are_the_pieces_bit_for_bit_beyond_tanh_reach(case, delta):
+    band = case().material
+    m = SmoothBand(band, delta)
+    rng = np.random.default_rng(7)
+    x, y = rng.uniform(0.0, 1.0, (2, 20000))
+    far = np.ones(x.size, dtype=bool)
+    for curve in band.interfaces:
+        far &= np.abs(curve.signed_distance(x, y)) >= TANH_REACH * delta
+    assert far.sum() > 1000
+    assert np.array_equal(m.alpha(x[far], y[far]), band.alpha(x[far], y[far]))
+
+
+@pytest.mark.parametrize("case", [case1, case2, case3])
+def test_smooth_band_gradient_is_the_derivative_of_its_alpha(case):
+    # The edge is smooth to rounding: the analytic gradient (the pieces'
+    # blended, plus s′ ∇d with ∇d the normal at the foot point) against
+    # central differences, near the edges where it is steep.
+    delta = 0.01
+    band = case().material
+    m = SmoothBand(band, delta)
+    rng = np.random.default_rng(11)
+    x, y = rng.uniform(0.02, 0.98, (2, 4000))
+    near = np.zeros(x.size, dtype=bool)
+    for curve in band.interfaces:
+        near |= np.abs(curve.signed_distance(x, y)) < 5 * delta
+    x, y = x[near], y[near]
+    assert x.size > 100
+    h = 1e-6
+    fx = (m.alpha(x + h, y) - m.alpha(x - h, y)) / (2 * h)
+    fy = (m.alpha(x, y + h) - m.alpha(x, y - h)) / (2 * h)
+    gx, gy = m.gradient(x, y)
+    scale = np.abs(band.inside.alpha(x, y) - band.outside.alpha(x, y)).max() / delta
+    np.testing.assert_allclose(gx, fx, atol=1e-6 * scale)
+    np.testing.assert_allclose(gy, fy, atol=1e-6 * scale)
+
+
+def test_a_band_thinner_than_its_edges_gets_the_product_profile():
+    # Stiff note §3.1: the fold gives o + (i − o) s(d₁/δ)(1 − s(d₂/δ)), whose
+    # extreme is at the midline, s(w/2δ)² of the contrast. It tends to a
+    # quarter as w/δ → 0, not to zero (§4.1: a ring thinner than its edges
+    # keeps a bump of width δ; the difference of the two edges, s₁ − s₂,
+    # would peak at tanh(w/2δ) instead).
+    for ratio in (0.0, 0.5, 2.0):
+        delta = 0.001
+        lower, upper = 0.6, 0.6 + ratio * delta
+        band = Band(FlatLine(lower), FlatLine(upper), Constant2D(1e-3), Constant2D(1.0))
+        m = SmoothBand(band, delta)
+        y = np.linspace(0.59, 0.61, 4001)
+        x = np.full_like(y, 0.5)
+        s1, s2 = logistic(y - lower, delta), logistic(y - upper, delta)
+        expected = 1.0 + (1e-3 - 1.0) * s1 * (1.0 - s2)
+        np.testing.assert_allclose(m.alpha(x, y), expected, rtol=1e-13)
+        mid = float(m.alpha(0.5, 0.5 * (lower + upper)))
+        peak = logistic(0.5 * ratio * delta, delta) ** 2
+        assert mid == pytest.approx(1.0 + (1e-3 - 1.0) * peak, rel=1e-14)
+    assert 0.77 < peak < 0.78  # w = 2δ reaches 78 % of the contrast
+    zero_width = SmoothBand(
+        Band(FlatLine(0.6), FlatLine(0.6), Constant2D(1e-3), Constant2D(1.0)), 1e-3
+    )
+    assert float(zero_width.alpha(0.5, 0.6)) == pytest.approx(1.0 - 0.999 / 4)
+
+
+def test_the_ring_blends_in_the_radial_distance():
+    delta = 2e-4
+    m = SmoothBand(case3().material, delta)
+    inner, outer = ring_radii()
+    theta = 0.3
+    rho = np.linspace(0.345, 0.355, 2001)
+    x, y = 0.5 + rho * np.cos(theta), 0.5 + rho * np.sin(theta)
+    r = np.hypot(x - 0.5, y - 0.5)  # the circles' own radius, to the bit
+    ring = case3().material.inside.alpha(x, y)
+    s1, s2 = logistic(r - inner, delta), logistic(r - outer, delta)
+    expected = 1.0 + (ring - 1.0) * s1 * (1.0 - s2)
+    np.testing.assert_allclose(m.alpha(x, y), expected, rtol=1e-13)
+
+
+def test_smooth_band_rejects_a_negative_or_infinite_width():
+    with pytest.raises(ValueError, match="delta"):
+        SmoothBand(case1().material, -1e-3)
+    with pytest.raises(ValueError, match="delta"):
+        SmoothBand(case1().material, np.nan)
+    with pytest.raises(TypeError, match="jump"):
+        SmoothBand(SmoothBand(case1().material, 0.01), 0.01)
+
+
+def test_with_smooth_edges_keeps_the_geometry_and_the_node_set():
+    d = with_smooth_edges(case1(), 0.01)
+    assert isinstance(d.material, SmoothBand) and d.material.delta == 0.01
+    assert d.material.band == case1().material
+    assert (d.straddle, d.dirichlet, d.holes) == (
+        case1().straddle,
+        case1().dirichlet,
+        case1().holes,
+    )
+    a, b = (
+        build_node_set(d, 1250, iterations=5),
+        build_node_set(case1(), 1250, iterations=5),
+    )
+    assert np.array_equal(a.x, b.x) and np.array_equal(a.y, b.y)
+    # Re-smoothing replaces δ rather than compounding it.
+    again = with_smooth_edges(d, 0.0025)
+    assert again.material == SmoothBand(case1().material, 0.0025)
+
+
+# --- the normal profile -----------------------------------------------------
+
+
+@pytest.mark.parametrize("y_e", [0.5896, 0.7, 0.83])
+def test_normal_profile_at_delta_zero_is_the_regions_along_the_line(y_e):
+    m = SmoothBand(case1().material, 0.0)
+    h_s = 0.08
+    for j in (0, 1):
+        p = m.normal_profile(j, 0.37, y_e, h_s)
+        assert (p.nx, p.ny) == (-0.0, 1.0) and p.scale == h_s
+        # The breadcrumb's stops: (0.6 − y_e)/h_s and (0.8 − y_e)/h_s.
+        assert p.stops.tolist() == [(0.6 - y_e) / h_s, (0.8 - y_e) / h_s]
+        assert p.pieces == (m.outside, m.inside, m.outside)
+        # One-sided at the stops: each segment reads its own piece there.
+        lo, hi = p.stops
+        assert p.alpha(np.array([lo]), segment=0)[0] == 1.0
+        assert p.alpha(np.array([lo]), segment=1)[0] == 0.2
+        assert p.alpha(np.array([hi]), segment=1)[0] == 0.2
+        assert p.alpha(np.array([hi]), segment=2)[0] == 1.0
+        eta = np.array([lo - 0.5, 0.5 * (lo + hi), hi + 0.5])
+        assert p.alpha(eta).tolist() == [1.0, 0.2, 1.0]
+        assert p.alpha_e == float(m.alpha(0.37, y_e))
+
+
+@pytest.mark.parametrize("delta", DELTAS)
+def test_normal_profile_stops_are_the_1d_marchs_stops_bit_for_bit(delta):
+    m = SmoothBand(case1().material, delta)
+    y_e, h_s = 0.5896, 0.08
+    p = m.normal_profile(0, 0.37, y_e, h_s)
+    one_d = _stops(np.array([y_e]), np.array([h_s]), case1_in_y(delta))
+    assert np.array_equal(p.stops, np.unique(one_d))
+    # The flanks sit EDGE_STOP δ either side of each crossing.
+    np.testing.assert_allclose(
+        np.sort(p.stops),
+        np.sort(
+            [
+                (c + f * delta - y_e) / h_s
+                for c in (0.6, 0.8)
+                for f in (-EDGE_STOP, 0, EDGE_STOP)
+            ]
+        ),
+        rtol=0,
+        atol=1e-14,
+    )
+    assert all(piece is m for piece in p.pieces)
+    assert len(p.pieces) == p.stops.size + 1
+    eta = np.linspace(-1.0, 4.0, 501)
+    px, py = p.point(eta)
+    assert np.array_equal(p.alpha(eta), m.alpha(px, py))
+    assert np.array_equal(p.alpha(eta), case1_in_y(delta).alpha(y_e + h_s * eta))
+
+
+def test_normal_profile_refuses_curved_interfaces_for_now():
+    for case in (case2, case3):
+        m = SmoothBand(case().material, 0.01)
+        with pytest.raises(NotImplementedError, match="E4.7"):
+            m.normal_profile(0, 0.3, 0.6, 0.08)

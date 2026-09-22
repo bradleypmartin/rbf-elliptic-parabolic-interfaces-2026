@@ -1,13 +1,34 @@
 import numpy as np
 import pytest
 
+from heat_interfaces.heat1d.domain import OnInterval, SmoothEdges
+from heat_interfaces.heat2d.domain import (
+    Band,
+    Constant2D,
+    FlatLine,
+    SineProduct,
+    SmoothBand,
+    build_node_set,
+    case1,
+    case2,
+    with_smooth_edges,
+)
 from heat_interfaces.heat2d.exact import (
+    REFERENCE_MAX_WIDTH,
+    REFERENCE_N_CHEB,
     LayeredExact,
     RingMode,
+    SeparableReference,
     case1_exact,
+    case1_reference,
     control_exact,
+    profile_medium,
     ring_exact,
+    separable_reference,
 )
+from heat_interfaces.heat2d.operators import build_stencils, interface_aware_operator
+from heat_interfaces.heat2d.rbf import BOUNDARY
+from heat_interfaces.heat2d.solve import rms_error, solve_equilibrium
 
 Y = np.linspace(0.0, 1.0, 41)
 X = np.linspace(0.0, 1.0, 17, endpoint=False)
@@ -179,3 +200,142 @@ def test_ring_mode_refuses_malformed_rings():
         RingMode((0.3,), (1.0, 2.0), 0)
     with pytest.raises(ValueError, match="increase"):
         RingMode((0.3, 0.2), (1.0, 2.0, 1.0))
+
+
+# --- the separable reference through a smooth flat band (E4.2) ---------------
+
+STUDY_DELTAS = (0.04, 0.01, 0.005, 0.0025)
+"""E4.3's edge widths (plan, #34)."""
+
+YS = np.linspace(0.0, 1.0, 4001)
+
+
+@pytest.mark.parametrize("growth", [0.0, 1.0])
+def test_the_reference_at_delta_zero_is_the_analytic_case1_solution(growth):
+    ref, exact = case1_reference(0.0, growth), case1_exact(growth)
+    np.testing.assert_allclose(ref.v(YS), exact.v(YS), rtol=0, atol=1e-12)
+    off = YS[(np.abs(YS - 0.6) > 1e-9) & (np.abs(YS - 0.8) > 1e-9)]
+    np.testing.assert_allclose(ref.v_y(off), exact.v_y(off), rtol=0, atol=1e-11)
+    xx, yy = np.meshgrid(X, YS[::40])
+    for t in (-0.3, 0.0, 0.1):
+        np.testing.assert_allclose(ref(xx, yy, t), exact(xx, yy, t), atol=1e-12)
+        np.testing.assert_allclose(
+            ref.flux_y(xx, yy, t), exact.flux_y(xx, yy, t), atol=1e-11
+        )
+    # A point on a break reads the layer above it, as LayeredExact does.
+    for yb in (0.6, 0.8):
+        assert ref.v_y(yb) == pytest.approx(exact.v_y(yb), abs=1e-11)
+    assert ref.elements == 10 and ref.unknowns == 10 * (REFERENCE_N_CHEB - 1)
+
+
+@pytest.mark.parametrize("delta", STUDY_DELTAS)
+@pytest.mark.parametrize("growth", [0.0, 1.0])
+def test_the_reference_is_converged_at_every_delta_of_the_study(delta, growth):
+    # Stiff note §4.1: against 24 nodes on 0.05-wide elements the reference
+    # agrees to 1e-12 … 2e-11, the collocation's round-off floor on the
+    # δ-wide elements (E3.2's, row scaling does not move it); 5e-11 leaves
+    # room for the run-to-run noise of threaded BLAS.
+    ref = case1_reference(delta, growth)
+    fine = case1_reference(delta, growth, 24, 0.05)
+    assert np.abs(ref.v(YS) - fine.v(YS)).max() < 5e-11
+    assert np.abs(ref.flux_y(0.25, YS) - fine.flux_y(0.25, YS)).max() < 1e-9
+    assert ref.v(0.0) == pytest.approx(0.0, abs=1e-15)
+    assert ref.v(1.0) == pytest.approx(1.0, abs=1e-15)
+
+
+@pytest.mark.parametrize("delta", [0.01, 0.0025])
+@pytest.mark.parametrize("growth", [0.0, 1.0])
+def test_the_reference_solves_its_ode_through_the_edges(delta, growth):
+    # Independent of the collocation: the flux α v′ differentiated by central
+    # differences against (κ² α + c) v with the 2-D medium's own α.
+    ref = case1_reference(delta, growth)
+    medium = SmoothBand(case1().material, delta)
+    y = np.linspace(0.02, 0.98, 20001)
+    s = 1e-6
+    flux = (ref.flux_y(0.25, y + s) - ref.flux_y(0.25, y - s)) / (2 * s)
+    flux /= np.sin(0.5 * np.pi)
+    rhs = ((2 * np.pi) ** 2 * medium.alpha(np.full_like(y, 0.25), y) + growth) * ref.v(
+        y
+    )
+    assert np.abs(flux - rhs).max() < 1e-6 * np.abs(rhs).max()
+    # And the flux is continuous where v_y jumps by the contrast at δ = 0.
+    alpha = medium.alpha(np.full_like(y, 0.25), y)
+    np.testing.assert_allclose(ref.flux_y(0.25, y), alpha * ref.v_y(y), atol=1e-10)
+
+
+def test_the_reference_approaches_the_jump_at_first_order_in_delta():
+    # H10's floor: the δ = 0 construction is off by the two references'
+    # difference, O(δ) (stiff note §1.7, §4.1). sup |v_δ − v_0| / δ is 1.55
+    # at δ = 1e-3 and 1.58 at 5e-4.
+    v0 = case1_reference(0.0).v(YS)
+    gaps = [np.abs(case1_reference(d).v(YS) - v0).max() for d in (1e-3, 5e-4)]
+    assert 1.9 < gaps[0] / gaps[1] < 2.0
+    assert 1.5 < gaps[1] / 5e-4 < 1.65
+
+
+def test_profile_medium_is_the_smooth_band_in_y_bit_for_bit():
+    for delta in (0.0, 0.01, 0.0025):
+        band = SmoothBand(case1().material, delta)
+        medium = profile_medium(band)
+        assert isinstance(medium, OnInterval) and (medium.lo, medium.hi) == (0.0, 1.0)
+        assert isinstance(medium.medium, SmoothEdges)
+        assert medium.medium.delta == delta
+        x = np.full_like(YS, 0.41)
+        assert np.array_equal(band.alpha(x, YS), medium.alpha(YS))
+        assert np.array_equal(band.gradient(x, YS)[1], medium.alpha_x(YS))
+        edges, _ = medium.elements()
+        assert edges[0] == 0.0 and edges[-1] == 1.0
+    assert profile_medium(case1().material) == profile_medium(
+        SmoothBand(case1().material, 0.0)
+    )
+
+
+def test_profile_medium_refuses_what_does_not_separate():
+    with pytest.raises(ValueError, match="flat"):
+        profile_medium(case2().material)
+    sine_inside = Band(
+        FlatLine(0.6), FlatLine(0.8), SineProduct(0.2, 0.1), Constant2D(1.0)
+    )
+    with pytest.raises(ValueError, match="constant"):
+        profile_medium(SmoothBand(sine_inside, 0.01))
+
+
+def test_boundary_values_are_the_papers_dirichlet_rows_at_any_time():
+    ref = case1_reference(0.01, growth=1.0)
+    bottom, top = ref.boundary_values()
+    assert bottom == 0.0
+    for t in (-0.2, 0.0, 0.1):
+        np.testing.assert_array_equal(top(X, 1.0, t), np.exp(t) * np.sin(2 * np.pi * X))
+        np.testing.assert_allclose(ref(X, 1.0, t), top(X, 1.0, t), atol=1e-15)
+        np.testing.assert_allclose(ref(X, 0.0, t), 0.0, atol=1e-15)
+    assert top(0.25, 1.0) == pytest.approx(
+        1.0
+    )  # t defaults to 0, as solve_equilibrium calls it
+    general = separable_reference(
+        Band(FlatLine(0.3), FlatLine(0.5), Constant2D(3.0), Constant2D(1.0))
+    )
+    exact = LayeredExact((1.0, 3.0, 1.0), (0.3, 0.5))
+    np.testing.assert_allclose(general.v(YS), exact.v(YS), atol=1e-12)
+    assert isinstance(general, SeparableReference)
+    assert (general.n_cheb, general.max_width) == (
+        REFERENCE_N_CHEB,
+        REFERENCE_MAX_WIDTH,
+    )
+
+
+def test_the_delta_zero_reference_through_the_solver_is_e25s_case1_error():
+    # The medium, the reference and its boundary values plug into the 2016
+    # solver unchanged: on the smooth medium at δ = 0 the aware operator's
+    # error against the reference is port notes §2.4's 1.60e-5 at 1250 nodes,
+    # and it equals the error against case1_exact to the reference's 4e-13.
+    domain = with_smooth_edges(case1(), 0.0)
+    nodes = build_node_set(domain, 1250)
+    st = build_stencils(nodes, domain, interface=BOUNDARY)
+    op = interface_aware_operator(nodes, domain.material, st)
+    ref = case1_reference(0.0)
+    u = solve_equilibrium(op, nodes, ref.boundary_values())
+    err = rms_error(u, ref(nodes.x, nodes.y))
+    assert err == pytest.approx(1.60e-5, rel=0.01)
+    assert err == pytest.approx(
+        rms_error(u, case1_exact()(nodes.x, nodes.y)), abs=1e-12
+    )
