@@ -55,7 +55,8 @@ src/heat_interfaces/   library (filled in by the epics; module names are the pla
                        curvature, multi-interface translation), operators, solve
                        (direct; the reduced interior system, gmres/bicgstab,
                        spilu), precondition (DDR, Appendix B's P), march (BD4),
-                       exact, fd4 (Cartesian Dx A Dx + Dy A Dy), resample (fine →
+                       exact (separable; the sheared Fourier × Chebyshev product
+                       grid), fd4 (Cartesian Dx A Dx + Dy A Dy), resample (fine →
                        coarse through the fine stencils; cached references),
                        seeds, treatments
 scripts/               drivers writing to outputs/; publish_issues.py;
@@ -97,9 +98,11 @@ uv run python scripts/<driver>.py         # figures into outputs/ (defaults run 
 - Naive baselines are assembled as `Dx A Dx` (+ `Dy A Dy`), dissertation
   eq. 76, never as a direct `(α u_x)_x` stencil.
 - References: 1-D elliptic by quadrature; 1-D parabolic and 2-D flat by
-  Chebyshev collocation on the separated 1-D problem; 2-D curved by a fine
-  jump-aware run (δ = 0) or a Fourier × Chebyshev product grid (δ > 0). Cache
-  them under `outputs/`.
+  Chebyshev collocation on the separated 1-D problem; case 2's sine pair by
+  the sheared Fourier × Chebyshev product grid at every δ, the jump included
+  (E4.7; the 160,000-node jump-aware run is its δ = 0 cross-check); case 3 by
+  a fine jump-aware run. Cache them under `outputs/`, except what solves in
+  seconds (the separable and product-grid references do).
 - Default driver parameters run in seconds; bigger runs sit behind flags and
   record their run times in the notes.
 - Notes: `docs/port-notes.md` for reproductions (2016 number next to ours),

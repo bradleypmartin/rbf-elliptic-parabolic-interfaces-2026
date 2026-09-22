@@ -206,6 +206,10 @@ otherwise. `CLAUDE.md` carries the working set.
   1-D in y, solved to 1e−12. 2-D curved, δ = 0: a fine jump-aware run
   (160,000 nodes as in 2016). 2-D curved, δ > 0: Fourier in x × Chebyshev in
   y on a product grid, since α is smooth there. Case 3: a fine jump-aware run.
+  *Revised in E4.7 (#38, Brad, 2026-09-22):* the product grid serves case 2 at
+  every δ, the jump included, in sheared coordinates that make both sine
+  curves coordinate lines (stiff note §4.6); the 160,000-node run is its
+  cross-check and is 4.3e-9 RMS from it.
 - **D5 Time integration** is BD4 with dt ∝ h and one sparse LU per operator,
   as in the dissertation, for every parabolic run that is compared with 2016.
   Stiff-edge parabolic studies may add an SDIRK or Crank–Nicolson line only if
@@ -263,6 +267,13 @@ otherwise. `CLAUDE.md` carries the working set.
 - **R6 Runtime.** The curved-δ product-grid references and the s-sweep are
   the expensive parts. Cache under `outputs/`, keep the reference builds
   behind flags, and record run times in the notes as the companion did.
+- **R7 The straight-feature seeds need α to vary along the normal only**
+  (found by E4.7, stiff note §4.6). Where α varies along an unresolved edge —
+  a curved edge, or a piece that varies tangentially — the frozen normal
+  profile is O(1)-inconsistent and route (a) is first order: at δ = 0 it is
+  EABE Fig. 10's flat-interface line. E4.11 builds the tangential chain; if
+  it does not restore the order, the manuscript scopes the 2-D seeds to
+  features whose α varies along the normal alone and says so.
 
 ## 6. Epics and tickets
 
@@ -746,10 +757,31 @@ jump-aware run for δ = 0 and a Fourier × Chebyshev product-grid solve for
 **Done when**
 - Curved numbers compared with the flat ones at equal δ; route (a)'s geometry error located or shown absent on these node sets.
 
+### E4.11 stiff 2-D: tangential seeds for a curved or tangentially varying edge (#81)
+Labels: enhancement
+Size: L
+Depends on: E4.7
+
+E4.7 found route (a) O(1)-inconsistent on case 2 (stiff note §4.6): the
+frozen normal profile puts the seeds' kink on the tangent line and imposes
+the foot point's flux ratio at every node, so wherever α varies along an
+unresolved edge the error is not in the seed span. Build §3.5's tangential
+chain in the curve's own coordinates (arclength, normal distance): the metric
+`1 − κ d` and α expanded in the tangential coordinate along the normal line,
+the levels coupled (about 55 levels and 110 states at degree 4, not 44), and
+the moment right-hand sides from the true curvilinear operator. The
+osculating-circle chain (the metric frozen at the foot point) is its first
+rung and is exact on concentric circles with constant pieces. Design first,
+as §3 was: a §3.10 in the stiff note before the code. Numbered after E4.10
+because the plan's ticket ids are numeric; it runs before E4.8.
+
+**Done when**
+- The chain passes its checks (RingMode through concentric circles, the δ = 0 limit against E2.3-curved on case 2 and on E4.7's two split geometries, the truncation probe converging at the bulk rows' rate), and its line on E4.7's cached curved sweep answers H9 again: fourth order within a small factor of the flat numbers, or the notes say what still stalls.
+
 ### E4.8 stiff 2-D: the doubly sub-grid ring and the extremizing sweep with seeds (#39)
 Labels: enhancement
 Size: M
-Depends on: E4.7
+Depends on: E4.11
 
 Case 3's ring with smooth edges (thickness w and edge width δ both below h),
 seeds marched through both edges; the s-sweep of E2.9 rerun with seeds: does

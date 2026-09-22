@@ -13,11 +13,15 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from heat2d_stiff import (  # noqa: E402
+    CASE1,
+    CURVED_CACHE,
+    CURVED_CACHE_META,
     KNEE_CACHE,
     KNEE_CACHE_META,
     OPERATORS,
     QUANTITIES,
     STUDY_DELTAS,
+    Geometry,
     curve_level,
     edge_diagnostics,
     knee_key,
@@ -33,11 +37,13 @@ from heat2d_stiff import (  # noqa: E402
 from heat_interfaces.heat1d.domain import TANH_REACH  # noqa: E402
 from heat_interfaces.heat2d import (  # noqa: E402
     BOUNDARY,
+    ProductGridReference,
     SmoothBand,
     build_node_set,
     build_stencils,
     case1,
     case1_reference,
+    case2,
     seed_operator,
 )
 
@@ -373,3 +379,98 @@ def test_the_delta_zero_regression_run(tmp_path, capsys):
         (row,) = lines[0.0]
         assert row["seeds/rms"] == pytest.approx(row["construction/rms"], rel=1e-7)
         assert "seeds-plain/rms" not in row
+
+
+# --- E4.7: the curved feature ---------------------------------------------------------
+
+
+def test_the_geometries_keep_case_ones_keys_and_cache():
+    assert CASE1.is_case1 and CASE1.tag == "" and CASE1.domain() == case1()
+    assert CASE1.cache() == (KNEE_CACHE, KNEE_CACHE_META)
+    two = Geometry(0.02, "sine")
+    assert two.name == "case 2" and two.domain() == case2()
+    assert two.cache() == (CURVED_CACHE, CURVED_CACHE_META)
+    key = knee_key("elliptic", 0.0, 1250, "seeds", 0, 100, 0.1)
+    assert knee_key("elliptic", 0.0, 1250, "seeds", 0, 100, 0.1, two.tag) == (
+        f"a0.02 sine {key}"
+    )
+    assert isinstance(two.reference(0.0, 0.0), ProductGridReference)
+    assert two.reference(0.0, 0.0) is two.reference(0.0, 0.0)
+    with pytest.raises(ValueError, match="inside"):
+        Geometry(0.02, "linear")
+
+
+def test_the_curved_sweep_at_the_two_smallest_counts(tmp_path, capsys):
+    # E4.7 (#38), stiff note §4.6: route (a) on case 2. At δ = 0 the
+    # construction is E2.6's curved line (3.06e-5 at 1250 nodes, now against
+    # the product grid) and route (a) is not: its seed rows are O(1)-wrong
+    # where alpha varies along the edge, 3.80e-4 at 1250 and the probe's
+    # seeded rows barely converging while E2.3's crossing rows do.
+    argv = [
+        "--mode",
+        "seeds",
+        "--amplitude",
+        "0.02",
+        "--counts",
+        "900",
+        "1250",
+        "--deltas",
+        "0",
+        "0.0025",
+        "--operators",
+        "construction",
+        "seeds",
+        "--outputs",
+        str(tmp_path),
+    ]
+    tables = main(argv)
+    out = capsys.readouterr().out
+    assert "route (a) at δ = 0 against the curved construction" in out
+    assert "H9's probe" in out and "case 2 over case 1" in out
+    assert (tmp_path / CURVED_CACHE).exists() and not (tmp_path / KNEE_CACHE).exists()
+    assert (tmp_path / "heat2d_stiff_seeds_a0.02_sine.png").exists()
+    elliptic = tables["sweep"]["elliptic"]
+    jump = {r["n"]: r for r in elliptic[0.0]}
+    assert jump[1250]["construction/rms"] == pytest.approx(3.059e-5, rel=1e-3)
+    assert jump[1250]["seeds/rms"] == pytest.approx(3.804e-4, rel=1e-3)
+    probe = [r["seeds/probe_crossing"] for r in elliptic[0.0]]
+    built = [r["construction/probe_crossing"] for r in elliptic[0.0]]
+    assert probe[1] / probe[0] > 0.8 and built[1] / built[0] < 0.6
+    for lines in tables["sweep"].values():
+        # Both problems: 12× the construction at the jump, and still below the
+        # δ = 0 construction on a 0.0025 edge, which it reads as a jump.
+        assert lines[0.0][1]["seeds/rms"] > 5.0 * lines[0.0][1]["construction/rms"]
+        for r in lines[0.0025]:
+            assert r["seeds/rms"] < r["construction/rms"]
+    again = main(argv)
+    assert again["sweep"] == tables["sweep"]
+
+
+def test_the_curved_reference_table(tmp_path, capsys):
+    rows = main(
+        [
+            "--mode",
+            "references",
+            "--amplitude",
+            "0.02",
+            "--deltas",
+            "0",
+            "0.0025",
+            "--growth",
+            "0",
+            "--outputs",
+            str(tmp_path),
+        ]
+    )["references"]
+    assert "product-grid reference" in capsys.readouterr().out
+    assert [r["delta"] for r in rows] == [0.0, 0.0025]
+    for r in rows:
+        assert r["n_x"] < 1e-11 and r["elements_check"] < 1e-11
+        assert "e26_rms" not in r  # E2.6's run is not under tmp_path
+    assert 3e-3 < rows[1]["distance"] < 3e-2
+
+
+def test_the_curved_geometries_run_the_seed_sweep_and_the_references_only():
+    for mode in ("naive", "stencils", "all"):
+        with pytest.raises(SystemExit):
+            main(["--mode", mode, "--amplitude", "0.02"])

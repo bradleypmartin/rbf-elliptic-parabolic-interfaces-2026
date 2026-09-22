@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from math import factorial, sqrt
+from math import atan, cos, factorial, hypot, sin, sqrt
 from typing import Literal, Protocol
 
 import numpy as np
@@ -74,9 +74,30 @@ class Curve(Protocol):
 
     def signed_distance(self, x: np.ndarray, y: np.ndarray) -> np.ndarray: ...
 
+    def signed_distance_at(self, x: float, y: float) -> float:
+        """``signed_distance`` at one point, in floats (the seed march's, E4.4–E4.7)."""
+        ...
+
 
 def _as_float(*arrays: np.ndarray) -> tuple[np.ndarray, ...]:
     return tuple(np.asarray(a, dtype=float) for a in arrays)
+
+
+NEWTON_STEPS = 12
+"""Newton iterations of the foot-point and crossing searches (quadratic at once)."""
+
+FOOT_REACH, FOOT_CURVATURE = 2.0, 0.8
+"""Route (a)'s geometric guard (``SmoothBand.normal_profile``, E4.7).
+
+The march reads the foot point's normal line out to about one stencil radius
+beyond the anchor; ``κ_max (|d_e| + FOOT_REACH h_s)`` must stay below
+``FOOT_CURVATURE``, with ``κ_max`` the curve's largest curvature
+(``curvature_bound``), so that the whole line stays inside the curve's focal
+distance with a margin of 1.25: there the foot point does not move along the
+line (``NormalProfile.foot``) and the line meets the curve once. Case 2 at
+amplitude 0.02 reaches 0.37 at δ ≤ 0.01 and 0.68 at δ = 0.04 on 1250 nodes; a
+tighter curve, or a coarser set, is refused rather than marched.
+"""
 
 
 class _Graph:
@@ -95,6 +116,20 @@ class _Graph:
 
     def second(self, x: np.ndarray) -> np.ndarray:
         raise NotImplementedError
+
+    def height_at(self, x: float) -> float:
+        """``height`` at one point in floats; subclasses override the array call."""
+        return float(self.height(np.array([x]))[0])
+
+    def curvature_bound(self) -> float:
+        """The largest ``|curvature|`` anywhere on the curve (route (a)'s guard)."""
+        raise NotImplementedError
+
+    def slope_at(self, x: float) -> float:
+        return float(self.slope(np.array([x]))[0])
+
+    def second_at(self, x: float) -> float:
+        return float(self.second(np.array([x]))[0])
 
     def level(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         x, y = _as_float(x, y)
@@ -125,7 +160,7 @@ class _Graph:
         """
         x, y = _as_float(x, y)
         s = np.array(x, dtype=float, copy=True)
-        for _ in range(12):
+        for _ in range(NEWTON_STEPS):
             c, cp, cpp = self.height(s), self.slope(s), self.second(s)
             g = periodic_dx(s - x) + (c - y) * cp
             gp = 1.0 + cp**2 + (c - y) * cpp
@@ -140,6 +175,31 @@ class _Graph:
         s = self.closest(x, y)
         nx, ny = self.normal(s)
         return nx * periodic_dx(x - s) + ny * (y - self.height(s))
+
+    def signed_distance_at(self, x: float, y: float) -> float:
+        """``closest`` and ``signed_distance`` step for step, in floats.
+
+        The same Newton iteration from ``s = x`` and the same projection on
+        the unit normal, with ``math`` in place of NumPy, so it is
+        ``signed_distance`` to rounding at a few microseconds a call instead
+        of tens: the seed march reads alpha along a normal line thousands of
+        times per stencil (E4.4's float path, route (a) of E4.7).
+        """
+        s = x
+        for _ in range(NEWTON_STEPS):
+            c, cp, cpp = self.height_at(s), self.slope_at(s), self.second_at(s)
+            step = (_periodic_dx(s - x) + (c - y) * cp) / (1.0 + cp**2 + (c - y) * cpp)
+            s -= step
+            if abs(step) < 1e-15:
+                break
+        s %= PERIOD
+        theta = atan(self.slope_at(s))
+        return -sin(theta) * _periodic_dx(x - s) + cos(theta) * (y - self.height_at(s))
+
+
+def _periodic_dx(dx: float) -> float:
+    """``neighbors.periodic_dx`` for one float (Python's ``%`` floors as NumPy's)."""
+    return (dx + PERIOD / 2) % PERIOD - PERIOD / 2
 
 
 @dataclass(frozen=True)
@@ -156,11 +216,25 @@ class FlatLine(_Graph):
 
     second = slope
 
+    def height_at(self, x: float) -> float:
+        return float(self.c)
+
+    def curvature_bound(self) -> float:
+        return 0.0
+
+    def slope_at(self, x: float) -> float:
+        return 0.0
+
+    second_at = slope_at
+
     def closest(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         return wrap_x(x)
 
     def signed_distance(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         return self.level(x, y)
+
+    def signed_distance_at(self, x: float, y: float) -> float:
+        return y - self.c
 
 
 @dataclass(frozen=True)
@@ -186,6 +260,19 @@ class SineGraph(_Graph):
     def second(self, x: np.ndarray) -> np.ndarray:
         x = np.asarray(x, dtype=float)
         return -self.amplitude * self.wavenumber**2 * np.sin(self.wavenumber * x)
+
+    def height_at(self, x: float) -> float:
+        return self.c + self.amplitude * sin(self.wavenumber * x)
+
+    def curvature_bound(self) -> float:
+        """``|a| k²``, at the crests, where the slope vanishes."""
+        return abs(self.amplitude) * self.wavenumber**2
+
+    def slope_at(self, x: float) -> float:
+        return self.amplitude * self.wavenumber * cos(self.wavenumber * x)
+
+    def second_at(self, x: float) -> float:
+        return -self.amplitude * self.wavenumber**2 * sin(self.wavenumber * x)
 
 
 @dataclass(frozen=True)
@@ -233,6 +320,9 @@ class Circle:
     def signed_distance(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         return self.level(x, y)
 
+    def signed_distance_at(self, x: float, y: float) -> float:
+        return hypot(x - self.cx, y - self.cy) - self.radius
+
 
 # --- materials --------------------------------------------------------------
 
@@ -271,6 +361,9 @@ class Constant2D:
         a[0, 0] = self.value
         return a
 
+    def alpha_at(self, x: float, y: float) -> float:
+        return float(self.value)
+
 
 def _sine_taylor(k: float, x0: float, degree: int) -> np.ndarray:
     """Coefficients of ``sin(k x)`` about ``x0``: ``k^m sin(k x0 + mπ/2) / m!``."""
@@ -291,6 +384,10 @@ class SineProduct:
     def alpha(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         x, y = _as_float(x, y)
         return self.offset + self.amplitude * np.sin(self.kx * x) * np.sin(self.ky * y)
+
+    def alpha_at(self, x: float, y: float) -> float:
+        """``alpha`` at one point in floats, for the seed march (``_piece_at``)."""
+        return self.offset + self.amplitude * sin(self.kx * x) * sin(self.ky * y)
 
     def gradient(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         x, y = _as_float(x, y)
@@ -459,24 +556,33 @@ class SmoothBand:
     def alpha(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         return self._blend(x, y)[0]
 
-    def alpha_at(self, x: float, y: float) -> float:
+    def alpha_at(
+        self, x: float, y: float, known: tuple[int, float] | None = None
+    ) -> float:
         """``alpha`` at one point, in floats: ``_blend``'s value without its gradient.
 
         For the seed march (E4.4), which reads alpha along a line a thousand
         times per stencil; through the array code each call costs about
         60 µs across an edge. The same steps in the same order, with
-        ``edge_value`` for ``edge_blend`` and a flat line's level for its
-        signed distance, so it is ``alpha`` to rounding (bit for bit where
-        ``math.exp`` and NumPy's ``exp`` agree).
+        ``edge_value`` for ``edge_blend`` and each curve's float
+        ``signed_distance_at`` (a flat line's level, bit for bit), so it is
+        ``alpha`` to rounding (bit for bit where ``math.exp`` and NumPy's
+        ``exp`` agree). ``known = (j, d)`` supplies interface ``j``'s distance
+        instead of computing it: on the normal line through a foot point of
+        a curve the distance to that curve is linear in the arc along the
+        line, so route (a)'s march (E4.7) pays the foot-point Newton only for
+        the other curve.
         """
         if self.delta == 0.0:
             return float(self.band.alpha(np.array([x]), np.array([y]))[0])
         a = _piece_at(self.outside, x, y)
-        for curve, piece in ((self.lower, self.inside), (self.upper, self.outside)):
-            if isinstance(curve, FlatLine):
-                d = y - curve.c
+        for j, (curve, piece) in enumerate(
+            ((self.lower, self.inside), (self.upper, self.outside))
+        ):
+            if known is not None and known[0] == j:
+                d = known[1]
             else:
-                d = float(curve.signed_distance(np.array([x]), np.array([y]))[0])
+                d = curve.signed_distance_at(x, y)
             a = edge_value(a, _piece_at(piece, x, y), d / self.delta)
         return a
 
@@ -511,27 +617,52 @@ class SmoothBand:
         normal at interface ``j``'s foot point nearest it (``frame_at``'s
         ``y'``, into ``level > 0``), in units of the stencil radius
         ``scale``; the stops are both curves' crossings of the line and, at
-        δ > 0, their ``± EDGE_STOP δ`` flanks (``heat1d.stiff``'s, formed as
-        its ``_stops`` forms them, so a flat edge is the 1-D march's stops
-        bit for bit). Flat interfaces only: the crossings of a curved one
-        are route (a)'s Newton iteration, E4.7 (#38), and the ring's widths
-        E4.8 (#39).
+        δ > 0, their ``± EDGE_STOP δ`` flanks. A flat interface's are
+        formed as ``heat1d.stiff``'s ``_stops`` forms them, so case 1 is the
+        1-D march's stops bit for bit. A sine graph's crossing is route
+        (a)'s Newton iteration on its level along the line (E4.7, #38,
+        ``_line_crossing``), and its flanks are ``EDGE_STOP δ`` in its own
+        normal distance to first order, which is all a restart point needs;
+        on a curved foot curve the profile also carries the anchor's
+        distance to it (``NormalProfile.foot``), exact along the line, and a
+        line that would reach toward the curve's focal distance is refused
+        (``FOOT_CURVATURE``). The ring's circles are E4.8's (#39), marched as
+        widths.
         """
+        if not all(isinstance(c, _Graph) for c in self.interfaces):
+            raise NotImplementedError(
+                "normal profiles cross graphs only; the ring's circles are "
+                "E4.8 (#39), marched as widths from the outer radius"
+            )
         curve = self.interfaces[j]
         s = curve.closest(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
         nx, ny = (float(c) for c in curve.normal(s))
+        foot = None
+        if not isinstance(curve, FlatLine):
+            d_e = curve.signed_distance_at(float(x), float(y))
+            reach = curve.curvature_bound() * (abs(d_e) + FOOT_REACH * scale)
+            if reach >= FOOT_CURVATURE:
+                raise ValueError(
+                    f"route (a)'s normal line reaches {reach:.2f} of the curve's "
+                    f"focal distance, past FOOT_CURVATURE = {FOOT_CURVATURE}: the "
+                    "foot point is not fixed along it"
+                )
+            foot = (j, d_e)
         flanks = (-EDGE_STOP * self.delta, 0.0, EDGE_STOP * self.delta)
         stops = []
         for other in self.interfaces:
-            if not isinstance(other, FlatLine):
-                raise NotImplementedError(
-                    "normal profiles cross flat interfaces only; curved crossings "
-                    "are E4.7 (#38), the ring's E4.8 (#39)"
-                )
+            if isinstance(other, FlatLine):
+                for f in flanks if self.delta > 0.0 else (0.0,):
+                    stops.append(((other.c + f) - float(y)) / (scale * ny))
+                continue
+            centre = _line_crossing(other, float(x), float(y), nx, ny, scale)
+            px = float(x) + scale * centre * nx
+            ox, oy = (float(c) for c in other.normal(np.array(px % PERIOD)))
+            cosine = abs(nx * ox + ny * oy)
             for f in flanks if self.delta > 0.0 else (0.0,):
-                stops.append(((other.c + f) - float(y)) / (scale * ny))
+                stops.append(centre + f / (scale * cosine))
         stops = np.unique(stops)
-        line = NormalProfile(float(x), float(y), nx, ny, float(scale), stops, ())
+        line = NormalProfile(float(x), float(y), nx, ny, float(scale), stops, (), foot)
         if self.delta > 0.0:
             pieces = (self,) * (stops.size + 1)
         else:
@@ -541,6 +672,33 @@ class SmoothBand:
             regions = self.region_index(*line.point(probes))
             pieces = tuple(self.region_piece(int(r)) for r in regions)
         return replace(line, pieces=pieces)
+
+
+def _line_crossing(
+    curve: _Graph, x0: float, y0: float, nx: float, ny: float, scale: float
+) -> float:
+    """Where the line ``(x0, y0) + scale η (nx, ny)`` meets the graph, in η.
+
+    Newton on the level ``y − c(x)`` along the line from the crossing of the
+    graph's value at ``x0``, the level's derivative along the line being
+    ``scale (ny − c′ nx)``. A normal line of a case-2 curve is within 7.2°
+    of vertical, so it meets each sine graph once and the iteration is
+    quadratic from the first step; one that has not settled to 1e-12 in
+    ``NEWTON_STEPS`` is refused rather than returned.
+    """
+    eta = (curve.height_at(x0) - y0) / (scale * ny)
+    for _ in range(NEWTON_STEPS):
+        px, py = x0 + scale * eta * nx, y0 + scale * eta * ny
+        step = (py - curve.height_at(px)) / (scale * (ny - curve.slope_at(px) * nx))
+        eta -= step
+        if abs(step) < 1e-15:
+            break
+    if abs(step) > 1e-12:
+        raise RuntimeError(
+            f"the normal line's crossing did not converge in {NEWTON_STEPS} "
+            f"Newton steps (last step {step:.1e})"
+        )
+    return eta
 
 
 @dataclass(frozen=True)
@@ -563,6 +721,7 @@ class NormalProfile:
     scale: float
     stops: np.ndarray
     pieces: tuple[Piece2D | SmoothBand, ...]
+    foot: tuple[int, float] | None = None
 
     def point(self, eta: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         step = self.scale * np.asarray(eta, dtype=float)
@@ -594,16 +753,25 @@ class NormalProfile:
         """``η ↦ alpha(η, segment)`` in floats, the march's right-hand side (E4.4).
 
         A constant piece is its value; the smooth band goes through
-        ``SmoothBand.alpha_at`` and any other piece through its own
-        ``alpha``, at ``point``'s arithmetic, so the function is ``alpha(η,
-        segment)`` to rounding at a few microseconds a call.
+        ``SmoothBand.alpha_at`` (with the foot curve's distance from ``foot``
+        when the line has one) and any other piece through ``_piece_at``, at
+        ``point``'s arithmetic, so the function is ``alpha(η, segment)`` to
+        rounding at a few microseconds a call.
         """
         piece = self.pieces[segment]
         if isinstance(piece, Constant2D):
             value = float(piece.value)
             return lambda eta: value
-        at = piece.alpha_at if isinstance(piece, SmoothBand) else _point_alpha(piece)
         x0, y0, nx, ny, scale = self.x0, self.y0, self.nx, self.ny, self.scale
+        if isinstance(piece, SmoothBand) and self.foot is not None:
+            j, d0 = self.foot
+
+            def along(eta: float) -> float:
+                step = scale * eta
+                return piece.alpha_at(x0 + step * nx, y0 + step * ny, (j, d0 + step))
+
+            return along
+        at = piece.alpha_at if isinstance(piece, SmoothBand) else _point_alpha(piece)
 
         def alpha(eta: float) -> float:
             step = scale * eta
@@ -613,9 +781,12 @@ class NormalProfile:
 
 
 def _piece_at(piece: Piece2D, x: float, y: float) -> float:
-    """One piece's alpha at one point; a constant without the array call."""
+    """One piece's alpha at one point: its float ``alpha_at`` when it has one."""
     if isinstance(piece, Constant2D):
         return float(piece.value)
+    at = getattr(piece, "alpha_at", None)
+    if at is not None:
+        return at(x, y)
     return float(piece.alpha(np.array([x]), np.array([y]))[0])
 
 
