@@ -874,3 +874,274 @@ constant to 5 % between δ/h = 0.01 and 0.001 and below half of it at
 δ/h = 1, and the driver's figure and cache;
 `tests/heat1d/test_exact.py` pins the closed form against the quadrature
 gap in both directions of the contrast.
+
+### 2.3 The seed stencils (E3.4, #29)
+
+![knee, with the seeds](figures/heat1d_stiff_knee.png)
+
+`heat1d/stiff.py`: the chain of §1.2 marched as §1.3 prescribes, and the
+seed operator on the knee sweep of §2.2 as its third line (blue; the δ = 0
+construction moves to purple). The figure above replaces §2.2's. The
+implementation, so the numbers below can be read:
+
+- **The march.** One first-order system in `(φ_k, ψ_k = α φ_k′)`, DOP853
+  at rtol 1e-13 / atol 1e-15 (`SEED_RTOL`, `SEED_ATOL`) in the stencil
+  coordinate `ξ = (x − x_e)/h_s`, `h_s = max |x_i − x_e|` (the companion's
+  half-width normalisation, `ξ_i = 0, ±½, ±1` on an interior row), with a
+  fresh segment at every edge centre and at `±10δ` from it (`EDGE_STOP`).
+  On each segment α is read from the piece of the medium's element that
+  contains it (`Medium1D.elements`), which is what makes the evaluation
+  one-sided at a jump: δ = 0 is marched like any other width, the centre a
+  stop across which `(φ, ψ)` is continuous, and it reproduces E1.2's
+  algebra to rounding (P4 below) rather than being dispatched to it.
+- **Batched rows.** Every seeded row whose window has the same node pattern
+  `ξ_i` marches in one system (`seed_profiles`, `(rows, 2, 5)` states):
+  the rows' stops, spaced `h/h_s = ½` apart in ξ, union to at most six per
+  side, so an operator costs some sixteen `solve_ivp` calls whatever the
+  count of seeded rows: 0.11 s for the 1284 rows of δ = 0.04 at 1600 nodes
+  (1442 on eq. 75), 0.04 s for the 8 rows of δ = 0.0025 at 100. The batch
+  agrees with single-row marches to 6e-15 on φ where the edge is resolved
+  and to 2e-13 where it is not (DOP853's error norm is an RMS over the
+  batch, so the few rows crossing the steep part are controlled to a factor
+  sqrt(rows) more loosely); the weights agree to 7e-12 relative at worst
+  and the solutions to rounding (`test_the_batched_march_agrees_with_
+  single_stencils`; the equilibrium errors below are the same whether the
+  rows are marched together, in eights or singly).
+- **Which rows.** Those whose window span overlaps `(x_c − 20δ, x_c + 20δ)`,
+  `TANH_REACH` (E3.2's bit-exact reach, not §1.3's 19δ): at δ = 0 exactly
+  `straddling_windows`; 8 rows at δ = 0.0025 and 84 at δ = 0.04 on 100
+  nodes; every row, the one-sided end rows in batches of their own, once
+  the reach covers the domain. `reach` is the operator's one knob.
+- **Cost of the study.** The driver reruns in 3.7 s with everything
+  cached and took 18 s to add the 24 seed marches of the ramp sweep to the
+  knee cache; the 41 tests of `tests/heat1d/test_stiff.py` and
+  `tests/test_heat1d_stiff.py` run in 17 s.
+
+**P4, the weights (holds).** Constant α = 0.7 gives 0.7 × Fornberg's
+second-derivative weights to 1e-15 on the centred window and 2e-16 with
+the centre off the nodes (the chain is nilpotent, so the order-8 march
+reproduces the monomials exactly). On the MATLAB window of §1.4 (the
+`1/9 | 1` jump half a cell right of the node, h = 0.01), `max |w_seed −
+w_jump| / max |w_jump|` against E1.2's weights, with the stencil solve's
+condition number as built and with the rows of A scaled to unit max norm
+(the seeds carry the normalisation `α_e^{⌈k/2⌉}`, §1.2, which the weights
+never see):
+
+| δ/h | difference | cond A | rows scaled |
+| --- | --- | --- | --- |
+| 0 | 7e-16 | 90.3 | 90.3 |
+| 1 | 0.843 | 100.4 | 147.0 |
+| 0.5 | 0.465 | 137.9 | 206.7 |
+| 0.1 | 0.114 | 114.2 | 114.2 |
+| 0.01 | 0.0107 | 92.2 | 92.2 |
+| 0.001 | 0.00107 | 90.5 | 90.5 |
+
+§1.4's scratch numbers to three digits (84 %, 47 %, 11 %, 1.1 %, 0.11 %),
+first order in δ/h (ratios 10.6 and 10.0 over the last two decades), and
+the δ = 0 march equal to the translated basis to rounding at offsets ½,
+3/2 and 0 cells (the last with the jump *on* the evaluation node, `α_e`
+the owner's). The double-cross of P8 is the same limit twice over.
+
+On eq. 75 the difference does not go to zero. At the layer's edge on a
+node (x = 0, 201 nodes, `α_e` = 0.1 the layer's, `α′/α = 25` on that side)
+it is 2.24, 2.04, 1.69, 1.31, 1.26 at δ/h = 1, ½, 0.1, 0.01, 0.001 and
+1.25 at δ = 0: the `O(h α′/α)` floor of §1.4, at which E1.2's
+degree-4-truncated operator on plain monomials and the exact chain part
+company. It is first order in h (at x = 0.5: 1.75, 1.25, 0.50, 0.22 for
+h = 0.02, 0.01, 0.005, 0.0025), O(1) on every grid of the study, and both
+operators are fourth order on solutions (P6, P7): the two spaces are
+different and equally good, as §1.4 said, and the seeds' one is the
+better of the two in the solution error by 6–44× (below).
+
+**P5, conditioning (holds, with the constant).** `cond A` in the stencil
+coordinate is 23.5 at constant α for the centred window (the Vandermonde
+value) and, on the MATLAB window, 90 at every δ ≤ 0.01 h (the translated
+basis' own value at δ = 0), rising to 138 at δ = h/2 (207 rows-scaled) and
+back to 24 for δ ≥ 10 h, where the seeds are the monomials again (§1.4's
+last paragraph): within a factor six of the Vandermonde value from δ =
+1e-5 h to 100 h, the companion's "20 to 60" at contrast 4 becoming 24 to
+138 at contrast 9. On eq. 75's edge node the as-built numbers are 84 to
+648 and the rows-scaled 117 to 452: the sinusoid's `h α′/α = 0.25` bends
+every seed away from `ξ^k` inside the window, and the δ = 0 value (648) is
+inflated by `α_e` being the owner's 0.1 rather than the blend's 0.55, a
+row scaling the weights do not see (the rows-scaled 452 against 450 at
+δ = 0.001 h). No solve in the study is threatened; the equilibrium
+residuals below are rounding.
+
+**P6, equilibrium (holds on constant pieces; on eq. 75 it is the plain
+rows' line).** On the MATLAB medium the seed line is exact at every δ:
+
+| n | δ = 0 | δ = 0.04 | δ = 0.01 | δ = 0.0025 | E1.2 at δ = 0 |
+| --- | --- | --- | --- | --- | --- |
+| 50 | 1.4e-14 | 1.7e-14 | 1.9e-14 | 4.5e-14 | 6.2e-15 |
+| 100 | 5.9e-14 | 2.2e-14 | 4.2e-14 | 5.3e-14 | 5.1e-14 |
+| 200 | 2.6e-13 | 3.2e-13 | 2.2e-13 | 2.6e-13 | 2.9e-13 |
+| 400 | 1.2e-12 | 4.7e-14 | 8.9e-13 | 1.1e-12 | 6.3e-13 |
+| 800 | 1.2e-11 | 1.2e-12 | 8.8e-12 | 1.0e-11 | 1.0e-11 |
+| 1600 | 2.3e-11 | 3.8e-11 | 1.7e-11 | 2.3e-11 | 1.9e-11 |
+
+Below 1e-12 to 400 nodes at every δ, then growing exactly as E1.2's own
+δ = 0 line does (last column): the direct solve's conditioning, not the
+seeds. The seed rows' residual on the exact solution, `h² max |L_h u_δ|`
+over the seeded rows at 200 nodes, is 1.8e-16, 2.5e-16, 9.7e-17 at δ/h =
+1, ½, 0.1 and 2.4e-13, 5.8e-13 at 0.01, 0.001 (against the δ = 0 rows'
+6.6 … 0.024 of §2.2): rounding while the march crosses the edge in a few
+steps, and the march's own floor once it takes many, which the solution
+sees at δ ≲ h/40 (1.0e-11 at 101 nodes and δ = 5e-4, 4e-11 at 100 nodes
+and δ = 1e-4; tightening rtol to SciPy's 100 eps changes neither, and
+§1.4's remark that an edge below 1e-5 h is better served by the jump
+weights stands, with the bound nearer 1e-2 h for 1e-12 work). The
+ticket's "exact to 1e-12 at every δ" is met where the direct solve allows
+it and for δ ≳ h/40.
+
+On eq. 75 the seed rows are exact too, and the line is the error of the
+rows that are *not* seeded, which depends on δ through the reach:
+
+| n | δ = 0 | δ = 0.04 | δ = 0.01 | δ = 0.0025 | E1.2 at δ = 0 |
+| --- | --- | --- | --- | --- | --- |
+| 101 | 9.69e-5 | 2.2e-13 | 2.0e-14 | 5.05e-6 | 4.25e-3 |
+| 201 | 1.58e-5 (2.61) | 6.2e-13 | 3.6e-10 | 8.65e-7 (2.55) | 2.45e-4 (4.12) |
+| 401 | 1.79e-6 (3.14) | 1.8e-13 | 8.0e-11 | 7.54e-8 (3.52) | 1.67e-5 (3.88) |
+| 801 | 1.57e-7 (3.51) | 9.6e-12 | 6.7e-12 | 5.61e-9 (3.75) | 1.13e-6 (3.89) |
+| 1601 | 1.18e-8 (3.74) | 3.4e-11 | 3.4e-11 | 3.63e-10 (3.95) | 7.39e-8 (3.93) |
+
+At δ = 0.04 the reach (0.8) covers the layer and the solve is exact at
+every count. At δ = 0.01 it covers it at 101 nodes (2e-14) and from 201
+on leaves the rows with `x ∈ (0.2, 0.3)` plain: FD4 on the sinusoid at
+h = 0.01, pre-asymptotic (`u⁽⁶⁾ ∼ (2π)⁶`), 3.6e-10, falling to the solve's
+floor by 801; seeding every row (`reach = 40`) at 201 nodes returns
+1.3e-13. At δ = 0.0025 the reach is 0.05 and the layer's interior is plain
+from 101 nodes on: the line is the sinusoid's own FD4 error with the rows
+nearest the edges (`h α′/α = 0.5` at 101 nodes) removed, rate 2.55 → 3.95
+as those rows become asymptotic. At δ = 0 only the six straddling rows are
+seeded and the line is 44× below E1.2's at 101 nodes and 6× at 1601, at
+rates 2.6 → 3.7 against E1.2's 3.9–4.1: E1.2's error was dominated by its
+straddling rows' `O(h³)` local term, the seeds' by the plain rows next to
+them. So "one δ-independent fourth-order line equal to the smooth
+problem's" (§1.9) is right about the seeded rows and wrong about the
+line, which is whichever plain rows the reach leaves inside the layer;
+the note's prediction assumed the seeded set did not move with δ.
+
+**P7, parabolic (holds; three digits at δ = 0.0025, 1.5 % at 0.01).** The
+ramp problem at t = 2, BD4 at dt = h, against the true-δ reference:
+
+| n | δ = 0 | δ = 0.04 | δ = 0.01 | δ = 0.0025 | construction at 0.0025 |
+| --- | --- | --- | --- | --- | --- |
+| *MATLAB medium* | | | | | |
+| 50 | 2.487e-6 | 2.388e-6 | 2.462e-6 | 2.480e-6 | 6.97e-4 |
+| 100 | 2.951e-8 (6.40) | 3.049e-8 (6.29) | 2.989e-8 (6.36) | 2.954e-8 (6.39) | 7.12e-4 |
+| 200 | 1.614e-9 (4.19) | 1.690e-9 (4.17) | 1.638e-9 (4.19) | 1.616e-9 (4.19) | 7.16e-4 |
+| 400 | 9.757e-11 (4.05) | 1.027e-10 (4.04) | 9.886e-11 (4.05) | 9.741e-11 (4.05) | 7.01e-4 |
+| 800 | 6.1e-12 (4.00) | 6.5e-12 (3.97) | 6.3e-12 (3.97) | 5.6e-12 (4.12) | 4.65e-3 |
+| 1600 | 4.2e-12 | 2.2e-11 | 5.8e-12 | 4.2e-12 | 2.30e-2 |
+| *eq. 75 medium* | | | | | |
+| 101 | 1.280e-4 | 2.606e-8 | 2.922e-8 | 8.497e-6 | 7.51e-3 |
+| 201 | 1.991e-5 (2.68) | 1.531e-9 (4.09) | 1.373e-8 (1.09) | 1.281e-6 (2.73) | 3.41e-3 |
+| 401 | 2.201e-6 (3.18) | 1.107e-10 (3.79) | 1.301e-9 (3.40) | 1.082e-7 (3.57) | 4.29e-3 |
+| 801 | 1.910e-7 (3.53) | 2.1e-11 | 1.017e-10 (3.68) | 7.953e-9 (3.77) | 4.60e-2 |
+| 1601 | 1.421e-8 (3.75) | 2.2e-11 | 3.3e-11 | 5.064e-10 (3.97) | 1.32e-1 |
+
+On the MATLAB medium the seed line is one line: the δ = 0.0025 points sit
+on the δ = 0 ones (the jump-aware operator's, which the seeds *are* at
+δ = 0 on constant pieces) to 0.1–0.3 % at every count to 400, the δ = 0.01
+ones to 1.0–1.5 % and the δ = 0.04 ones (δ ≈ h at 50 nodes, a genuinely
+different solution) to 3–5 %; the rates are 6.4, 4.2, 4.05, 4.0 (E1.3's
+super-convergent first pair, then four), and from 800 nodes every δ sits
+on the reference's 2e-12 floor of §2.1 (6e-12, then 4e-12 to 2e-11), as
+that section said the 800-node points would. The construction's δ =
+0.0025 line is on its floor (7e-4) to 400 nodes, seven orders above the
+seeds there and ten once h ≤ δ; the naive line crosses the seed line
+nowhere. On eq. 75 the
+reading of P6 repeats: δ = 0.04 (every row seeded) is the fourth-order
+line 2.6e-8 → 2e-11 (4.09, 3.79, then the reference's 2–6e-11 floor), δ =
+0.01 has the plain rows' 1.4e-8 at 201 nodes (1.7e-9 with every row
+seeded) and is fourth order past it, δ = 0.0025 runs 2.7 → 4.0, and δ = 0
+is 38× below E1.2's 4.93e-3 … 8.53e-8 at rates 2.7 → 3.75 against 3.9–4.1.
+
+Two library-level checks without the Chebyshev reference, on the separable
+solution `e^{ct} v(x)` (E1.3's pattern, `chebyshev_equilibrium(shift=c)`
+on the smooth medium's elements; MATLAB medium, δ = 0, 0.01, 0.0025, 50 to
+400 nodes): the seed lines converge at 4.95, 4.84, 4.15 and agree across
+δ to 0.07 %, 0.17 %, 0.85 %, 2.3 % as the errors fall from 1.6e-6 to
+1.0e-10 and the profiles `v_δ` themselves differ at O(δ). And §1.6's
+local truncation on v (`L v = c v`): the seeded rows' residual is third
+order (rates 3.06, 3.78 at δ = 0.01 and 3.15, 3.51 at 0.0025 over 100 →
+400 nodes; `residual · n³` 0.27, 0.26, 0.15 and 0.43, 0.38, 0.27, the same
+within a factor two between the widths, the "δ-independent constant"
+P7 asked for) and the plain rows' fourth (3.94, 3.97 and 3.94, 4.01); at
+800 nodes both are on the 48-node collocation profile's floor.
+
+**P8, the double-cross (holds).** A layer two cells thick (`1 | 0.1 | 1`
+on [0, 2h] at h = 0.05) with both tanh edges inside one window: the
+window's seed weights are E1.2's translate-twice weights to 7.6e-15 at
+δ = 0 and differ from them by 22.2 %, 1.86 %, 0.182 % at δ/h = 0.1, 0.01,
+0.001 (first order in δ/h with constant 1.8 against the single edge's 1.1:
+two edges, each a 10 : 1 contrast, inside one window);
+the seed operator annihilates the smooth layer's exact equilibrium to
+3e-13 at δ/h = 0, 0.1 and 0.5, the windows seeing both centres numbering
+1, 5 and 23. One march, two stops per edge.
+
+**P9, the spectrum (holds, and more).** The interior operator's
+eigenvalues (Dirichlet rows removed, `interior_operator`) at δ = 0 and
+0.0025:
+
+| medium | n | max Re λ | max \|Im λ\| | min Re λ · h² | BD4 max amplification |
+| --- | --- | --- | --- | --- | --- |
+| MATLAB | 50 | −0.831 / −0.834 | 0 | −5.302 | 0.967 |
+| | 100 | −0.831 / −0.834 | 0 | −5.326 | 0.983 |
+| | 400 | −0.831 / −0.834 | 0 | −5.333 | 0.996 |
+| eq. 75 | 49 | −2.05 / −2.08 | 0 | −5.302 | 0.918 |
+| | 53 | −2.05 / −2.08 | 0 | −5.306 | 0.924 |
+| | 101 | −2.06 / −2.08 | 0 | −5.326 | 0.960 |
+| | 401 | −2.06 / −2.08 | 0 | −5.333 | 0.990 |
+
+Real to the bit (no complex pair anywhere, the one-sided end rows
+included), negative, the extreme FD4's `−16/3 h⁻²` in the α = 1 material
+to 0.6 % at 50 nodes and 0.01 % at 400, BD4-damped at dt = h; the
+least-damped eigenvalue moves by 0.4 % (MATLAB) and 1.5 % (eq. 75) between
+the jump and the sub-grid edge. And the seed operator is stable on eq. 75 at
+49 and 53 nodes (largest real part −2.05), where the δ = 0 construction
+has eigenvalues at +248 and +8.8 (§2.2, `MIN_COUNT`): E1.2's under-resolved
+translated basis, `h α′/α ≈ 1` at the layer's edges, is what crossed the
+axis, and the exact chain does not. The sweep still starts at 101 (its
+grids are shared by the three operators); E3.6 may run the seeds coarser
+if the figure wants it.
+
+**What this changes downstream.** P4, P5, P7, P8 and P9 are ticked as
+predicted, P6 on constant pieces too; two readings are corrected. On
+eq. 75 the seed line is the plain rows' line and moves with the reach, so
+any statement about it names δ and the reach (the manuscript's 1-D
+elliptic remark should stay on the MATLAB medium, where the exactness is
+clean, plan R2). P7's "three digits at every n" holds for δ = 0.0025 and
+becomes 1.5 % at δ = 0.01 and 5 % at 0.04, where δ ≈ h and the solutions
+differ; the claim to make is the one line through the whole plot in the
+figure, not a digit count. Three things for the manuscript: the seeds
+need no δ to be switched off where the construction does (§2.2's h ≲ 2δ
+regime is the seeds' at cost nothing: 1e-12 elliptic and the same
+parabolic line at every h/δ from 16 to 1/32); they are the jump-aware
+operator itself at δ = 0 on constant pieces (one construction, two
+implementations, checked to rounding) and a better operator than it on
+smoothly varying pieces (6–44× on eq. 75) and at coarse counts (stable at
+49 nodes); and the march's floor at δ ≲ h/40 (a row residual of 1e-12,
+a solution error of 1e-11) is the one place the ODE implementation shows,
+which a collocation integration of the same chain would remove and E3.6
+may mention as not built. E3.5 (#30) reads its treatments against the
+tables above with the seed line as the target; E3.6 (#31) inherits
+`COLOURS` (purple for the construction, blue for the seeds) and the
+figure.
+
+Tests: `tests/heat1d/test_stiff.py` (Fornberg at four centres; the δ = 0
+march against E1.2 at three offsets; the 84 % … 0.11 % limit and its
+ratios; the condition numbers' range, ends and peak; eq. 75's first-order
+floor; the equilibrium below 1e-12 at three counts and three δ with the
+residual below 1e-14, and the march's floor at δ = 1e-4; eq. 75's exact,
+plain-row and δ = 0 lines against E1.2's; the separable solution's rates
+and cross-δ agreement; the local truncation orders and constants; the
+double-cross; the seeded windows at δ = 0 and with the reach; the spectra
+at four grids with the construction's instability pinned at 49 nodes; the
+batch against single stencils at 14 and at 1284 rows; six-point stencils
+against Fornberg and against the degree-5 translated basis; the dispatch;
+validation) and
+`tests/test_heat1d_stiff.py` (the driver's seed line on the ramp problem
+at the study's reference resolution, the weights and conditioning table,
+the eq. 75 floor, the spectra at 49 and 101 nodes).
