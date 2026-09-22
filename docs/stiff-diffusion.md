@@ -3027,3 +3027,312 @@ six tests per mutation. `tests/heat2d/test_domain.py` pins `alpha_function` and
 `alpha_at` against the array path, `tests/heat1d/test_domain.py`
 `edge_value` against `edge_blend`, and `tests/test_heat2d_stiff.py` runs
 `--mode stencils` at 1250 nodes (17 s).
+
+### 4.4 The seed rows in the matrix (E4.5, #36)
+
+`seeds.seed_weights` closes E4.4's construction and `operators.seed_operator`
+puts its rows in the global matrix; `scripts/heat2d_stiff_eigenvalues.py`
+answers §3.7's H5 and H6 with the tables below. The row study runs on the
+2500-node case-1 set (seed 0, `h = 1/48`) at δ/h ∈ {8, 1, 1/8, 1/64, 0} and
+the spectra at 1600 nodes on the study's widths; both cache under
+`outputs/` (97 s and 66 s cold, 3 s and 2 s cached, 2026-09-22).
+
+**What is built.**
+
+- `seed_weights(xy, medium, degree, shape, warp)`, the twin of
+  `interface.stencil_weights`: `seed_basis`'s block for `P`, its moment
+  conditions for the polynomial right-hand side, and Gaussians in
+  `seed_coordinates`'s `(ξ, φ₀₁(η))` with `ε = GA_SHAPE h_s / d` read off the
+  *physical* offsets, as E2.3 reads it. `weights_of(sb, shape, warp)` is the
+  same solve on a basis already marched, which is what the ablations and the
+  cost tables call.
+- *The chain-rule right-hand side is assembled, not assumed* (§3.8,
+  decision 5): `L G(ξ, η̃(η))` at the anchor is
+  `α G_ξξ + α_ξ G_ξ + (α η̃′)′ G_η̃ + α η̃′² G_η̃η̃` with `α η̃′` read from the
+  marched `ψ₀₁` and `(α η̃′)′` from the chain's own rate for that state. Both
+  collapse, and *structurally*: the state `(0, 1, 0)` has no lower seed and
+  no level above it, so the chain's `source` and `lower` rows are empty and
+  the derivative is `0.0` for every profile and every η, while `ψ₀₁` is
+  `α_e` from the anchor's initial condition. The row therefore equals the one
+  assembled from `α_e (G_ξξ + G_η̃η̃) + α_ξ G_ξ` to the saddle-point solve's
+  rounding (1e-12 relative, a test at four δ). The two coefficients are read
+  rather than written as 1 and 0 so that a chain which acquires a source
+  there — a curved feature's anchor correction, E4.7 — carries it instead of
+  losing it silently; what actually guards the cancellation is the check on
+  the whole line:
+  `seed_coordinates` refuses the warp if `ψ₀₁` leaves `α_e` by more than
+  `WARP_TOL = 1e-9` anywhere on the marched line, since the cancellation is
+  a property of the march and a march that lost it would otherwise pass
+  unnoticed.
+- `warp=False` writes the Gaussians in the frame's own `(ξ, η)` — the plain
+  block of E2.3, since a Gaussian does not see the rotation — and carries the
+  true `α_η G_η` that the warp cancels, `∇α` at the anchor being the smooth
+  medium's (`SeedBasis.gradient`, the rotated pair in stencil units whose
+  first component is already the seeds' `h_s α_ξ`).
+- `operators.seeded_rows(nodes, material, index, reach)` is §3.3's rule: a
+  stencil sees an edge when the span of its nodes' signed distances to that
+  curve meets `[−reach δ, reach δ]`, with `interface_crossings` OR-ed in so
+  that a stencil straddling an edge far thinner than the spacing is seeded
+  although no node of it is within 20 δ; at δ = 0 the span test is skipped
+  and the rule *is* `interface_crossings`, by construction and not by
+  arithmetic on a node that might sit on the curve.
+  `build_stencils(..., reach=TANH_REACH)` applies it one size up, so no
+  42 / 5 stencil sees an unresolved edge, and `seed_operator` seeds the
+  members of that group whose own 30 nodes see it. `OPERATOR_MODES` and
+  `build_operator(nodes, material, stencils, mode)` are the dispatch,
+  `heat1d.stiff.build_operator`'s twin (the plan's `build_operators`).
+
+**H2 at the operator level.** At δ = 0 the seed rows are E2.3's rows with
+either Gaussian block: over all 576 crossing stencils of the 2500-node set
+the largest relative weight distance is 7.6e-12 warped and 1.6e-12 plain, and
+over the thin band's 333 stencils (240 of them three-region) 1.9e-10 and
+6.0e-13. The warped numbers are larger because the warped block across a
+1 : 5 jump is the worse-conditioned system, not because the bases differ
+(E4.4 put the spans at 4.9e-14). Assembled, `seed_operator` and
+`interface_aware_operator` agree to 5.1e-13 relative at 1250 nodes and
+5.3e-13 at 2500, with the same sparsity, and every reading below — DDR,
+condition estimate, iteration counts, spectrum, elliptic error — is the
+construction's at δ = 0 to the digits printed. **H2's operator half, ticked.**
+
+**H5: dominance, conditioning and the solvers.** The elliptic problem of
+E4.3 (`u = sin 2πx v(y)` against the separable reference), the *reduced*
+interior system, 2500 nodes. `rows` is what the method recomputes (the
+seeded rows for the seeds, the crossing rows for the rest); the DDR columns
+are least and median over those rows, `all` the least over every interior
+row, `cond` a one-norm condition estimate of the reduced matrix (a lower
+bound, so read it across a table's operators and not against a bound),
+`error` the RMS against the reference.
+
+| δ/h | operator | rows | DDR least | median | all least | cond | SuperLU | error |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 8 | naive | 576 | 0.117 | 0.237 | 0.059 | 2.0e4 | 0.13 s | 2.19e-6 |
+| 8 | direct | 576 | 0.534 | 0.621 | 0.373 | 8.0e3 | 0.06 s | 4.65e-6 |
+| 8 | construction | 576 | 0.239 | 0.675 | 0.239 | 1.3e4 | 0.05 s | 2.85e-2 |
+| 8 | **seeds** | 2500 | **0.409** | **0.688** | 0.409 | 7.1e3 | 0.04 s | **2.60e-6** |
+| 1 | naive | 576 | 0.103 | 0.227 | 0.059 | 3.5e4 | 0.14 s | 1.38e-4 |
+| 1 | direct | 576 | 0.539 | 0.617 | 0.385 | 8.4e3 | 0.06 s | 3.62e-4 |
+| 1 | construction | 576 | 0.239 | 0.675 | 0.239 | 1.7e4 | 0.05 s | 3.30e-3 |
+| 1 | **seeds** | 2164 | **0.336** | **0.686** | 0.336 | 7.8e3 | 0.05 s | **3.13e-6** |
+| 1/8 | naive | 576 | 0.095 | 0.215 | 0.059 | 4.7e4 | 0.13 s | 2.46e-3 |
+| 1/8 | direct | 576 | 0.539 | 0.621 | 0.385 | 3.0e4 | 0.05 s | 3.57e-2 |
+| 1/8 | construction | 576 | 0.239 | 0.675 | 0.239 | 1.7e4 | 0.05 s | 6.58e-4 |
+| 1/8 | **seeds** | 1036 | **0.283** | **0.671** | 0.283 | 1.5e4 | 0.06 s | **3.14e-6** |
+| 1/64 | construction | 576 | 0.239 | 0.675 | 0.239 | 1.5e4 | 0.05 s | 8.35e-5 |
+| 1/64 | **seeds** | 576 | **0.244** | **0.675** | 0.244 | 1.7e4 | 0.05 s | **3.80e-6** |
+| 0 | naive | 576 | 0.095 | 0.215 | 0.059 | 5.5e4 | 0.13 s | 2.78e-3 |
+| 0 | direct | 576 | 0.539 | 0.621 | 0.385 | 3.2e4 | 0.05 s | 3.61e-2 |
+| 0 | construction | 576 | 0.239 | 0.675 | 0.239 | 1.7e4 | 0.05 s | 3.79e-6 |
+| 0 | **seeds** | 576 | **0.239** | **0.675** | 0.239 | 1.5e4 | 0.05 s | **3.79e-6** |
+
+- *Monotone between the two ends, as H5 predicted.* The seed rows' least DDR
+  falls from 0.409 at δ = 8h to 0.239 at δ = 0 through 0.336, 0.283 and
+  0.244, and the same holds row for row of the whole matrix (the `all`
+  column, the one set every operator shares). The two ends are the direct
+  rows' 0.373–0.385 and the jump-aware rows' 0.239; the seeds never go below
+  the jump's. The median hardly moves (0.671–0.688) and is above both ends'
+  at every δ. **No δ/h degrades anything**, so #36's "if direct solves
+  degrade, name the δ/h" has nothing to name and the plan stands as written
+  for E4.6.
+- *SuperLU does not see δ.* Factor and solve is 0.04–0.06 s at every width
+  (the naive product's 0.13 s with `PRODUCT_ORDERING`), the residual is
+  1e-14 or below throughout, and the one-norm condition estimate of the seed
+  matrix, 7.1e3 at δ = 8h rising to 1.7e4 at δ = h/64, stays at or below the
+  construction's (1.3e4–1.7e4) and 3–4 times below the naive product's
+  (2.0e4–5.5e4). The δ → 0 limit is the jump's matrix, which E2.7–E2.8
+  factored to 160,000 nodes.
+- *The iterative solvers.* Inner iterations to `|r| ≤ 1e-8 |b|`,
+  unpreconditioned / with Appendix B's `P` / with `spilu`:
+
+| δ/h | operator | gmres | +P | +ilu | bicgstab | +P | +ilu | P's DDR least | median |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 8 | naive | 118 | 114 | 3 | 84 | 83 | 1 | 0.064 | 0.199 |
+| 8 | direct | 130 | 60 | 4 | 86 | 40 | 2 | 0.870 | 0.911 |
+| 8 | construction | 208 | 64 | 4 | 147 | 41 | 2 | 0.349 | 0.543 |
+| 8 | seeds | 134 | 61 | 4 | 97 | 41 | 2 | 0.838 | 0.924 |
+| 1 | seeds | 155 | 64 | 4 | 95 | 46 | 2 | 0.706 | 0.920 |
+| 1/8 | seeds | 147 | 76 | 4 | 101 | 51 | 2 | 0.438 | 0.813 |
+| 1/64 | seeds | 160 | 78 | 4 | 100 | 55 | 2 | 0.360 | 0.550 |
+| 0 | seeds | 161 | 78 | 4 | 101 | 56 | 2 | 0.349 | 0.543 |
+| 0 | construction | 161 | 78 | 4 | 100 | 56 | 2 | 0.349 | 0.543 |
+| 0 | naive | 261 | 135 | 4 | 169 | 98 | 1 | 0.057 | 0.176 |
+
+  Every solve converged (no breakdown at any δ, either method, either
+  preconditioner), and the seed rows cost *fewer* iterations than the
+  construction's at every width: 134–161 gmres against 161–208, 95–101
+  bicgstab against 100–147. Appendix B's three sweeps lift the seed rows'
+  DDR further than the jump-aware rows' (to 0.838/0.924 at δ = 8h against
+  0.349/0.543) and cut the iterations 2.0–2.6×, at five times the matvec;
+  `spilu` with `MMD_AT_PLUS_A` gives 4 gmres and 2 bicgstab iterations at
+  every δ, and SuperLU still wins the wall clock at this size, as E2.8 found.
+  The naive product is the one line Appendix B cannot help (114 against 118):
+  its rows reach the neighbours of the neighbours and the 37-neighbour sweep
+  does not cover them.
+
+**The same table at 10,000 nodes** (`h = 0.0105`, H5's own size; 403 s cold,
+`--mode rows --n 10000`). The seed rows, with the two ends beside them:
+
+| δ/h | rows | DDR least | median | cond | SuperLU | gmres | bicgstab | error |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 8 | 10000 | 0.404 | 0.691 | 3.2e4 | 0.46 s | 202 | 181 | 1.24e-7 |
+| 1 | 6414 | 0.378 | 0.690 | 4.0e4 | 0.46 s | 227 | 201 | 1.59e-7 |
+| 1/8 | 2198 | 0.252 | 0.679 | 7.0e4 | 0.54 s | 237 | 211 | 1.06e-7 |
+| 1/64 | 1134 | 0.215 | 0.676 | 7.3e4 | 0.61 s | 237 | 209 | 1.44e-7 |
+| 0 | 1134 | 0.211 | 0.676 | 6.8e4 | 0.58 s | 238 | 213 | 1.45e-7 |
+| — | direct | 0.498–0.507 | 0.615–0.620 | 3.8e4–1.3e5 | 0.57 s | 212–390 | 192–287 | — |
+| — | construction | 0.211 | 0.676 | 5.8e4–7.5e4 | 0.56 s | 238–406 | 211–293 | — |
+| — | naive | 0.098–0.106 | 0.209–0.225 | 1.4e5–1.7e5 | 1.18 s | 223–468 | 200–407 | — |
+
+Monotone again, from 0.404 to the jump-aware 0.211, the direct rows' 0.403
+above it (the `all` column, every interior row); SuperLU 0.46–0.61 s at every
+width against the naive product's 1.14–1.21 s; the condition estimate 3.2e4
+at δ = 8h to 7.3e4 at δ = h/64, at or below the construction's and half the
+naive product's; no breakdown in any of the sixty solves. The elliptic error
+is again flat in δ — 1.06e-7 to 1.59e-7 against the construction's 2.36e-2 …
+1.45e-7 and the naive's 5.0e-8 … 1.28e-3 — and equals the construction's
+1.45e-7 at δ = 0. Seeding every row costs 58 s here (5.8 ms a row), 3.7 s
+at δ = 0.
+
+One reading moves with the count: the warp's worth. At 10,000 nodes the
+plain rows are 6.7× worse at δ = h/8 and 3.6× worse at δ = 0 but 1.4–2.0×
+*better* at δ ≥ h (8.4e-8 against 1.24e-7 at 8h), where the seeds' own error
+is near the discretisation floor and `η̃` is a mild stretch; at 2500 nodes
+the warp was 2.3–3.4× ahead below h/8 and level above. Two counts do not
+make a trend — E4.6's sweep decides — but the warp clearly earns its place
+where the edge is *unresolved*, which is the study's subject, and the
+spectra below say it is not optional there.
+
+**H6: the spectra.** `interior_eigenvalues` at 1600 nodes (1524 interior
+rows, `h = 0.0263`), BD4's largest root modulus at `dt = h`.
+
+| δ | δ/h | operator | complex | max Re | Re > 0 | h² min Re | h² max \|Im\| | BD4 max \|ζ\| |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0 | naive | 1318 | +1002.8 | 2 | −6.44 | 0.862 | 1.038 |
+| 0 | 0 | direct | 738 | −4.36 | 0 | −13.09 | 0.172 | 0.892 |
+| 0 | 0 | construction | 798 | −7.27 | 0 | −13.09 | 0.176 | 0.826 |
+| 0 | 0 | **seeds** | 798 | **−7.27** | 0 | −13.09 | 0.176 | 0.826 |
+| 0 | 0 | seeds-plain | 882 | −7.27 | 0 | −13.09 | **1.511** | 0.826 |
+| 0.0025 | 0.10 | naive | 1318 | +1002.8 | 2 | −6.44 | 0.862 | 1.038 |
+| 0.0025 | 0.10 | **seeds** | 748 | **−7.29** | 0 | −13.09 | 0.181 | 0.825 |
+| 0.005 | 0.19 | **seeds** | 726 | **−7.32** | 0 | −13.09 | 0.175 | 0.825 |
+| 0.01 | 0.38 | **seeds** | 700 | **−7.37** | 0 | −13.09 | 0.178 | 0.824 |
+| 0.04 | 1.52 | direct | 712 | −7.73 | 0 | −13.09 | 0.175 | 0.816 |
+| 0.04 | 1.52 | **seeds** | 680 | **−7.73** | 0 | −11.96 | 0.227 | 0.816 |
+
+- The seed operator sits where the warped aware operator sits, at every δ:
+  no eigenvalue in the right half-plane, `max Re` the physical −7.27 of port
+  notes §2.5 moving to the resolved medium's −7.73 as the edge widens (the
+  direct operator's value there), `h² min Re` −11.96 to −13.09 and
+  `h² max |Im|` ≤ 0.227, well inside §2.5's ≤ 0.4. BD4 at `dt = h` damps
+  every mode (0.816–0.826). **H6, ticked.**
+- The naive operator keeps the coarse set's growing mode at every δ
+  (+1003, one or two eigenvalues in the right half-plane) and BD4 amplifies
+  it at δ = 0, 0.0025 and 0.005 (1.03–1.04): E4.3's warning, unchanged by
+  the edge's width, and the reason a parabolic naive number at these counts
+  is read with the spectrum beside it.
+- *With plain Gaussians the complex loop returns, at δ = 0 only*:
+  `h² max |Im|` 1.511 against the warped 0.176, port notes §2.5's 1.49 on the
+  same operator. At δ > 0 the plain seed rows do not show it (0.159–0.233).
+  So E2.9's warning — on the ring the warp decides the *sign* — has a flat
+  twin in the imaginary direction, and the seeds run warped.
+
+**At 4900 nodes**, H6's own size (`h = 0.0149`, 128 s, `--mode spectra
+--spectrum-n 4900 --deltas 0 0.005`), the seed operator reproduces port
+notes §2.5's warped line to the digit: `max Re` −7.27, `h² min Re` −13.19
+(§2.5's −13.2), `h² max |Im|` 0.385 (its ≤ 0.4) and BD4's largest root
+modulus 0.897 at `dt = h`, which is §3.7's H6 verbatim, and at δ = 0.005 the
+same but for `max Re` −7.32. The plain-Gaussian ablation gives
+`h² max |Im|` **1.489** at δ = 0 against §2.5's 1.49 on the same operator —
+the loop is the 2016 crossing rows' own, and the seeds inherit it exactly
+when the warp is off. The naive operator has no eigenvalue in the right
+half-plane at this count (E4.3: none from 2500 on), which is why its growing
+mode is a *coarse-set* warning and not a property of the discretisation.
+
+**H7's two halves.** The cancellation is asserted, not assumed (above), and
+the warp is worth on the seeds what E2.4 measured on the polynomials: the
+elliptic error at 2500 nodes is 2.8× lower warped at δ = 0 (3.79e-6 against
+1.05e-5), 2.3× at δ = h/64, 3.4× at δ = h/8, and the two coincide once the
+edge is resolved (δ ≥ h: 3.13e-6 both; 2.60e-6 against 2.87e-6 at 8h), where
+`η̃` is a mild stretch. E2.4's factor was 2.3–6.9× on the jump at
+1250–20,000 nodes, so the seeds pay for the warp exactly as the translated
+basis does, and there is no width at which the plain rows are better. E4.6's
+sweep gives the factor against `n`.
+
+**The rows the rule seeds, and what they cost.** At 2500 nodes the interface
+group is 588 rows at δ = 0 (576 of them seeded, the 12 others keeping their
+direct rows) and grows to 1036, 2164 and 2500 at δ/h = 1/8, 1 and 8, i.e.
+the whole node set once `20 δ` covers the strip (H8's "the rule needs no
+δ"). Those 12 are the rule one size up doing its work: their 42-node
+stencils see the edge, so they are in the 30 / 4 group, but their own 30
+nodes do not, so they keep a direct row — E2.3's arrangement, kept here on
+purpose, since it is what makes the δ = 0 operator the construction row for
+row. A seed row costs 2.4 ms at δ = 0 (E4.4's cheap jump march), 8.3 ms at
+δ = h/64, where the march crosses the steep part in many steps, and about
+5 ms at the widths where every row is seeded: the operator builds in 1.4 s
+at δ = 0, 4.8 s at h/64, 6.9 s at h/8 and 12.5 s at h and 8h, against 1.0 s
+for the construction and 0.1 s for the naive product.
+
+**A preview of E4.6, and one number for H8.** The elliptic error at 2500
+nodes is essentially the same at every width — 2.60e-6, 3.13e-6, 3.14e-6,
+3.80e-6, 3.79e-6 from δ = 8h down to 0 — where the construction's runs
+2.85e-2, 3.30e-3, 6.58e-4, 8.35e-5, 3.79e-6 and the naive's 2.19e-6,
+1.38e-4, 2.46e-3, 2.74e-3, 2.78e-3. The seeds are the only line that does
+not care about δ/h, they lose nothing at the jump (they *are* the jump's
+rows there), and at δ = 8h, every row seeded, they are 1.19× the naive
+operator's error and 0.56× the direct operator's — H8's "resolved-edge
+penalty ≤ 1.2×", at this width and this count. The sweep over `n` at the
+study's widths, with the parabolic problem and the fits, is E4.6 (#37).
+
+**The row distance with the warp on.** E4.4's ladder held E2.3's Gaussian
+block fixed and moved the seed block alone; the operator moves both. Per
+anchor, the max relative distance from the δ = 0 warped row:
+
+| anchor | 8h | h | h/2 | h/8 | h/64 | h/1000 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0.5896 (below) | 0.496 | 0.307 | 0.195 | 5.97e-2 | 6.00e-3 | 3.71e-4 |
+| 0.6104 (inside) | 1.53 | 0.510 | 0.387 | 0.123 | 1.20e-2 | 7.57e-4 |
+| 0.7896 (inside) | 1.52 | 0.519 | 0.377 | 0.127 | 1.24e-2 | 7.76e-4 |
+| 0.8104 (above) | 0.514 | 0.315 | 0.200 | 6.00e-2 | 6.05e-3 | 3.75e-4 |
+
+First order in δ/h below h/2 with constant 0.38 (outside the band) and 0.77
+(inside), *monotone at every anchor* — where E4.4's fixed-Gaussian ladder
+was 1.1–3.6 δ/h and not monotone above h/8. The warp moves with the block
+and takes about four fifths of the change with it, which is why the operator
+at δ = h/64 is already within 6e-3 of the construction while its blocks
+differ by 7.5e-3 in span. H2's δ > 0 half therefore reads the same at the
+row level as at the block level: first order, no floor down to 1e-3 h.
+
+**What E4.6 (#37) inherits.**
+
+- `build_operator(nodes, material, stencils, "seeds", warp=…, reach=…)` on
+  `build_stencils(..., interface=BOUNDARY, reach=TANH_REACH)`. Key the
+  sweep's cache on δ, n, seed, mode, warp and reach (§3.8's trap) *and on
+  every solver or node-set flag its numbers read*: the two caches here carry
+  a `CACHE_VERSION`, the node set's repulsion `iterations`, and — for the
+  row study, whose preconditioned DDR and iteration counts move with them —
+  `rtol`, `maxiter`, Appendix B's `neighbours` and its `sweeps`. A flag that
+  moves the numbers and not the key gives the earlier run's answer back in
+  silence.
+- The cost model: 2.4–8.3 ms a seeded row (the thin edge is the dear one,
+  the jump the cheap one), every row seeded once `20 δ` covers the domain.
+  A 40,000-node set at δ = 0.04 is about three minutes of marches per
+  operator, which is why E4.6's sweep wants its own cache and a
+  `--seed-reach` knob if the resolved end is to be cheap (§3.3).
+- The δ-independent elliptic error above says the interesting part of the
+  sweep is the *order* and the constant, not whether the seeds hold up.
+- Resampling at δ > 0 (`interpolation_weights` with the seed block) is still
+  unbuilt: `seed_coordinates` and `SeedBasis.block` are what it needs — the
+  same system with the identity on the right — and E4.7 (#38) builds it with
+  its curved references.
+
+Tests: `tests/heat2d/test_seeds.py` adds the row-level half (E2.3's rows at
+δ = 0 warped and plain, on four case-1 anchors, two thin-band anchors and
+every eighth crossing stencil; the chain-rule form against the cancelled one
+at four δ with both blocks; the warp's flux guard; the row as the operator
+on a function outside the seed span, at a resolved edge with a tangentially
+varying piece; the ladder away from the jump's row).
+`tests/heat2d/test_operators.py` adds the rule (the crossing test at δ = 0,
+its growth with δ, a straddled thin edge, every row at δ = 0.04), the reach
+group, the operator against `interface_aware_operator` at δ = 0, the rows it
+replaces, and the dispatch. `tests/test_heat2d_stiff_eigenvalues.py` runs
+the driver at 1250 and 900 nodes and pins the δ = 0 identity, the ordering
+of the errors, the absence of breakdowns and the plain block's loop.

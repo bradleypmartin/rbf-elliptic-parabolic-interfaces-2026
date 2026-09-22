@@ -1,10 +1,12 @@
-"""The scalar seeds of E4.4 (#35): `docs/stiff-diffusion.md` §3.7's H1–H3.
+"""The scalar seeds of E4.4 (#35) and the seed rows of E4.5 (#36):
+`docs/stiff-diffusion.md` §3.7's H1–H3, and H2's and H7's row-level halves.
 
 Every check runs on real 30-node stencils of the 2500-node case-1 set (seed 0,
 ``h = 1/48``) at δ ∈ {h/8, h, 8h}, the ticket's widths, and at δ = 0.
 """
 
 import time
+from dataclasses import replace
 from math import comb
 
 import numpy as np
@@ -27,16 +29,22 @@ from heat_interfaces.heat2d.exact import profile_medium
 from heat_interfaces.heat2d.interface import interface_stencil, stencil_weights
 from heat_interfaces.heat2d.neighbors import knn
 from heat_interfaces.heat2d.rbf import (
+    GA_SHAPE,
     augmented_solve,
+    gaussian,
     gaussian_derivative,
     polynomial_block,
     polynomial_exponents,
 )
 from heat_interfaces.heat2d.seeds import (
+    WARP_TOL,
     block_condition,
     chain,
     seed_basis,
+    seed_coordinates,
     seed_profiles,
+    seed_weights,
+    weights_of,
 )
 
 N = 2500
@@ -322,6 +330,152 @@ def test_seed_blocks_condition_like_polynomial_blocks(nodes, y):
     np.testing.assert_allclose([raw[-1], scaled[-1]], jump, rtol=1e-4)
 
 
+# --- E4.5 (#36): the seed rows ------------------------------------------------------
+
+
+SINE_BAND = Band(FlatLine(0.6), FlatLine(0.8), SineProduct(0.2, 0.1), Constant2D(1.0))
+
+
+def epsilon(sb, shape=GA_SHAPE):
+    """E2.3's shape parameter of a stencil: ``shape h_s / d`` (``rbf``'s, in units
+    of the radius), read off the physical offsets as ``interface_stencil`` reads it."""
+    r = np.hypot(sb.xy[:, 0] - sb.xy[0, 0], sb.xy[:, 1] - sb.xy[0, 1])
+    return shape * sb.scale / np.where(r > 0.0, r, np.inf).min()
+
+
+def cancelled_weights(sb, warp=True):
+    """The seed row with §3.4's *cancelled* right-hand side, assembled here.
+
+    ``α_e (G_ξξ + G_η̃η̃) + α_ξ G_ξ`` in the warped coordinates, which is what
+    the chain-rule form in ``seeds.weights_of`` must come to once
+    ``α η̃′ ≡ α_e`` kills the ``G_η̃`` term.
+    """
+    xi, eta = (sb.xi, sb.warp) if warp else (sb.xi, sb.eta)
+    eps = epsilon(sb)
+    b_rbf = sb.alpha_e * gaussian_derivative(xi, eta, eps, "lap")
+    b_rbf = b_rbf + sb.gradient[0] * gaussian_derivative(xi, eta, eps, "dx")
+    if not warp:
+        b_rbf = b_rbf + sb.gradient[1] * gaussian_derivative(xi, eta, eps, "dy")
+    block = gaussian(xi[:, None] - xi[None, :], eta[:, None] - eta[None, :], eps)
+    w = augmented_solve(
+        block[None], sb.block[None], b_rbf[None, :, None], sb.rhs[None, :, None]
+    )
+    return w[0, :, 0] / sb.scale**2
+
+
+@pytest.mark.parametrize("warp", (True, False))
+@pytest.mark.parametrize(
+    ("band", "y"),
+    [(case1().material, y) for y in ANCHORS] + [(THIN, y) for y in (0.6104, 0.63)],
+    ids=[f"case1-{y}" for y in ANCHORS] + [f"thin-{y}" for y in (0.6104, 0.63)],
+)
+def test_at_delta_zero_a_seed_row_is_e23s_row(nodes, band, y, warp):
+    # H2 at the row level: with the φ₀₁ warp the Gaussian block is E2.4's
+    # warped one and with it off E2.3's plain one, so the whole row is
+    # ``stencil_weights``'s, three-region stencils included.
+    xy = stencil(nodes, y)
+    w = seed_weights(xy, band, 4, warp=warp)
+    ref = stencil_weights(xy, band, 4, warp=warp)
+    assert np.abs(w - ref).max() < 1e-11 * np.abs(ref).max()
+
+
+def test_at_delta_zero_every_crossing_row_is_e23s_row(nodes):
+    # The sweep behind the single anchors: every eighth crossing stencil of
+    # the 2500-node set, the warp on (E4.5's operator setting).
+    band = case1().material
+    region = band.region_index(nodes.x, nodes.y)
+    index, _ = knn(nodes.xy, 30)
+    crossing = np.flatnonzero(np.ptp(region[index], axis=1) > 0)
+    worst = 0.0
+    for row in crossing[::8]:
+        xy = nodes.xy[index[row]]
+        ref = stencil_weights(xy, band, 4)
+        w = seed_weights(xy, band, 4)
+        worst = max(worst, np.abs(w - ref).max() / np.abs(ref).max())
+    assert len(crossing[::8]) > 60
+    assert worst < 1e-11, worst
+
+
+@pytest.mark.parametrize("ratio", (0.0, *RATIOS))
+@pytest.mark.parametrize("warp", (True, False))
+def test_the_chain_rule_right_hand_side_is_the_cancelled_form(nodes, ratio, warp):
+    # §3.8 decision 5: ``weights_of`` applies L to G(ξ, η̃(η)) by the chain
+    # rule, every coefficient read off the march, and the ``G_η̃`` term must
+    # cancel against the warp's curvature. The row is therefore the one
+    # assembled here from α_e Δ_{ξη̃} G + α_ξ G_ξ alone.
+    medium = SmoothBand(SINE_BAND, ratio * H)
+    sb = seed_basis(stencil(nodes, 0.6104, x=0.4), medium)
+    w = weights_of(sb, warp=warp)
+    ref = cancelled_weights(sb, warp=warp)
+    # The two right-hand sides are the same number summed in a different
+    # order, so the rows agree to the saddle-point solve's rounding.
+    assert np.abs(w - ref).max() < 1e-10 * np.abs(ref).max()
+    if warp:  # the term that cancels: (α η̃′)′ at the anchor, from the chain
+        ch = sb.profiles.chain
+        segment = int(sb.profile.segment(np.zeros(1))[0])
+        rate = ch.rate(sb.alpha_e, sb.profile.alpha_function(segment))
+        state = rate(0.0, ch.initial(sb.alpha_e))
+        assert state[ch.size + ch.index(0, 1, 0)] == 0.0
+        assert abs(sb.gradient[1]) > 1e-3 if ratio else True
+
+
+@pytest.mark.parametrize("warp", (True, False))
+def test_a_seed_row_is_the_operator_on_a_function_outside_its_span(nodes, warp):
+    # The row is exact on its 15 seeds by construction; on a smooth function
+    # that is not in their span it must still be the operator, to the
+    # stencil's order. α varies along the tangent here (the sine product
+    # inside the band), so a wrong sign on either gradient term shows. Only
+    # at a resolved edge (δ = 8h): a generic smooth function has no business
+    # being differentiated across an unresolved one, and the seed rows, like
+    # the jump's, are built for the functions that satisfy the edge's
+    # conditions (E4.6 measures the rows on those).
+    ratio = 8.0
+    medium = SmoothBand(SINE_BAND, ratio * H)
+    xy = stencil(nodes, 0.6104, x=0.4)
+    x, y = xy[:, 0], xy[:, 1]
+    u = np.sin(2 * np.pi * x) * np.cos(3.0 * y)
+    ux = 2 * np.pi * np.cos(2 * np.pi * x) * np.cos(3.0 * y)
+    uy = -3.0 * np.sin(2 * np.pi * x) * np.sin(3.0 * y)
+    lap = -(4 * np.pi**2 + 9.0) * u
+    ax, ay = (g[0] for g in medium.gradient(x[:1], y[:1]))
+    exact = medium.alpha(x[:1], y[:1])[0] * lap[0] + ax * ux[0] + ay * uy[0]
+    w = seed_weights(xy, medium, 4, warp=warp)
+    assert abs(w @ u - exact) < 0.02 * abs(exact), (ratio, warp, w @ u, exact)
+
+
+def test_seed_coordinates_are_the_warp_and_the_flux_is_checked(nodes):
+    sb = seed_basis(stencil(nodes, 0.5896), SmoothBand(case1().material, H / 8))
+    xi, eta = seed_coordinates(sb, warp=True)
+    assert xi is sb.xi and np.array_equal(eta, sb.warp)
+    xi, eta = seed_coordinates(sb, warp=False)
+    assert np.array_equal(eta, sb.eta) and not np.array_equal(eta, sb.warp)
+    ch = sb.profiles.chain
+    psi = np.array(sb.profiles.psi)
+    psi[ch.index(0, 1, 0), 3] *= 1.0 + 10 * WARP_TOL
+    drifted = replace(sb, profiles=replace(sb.profiles, psi=psi))
+    with pytest.raises(RuntimeError, match="the march, not the geometry"):
+        seed_coordinates(drifted, warp=True)
+    seed_coordinates(drifted, warp=False)  # the plain rows never read the flux
+
+
+def test_a_seed_row_leaves_e23s_row_as_the_edge_widens(nodes):
+    # H2's δ > 0 half at the row level: the seed row is the jump's at δ = 0
+    # and a different row once the edge is a fraction of the spacing, so the
+    # operator of E4.6 is not silently the δ = 0 construction.
+    band = case1().material
+    xy = stencil(nodes, 0.5896)
+    jump = seed_weights(xy, band, 4)
+    distances = []
+    for ratio in (1.0 / 64.0, *RATIOS):
+        w = seed_weights(xy, SmoothBand(band, ratio * H), 4)
+        distances.append(np.abs(w - jump).max() / np.abs(jump).max())
+    # 0.006, 0.060, 0.31, 0.50 at δ/h = 1/64, 1/8, 1 and 8 (2026-09-22): first
+    # order in δ/h below h, with the warp moving with the block and taking
+    # roughly a factor four off E4.4's fixed-Gaussian ladder (§4.4).
+    assert distances == sorted(distances), distances
+    assert distances[0] < 0.02 and distances[-1] > 0.25, distances
+
+
 # --- the contract -------------------------------------------------------------------
 
 
@@ -339,3 +493,5 @@ def test_the_basis_refuses_what_it_cannot_build(nodes):
     sb = seed_basis(xy, band)
     with pytest.raises(ValueError, match="1-D"):
         seed_profiles(sb.profile, sb.eta[None, :])
+    with pytest.raises(ValueError, match="15 seeds"):
+        seed_weights(xy[:14], band)
