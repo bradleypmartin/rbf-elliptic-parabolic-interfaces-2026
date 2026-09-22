@@ -1139,7 +1139,9 @@ plain-row and δ = 0 lines against E1.2's; the separable solution's rates
 and cross-δ agreement; the local truncation orders and constants; the
 double-cross; the seeded windows at δ = 0 and with the reach; the spectra
 at four grids with the construction's instability pinned at 49 nodes; the
-batch against single stencils; the dispatch; validation) and
+batch against single stencils at 14 and at 1284 rows; six-point stencils
+against Fornberg and against the degree-5 translated basis; the dispatch;
+validation) and
 `tests/test_heat1d_stiff.py` (the driver's seed line on the ramp problem
 at the study's reference resolution, the weights and conditioning table,
 the eq. 75 floor, the spectra at 49 and 101 nodes).

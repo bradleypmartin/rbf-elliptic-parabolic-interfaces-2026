@@ -22,6 +22,7 @@ from heat_interfaces.heat1d.march import (
     interior_operator,
 )
 from heat_interfaces.heat1d.operators import (
+    derivative_matrix,
     direct_operator,
     dxx_matrix,
     jump_aware_operator,
@@ -336,14 +337,25 @@ def test_the_seed_spectrum_is_real_negative_and_damped_by_bd4(medium, n):
         assert np.max(np.linalg.eigvals(interior_operator(op).toarray()).real) > 100
 
 
-def test_the_batched_march_agrees_with_single_stencils():
-    g = equispaced_grid(200)
-    m = SmoothEdges(matlab_alpha(), 0.0025)
+@pytest.mark.parametrize(
+    ("n", "delta", "count"), [(200, 0.0025, 14), (1600, 0.04, 1284)]
+)
+def test_the_batched_march_agrees_with_single_stencils(n, delta, count):
+    # DOP853's error norm is an RMS over the batch, so the rows crossing the
+    # steep part are controlled more loosely the more rows sit in flat
+    # material beside them (§2.3): 7e-12 relative on the weights at worst
+    # for the 14 rows of δ = 0.0025, 1e-13 for the 1284 of δ = 0.04, where
+    # every window sees a resolved edge. The large batch is sampled, the
+    # rows nearest the centre included.
+    g = equispaced_grid(n)
+    m = SmoothEdges(matlab_alpha(), delta)
     x = g.snapped(m.interfaces)
     op = seed_operator(g, m)
     windows = seeded_windows(g, m)
-    assert len(windows) > 8
-    for i, lo, _ in windows:
+    assert len(windows) == count
+    sample = windows if count < 20 else windows[:: count // 16] + windows[-1:]
+    sample += [w for w in windows if abs(x[w[0]]) < 2 * g.h]
+    for i, lo, _ in sample:
         row = op[[i], lo : lo + 5].toarray()[0]
         assert _difference(row, seed_weights(x[lo : lo + 5], x[i], m)) < 1e-10
     # The batch marched the seeds of every row with the same node pattern.
@@ -351,6 +363,36 @@ def test_the_batched_march_agrees_with_single_stencils():
     phi = seed_profiles(x[rows], 2 * g.h, np.array([-1.0, -0.5, 0.0, 0.5, 1.0]), m)
     assert phi.shape == (rows.size, 5, 5)
     np.testing.assert_array_equal(phi[:, :, 2], np.tile(np.eye(5)[0], (rows.size, 1)))
+
+
+def test_six_point_stencils_carry_phi_5():
+    # The ticket's "φ₅ for six-point stencils": the chain is generic in its
+    # length, and the sixth seed is E1.2's (flux, 2) condition. Constant
+    # alpha gives Fornberg's six-point weights; at δ = 0 on constant pieces
+    # the seeds equal the degree-5 translated basis' weights (offsets ½ and
+    # 3/2); the operator at degree 5 is alpha times the six-point Dxx.
+    nodes = H * np.arange(-2.0, 4.0)
+    m = jump_alpha(0.7, 0.7)
+    for centre in (0.0, 0.01):
+        w = seed_weights(nodes, centre, m)
+        assert _difference(w, 0.7 * fornberg_weights(centre, nodes, 2)[2]) < 1e-12
+    jump = matlab_alpha()
+    for offset in (0.5, 1.5):
+        centre = -offset * H
+        nodes = centre + H * np.arange(-2.0, 4.0)
+        jumps = [
+            Jump(xi, jump.taylor(k, "left", 5), jump.taylor(k, "right", 5))
+            for k, xi in enumerate(jump.interfaces)
+        ]
+        w_jump = stencil_weights(jumps, nodes, centre)
+        assert _difference(seed_weights(nodes, centre, jump), w_jump) < 1e-11
+    g = equispaced_grid(40)
+    np.testing.assert_allclose(
+        seed_operator(g, SmoothEdges(m, 0.03), degree=5).toarray(),
+        0.7 * derivative_matrix(g, 2, 6).toarray(),
+        rtol=1e-10,
+        atol=1e-8,
+    )
 
 
 def test_build_operator_dispatches_by_name():
