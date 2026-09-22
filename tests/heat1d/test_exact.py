@@ -4,6 +4,7 @@ import pytest
 from heat_interfaces.heat1d.domain import (
     DISSERTATION_BC,
     Constant,
+    OnInterval,
     PiecewiseAlpha,
     Smooth,
     SmoothEdges,
@@ -12,11 +13,13 @@ from heat_interfaces.heat1d.domain import (
     matlab_alpha,
 )
 from heat_interfaces.heat1d.exact import (
+    ChebyshevPieces,
     ParabolicReference,
     alpha_integral,
     chebyshev_equilibrium,
     chebyshev_lobatto,
     chebyshev_parabolic,
+    chebyshev_profile,
     edge_resistance_deficit,
     equilibrium_exact,
     equilibrium_flux,
@@ -331,3 +334,31 @@ def test_parabolic_reference_agrees_between_two_resolutions_at_every_delta(delta
     ]
     assert np.max(np.abs(u[0] - u[1])) < 1e-10
     assert np.max(np.abs(u[1])) == pytest.approx(1.0)  # the ramped end
+
+
+@pytest.mark.parametrize("growth", [0.0, 1.5])
+def test_the_wavenumber_term_is_alpha_weighted(growth):
+    # (a v′)′ − κ² a v = c v on a constant a over [0, 1] with v(0) = 0,
+    # v(1) = 1: v = sinh(k y) / sinh k with k² = κ² + c/a, so the κ² term
+    # carries a and the shift c does not (E4.2's separable profile).
+    a, kappa = 0.3, 2 * np.pi
+    m = OnInterval(PiecewiseAlpha((), (Constant(a),)), 0.0, 1.0)
+    y = np.linspace(0.0, 1.0, 201)
+    k = np.sqrt(kappa**2 + growth / a)
+    v = chebyshev_equilibrium(m, 0.0, 1.0, y, 24, growth, wavenumber=kappa)
+    np.testing.assert_allclose(v, np.sinh(k * y) / np.sinh(k), atol=1e-13)
+    cp, nodal = chebyshev_profile(m, 0.0, 1.0, 24, growth, None, kappa)
+    np.testing.assert_allclose(cp.alpha, a)
+    np.testing.assert_allclose(
+        cp.derivative @ nodal, k * np.cosh(k * cp.x) / np.sinh(k), atol=1e-11
+    )
+
+
+def test_chebyshev_pieces_alpha_is_one_sided_at_a_jump():
+    cp = ChebyshevPieces.build(matlab_alpha(), 8)
+    left = cp.x < 0.0
+    right = cp.x > 0.0
+    assert np.all(cp.alpha[left] == 1 / 9) and np.all(cp.alpha[right] == 1.0)
+    # The shared edge at 0 appears twice, once per element, with each side's α.
+    at_jump = np.flatnonzero(cp.x == 0.0)
+    assert cp.alpha[at_jump].tolist() == [1 / 9, 1.0]

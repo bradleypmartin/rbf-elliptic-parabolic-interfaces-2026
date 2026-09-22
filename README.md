@@ -69,6 +69,7 @@ reproduction tables are in `docs/port-notes.md` (§1.7 and §2.10). See
 | `heat2d_case3.py` | case 3: the insulating ring, FD4 / flat / curved, the mesh plot (Fig. 5-13, 5-14, EABE Fig. 13, 14) |
 | `heat2d_iterative.py` | gmres / bicgstab, Appendix B and `spilu`, the DDR histograms (Fig. 5-15–5-18, B-1, EABE Fig. 15–18) |
 | `heat2d_extremes.py` | the s-sweep of eq. 40 and the continuity matrices' conditioning (EABE Fig. 19, 20) |
+| `heat2d_stiff.py` | the stiff-edge study in 2-D (E4): so far the smooth flat band's separable references in y at every δ, elliptic and parabolic, with their convergence checks and their O(δ) distance from the jump solution |
 
 ## Layout
 

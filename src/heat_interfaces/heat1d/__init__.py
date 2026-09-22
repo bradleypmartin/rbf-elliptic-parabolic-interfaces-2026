@@ -8,7 +8,8 @@ solve); ``solve``: Dirichlet rows and the sparse solve; ``exact``: the
 quadrature reference ``u = A + B ∫ dξ/alpha`` and the piecewise Chebyshev
 reference for the parabolic problems, cached as ``ParabolicReference``;
 ``march``: BD4 and RK4 with time-dependent Dirichlet ends and the BD4
-stability region. ``SmoothEdges`` (E3.2) is the stiff-edge medium; ``stiff``
+stability region. ``SmoothEdges`` (E3.2) is the stiff-edge medium, and
+``OnInterval`` any medium on part of the line (E4.2's profile in y); ``stiff``
 (E3.4) marches the seeds through it and builds the seed operator, with
 ``build_operator`` dispatching by name; ``treatments`` (E3.5) are the
 coefficient treatments the naive operator samples (cell means, the widened
@@ -23,12 +24,14 @@ from .domain import (
     Constant,
     Grid1D,
     Medium1D,
+    OnInterval,
     PiecewiseAlpha,
     Sinusoid,
     Smooth,
     SmoothEdges,
     dissertation_alpha,
     eabe_alpha,
+    edge_blend,
     equispaced_grid,
     grid_for,
     jump_alpha,
@@ -44,6 +47,7 @@ from .exact import (
     chebyshev_equilibrium,
     chebyshev_lobatto,
     chebyshev_parabolic,
+    chebyshev_profile,
     edge_resistance_deficit,
     equilibrium_exact,
     equilibrium_flux,
@@ -128,6 +132,7 @@ __all__ = [
     "LinearPiece",
     "Medium1D",
     "NodalAlpha",
+    "OnInterval",
     "ParabolicReference",
     "PiecewiseAlpha",
     "Region",
@@ -145,6 +150,7 @@ __all__ = [
     "chebyshev_equilibrium",
     "chebyshev_lobatto",
     "chebyshev_parabolic",
+    "chebyshev_profile",
     "coefficient_dx",
     "coefficient_operator",
     "constant_boundary",
@@ -157,6 +163,7 @@ __all__ = [
     "dx_matrix",
     "dxx_matrix",
     "eabe_alpha",
+    "edge_blend",
     "edge_resistance_deficit",
     "edge_width",
     "equilibrium_exact",

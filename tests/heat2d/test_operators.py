@@ -7,6 +7,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
+from heat_interfaces.heat1d.domain import TANH_REACH
 from heat_interfaces.heat1d.march import bd4_amplification, interior_operator
 from heat_interfaces.heat2d.domain import (
     ROW,
@@ -14,6 +15,7 @@ from heat_interfaces.heat2d.domain import (
     Constant2D,
     FlatLine,
     SineProduct,
+    SmoothBand,
     build_node_set,
     case1,
     case2,
@@ -478,3 +480,39 @@ def test_a_flat_band_with_alpha_one_is_the_control():
     a = naive_operator(nodes, same, st)
     b = naive_operator(nodes, ONE, st)
     assert abs(a - b).max() == 0.0
+
+
+def test_every_operator_runs_on_the_smooth_band_and_is_the_jumps_at_delta_zero():
+    # Stiff note §3.1 and §3.8 decision 1: the smooth band keeps the jump's
+    # protocol, so the naive, direct and aware operators run on it unchanged
+    # and δ = 0 is the jump bit for bit. At δ > 0 the aware operator is the
+    # "δ = 0 construction on a smooth edge": its crossing rows read the
+    # pieces' data and are the jump's to the bit, its direct rows read the
+    # smooth α and ∇α. Beyond TANH_REACH δ α is the piece to the bit and ∇α
+    # the blend's true derivative, 7e-16 at 20δ (E3.2's tails), so the rows
+    # there move by rounding only.
+    nodes, st = aware_set(1250)
+    band = DOMAIN.material
+    builders = {
+        "naive": lambda m: naive_operator(nodes, m, st),
+        "direct": lambda m: direct_operator(nodes, m, st),
+        "aware": lambda m: interface_aware_operator(nodes, m, st),
+    }
+    jump = {name: build(band) for name, build in builders.items()}
+    for name, build in builders.items():
+        assert abs(build(SmoothBand(band, 0.0)) - jump[name]).max() == 0.0
+
+    delta = 0.01
+    aware = builders["aware"](SmoothBand(band, delta))
+    rows = np.abs((aware - jump["aware"]).toarray()).max(axis=1)
+    group = next(g for g in st.groups if g.kind == INTERFACE_KIND)
+    crossing = np.zeros(nodes.n, dtype=bool)
+    crossing[group.rows[interface_crossings(nodes, band, group.index)]] = True
+    far = np.all(
+        [np.abs(nodes.y - c) >= TANH_REACH * delta for c in (0.6, 0.8)], axis=0
+    )
+    assert crossing.sum() > 300 and far.sum() > 400
+    assert np.all(rows[crossing] == 0.0) and rows[far].max() < 1e-13
+    near = ~crossing & ~far
+    assert near.sum() > 50 and rows[near].max() > 0.0
+    assert abs(builders["naive"](SmoothBand(band, delta)) - jump["naive"]).max() > 1.0

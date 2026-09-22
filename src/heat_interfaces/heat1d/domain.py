@@ -344,6 +344,22 @@ def _logistic_pair(z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return np.where(positive, large, small), np.where(positive, small, large)
 
 
+def edge_blend(
+    a: np.ndarray, b: np.ndarray, z: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(1 − s) a + s b`` and ``s′(z) = 2 s (1 − s)``, ``s = ½ (1 + tanh z)``.
+
+    One tanh edge of a ``SmoothEdges`` (and of the 2-D ``heat2d.domain.
+    SmoothBand``, whose ``z`` is the signed distance to a curve over δ). The
+    blend is formed from the near value on each side, so the far one's share
+    is an addition that rounds away in the tails; the caller adds the chain
+    rule's ``s′(z) z′ (b − a)`` to the blended derivatives.
+    """
+    s, t = _logistic_pair(z)
+    near = z >= 0.0
+    return np.where(near, b + t * (a - b), a + s * (b - a)), 2.0 * s * t
+
+
 def _merge_cuts(cuts: np.ndarray, gap: float) -> np.ndarray:
     """The ends and the sorted ``cuts``, dropping any within ``gap`` of a kept one."""
     kept = [X_MIN]
@@ -422,16 +438,60 @@ class SmoothEdges:
         for xc, piece in zip(self.interfaces, pieces[1:], strict=True):
             b, b_x = piece.alpha(x), piece.alpha_x(x)
             z = (x - xc) / self.delta
-            s, t = _logistic_pair(z)
-            near = z >= 0.0
-            # From the near piece on each side, so the far piece's share is an
-            # addition that rounds away in the tails; s' = 2 s (1 - s) / δ.
-            a, a_x = (
-                np.where(near, b + t * (a - b), a + s * (b - a)),
-                np.where(near, b_x + t * (a_x - b_x), a_x + s * (b_x - a_x))
-                + (2.0 * s * t / self.delta) * (b - a),
-            )
+            value, ds = edge_blend(a, b, z)
+            slope, _ = edge_blend(a_x, b_x, z)
+            a, a_x = value, slope + (ds / self.delta) * (b - a)
         return a, a_x
+
+
+@dataclass(frozen=True)
+class OnInterval:
+    """``medium`` on ``[lo, hi] ⊂ [-1, 1]``: the same material, its elements clipped.
+
+    For a problem posed on part of the line, such as E4.2's profile in
+    ``y ∈ [0, 1]`` of the 2-D strip, which is E3.2's medium in ``y`` (stiff
+    note §3.1). ``alpha``, ``alpha_x``, ``taylor`` and ``interfaces`` are the
+    medium's; every interface must lie strictly inside the interval.
+    ``elements`` keeps the medium's edges strictly inside ``(lo, hi)`` with
+    ``lo`` and ``hi`` as the ends, each new element carrying the piece of the
+    element it lies in, and drops a smooth edge's cut closer than δ/2 to an
+    end, as ``SmoothEdges.elements`` drops one near ±1.
+    """
+
+    medium: Medium1D
+    lo: float
+    hi: float
+    interfaces: tuple[float, ...] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if not X_MIN <= self.lo < self.hi <= X_MAX:
+            raise ValueError(f"[lo, hi] must be an interval inside [{X_MIN}, {X_MAX}]")
+        inside = all(self.lo < xi < self.hi for xi in self.medium.interfaces)
+        if not inside:
+            raise ValueError("every interface must lie strictly inside (lo, hi)")
+        object.__setattr__(self, "interfaces", self.medium.interfaces)
+
+    def alpha(self, x: np.ndarray) -> np.ndarray:
+        return self.medium.alpha(x)
+
+    def alpha_x(self, x: np.ndarray) -> np.ndarray:
+        return self.medium.alpha_x(x)
+
+    def taylor(self, i: int, side: Side, degree: int) -> np.ndarray:
+        return self.medium.taylor(i, side, degree)
+
+    def elements(self) -> tuple[np.ndarray, tuple[Piece, ...]]:
+        edges, pieces = self.medium.elements()
+        gap = 0.5 * float(getattr(self.medium, "delta", 0.0))
+        inner = edges[1:-1]
+        kept = inner[(inner > self.lo + gap) & (inner < self.hi - gap)]
+        # At δ > 0 every edge is a smooth cut (the medium is every element's
+        # piece); at δ = 0 the gap is zero and the interfaces, strictly
+        # inside by construction, all stay.
+        out = np.array([self.lo, *kept, self.hi])
+        mid = 0.5 * (out[:-1] + out[1:])
+        owner = np.searchsorted(inner, mid, side="right")
+        return out, tuple(pieces[k] for k in owner)
 
 
 DISSERTATION_BC = (1.0, 0.0)

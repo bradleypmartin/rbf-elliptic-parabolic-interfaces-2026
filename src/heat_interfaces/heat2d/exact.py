@@ -18,15 +18,41 @@ condition the translated basis enforces at the ring's 1500 : 1 contrast, so
 it is what E2.7 reads through the fine stencils to measure the resampling.
 (The radial equilibrium ``a + b ln r`` was tried first; its fifth derivative
 at the cooling circle is 1e7 and the reading measured that, not the ring.)
+
+``SeparableReference`` is ``LayeredExact`` for a flat band of any edge width
+(E4.2, ``docs/stiff-diffusion.md`` §3.1 and §4.1): with α a function of ``y``
+alone the same separation holds, and ``v`` is E3.2's Chebyshev-element
+collocation in ``y`` on the band's 1-D medium (``profile_medium``), cut at
+the ``EDGE_CUTS`` of each tanh edge.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import numpy as np
 
-from .domain import CASE3_S, TWO_PI, ring_radii
+from ..heat1d.domain import (
+    Constant,
+    Medium1D,
+    OnInterval,
+    PiecewiseAlpha,
+    SmoothEdges,
+)
+from ..heat1d.exact import ChebyshevPieces, chebyshev_profile
+from .domain import (
+    CASE3_S,
+    TWO_PI,
+    Y_MAX,
+    Y_MIN,
+    Band,
+    Constant2D,
+    FlatLine,
+    SmoothBand,
+    case1,
+    ring_radii,
+)
 
 
 @dataclass(frozen=True)
@@ -134,6 +160,153 @@ def control_exact(growth: float = 0.0) -> LayeredExact:
 def case1_exact(growth: float = 0.0) -> LayeredExact:
     """Eq. 34 / dissertation eq. 86: ``α = 0.2`` on ``[0.6, 0.8]``, 1 elsewhere."""
     return LayeredExact((1.0, 0.2, 1.0), (0.6, 0.8), growth)
+
+
+REFERENCE_N_CHEB, REFERENCE_MAX_WIDTH = 20, 0.1
+"""The separable reference's resolution: Chebyshev nodes per element, widest element.
+
+E3.2's recipe for the same medium in 1-D (stiff note §2.1, ``scripts/
+heat1d_stiff.py``'s ``N_CHEB``, ``MAX_WIDTH``): twenty nodes resolve a tanh
+element to 1e-11 and keep the collocation's round-off floor, which grows
+with the node count on the δ-wide elements, near 1e-12. On case 1 the
+reference agrees with 24 nodes on 0.05-wide elements to 1e-12 (δ = 0.04),
+1e-11 (δ = 0.0025) and 2e-11 (δ = 5e-4), and with ``case1_exact`` at δ = 0
+to 4e-13 (stiff note §4.1).
+"""
+
+
+def profile_medium(material: Band | SmoothBand) -> OnInterval:
+    """The band's α along ``y`` as a 1-D medium on ``[0, 1]``: flat, constant pieces.
+
+    Stiff note §3.1: ``SmoothEdges`` over ``outside | inside | outside`` at the
+    two lines, of the band's δ (0 for a ``Band``), the closed band owning
+    both lines as ``Band.piece_index`` does. On such a band
+    ``SmoothBand.alpha(x, y)`` is this medium's ``alpha(y)`` bit for bit, and
+    ``gradient``'s y component its ``alpha_x``.
+    """
+    band = material.band if isinstance(material, SmoothBand) else material
+    delta = material.delta if isinstance(material, SmoothBand) else 0.0
+    lines = (band.lower, band.upper)
+    pieces = (band.outside, band.inside)
+    if not all(isinstance(c, FlatLine) for c in lines):
+        raise ValueError("a separable reference needs flat interfaces")
+    if not all(isinstance(p, Constant2D) for p in pieces):
+        raise ValueError("a separable reference needs constant pieces")
+    out, inside = (Constant(p.value) for p in pieces)
+    jump = PiecewiseAlpha(
+        (band.lower.c, band.upper.c), (out, inside, out), ("right", "left")
+    )
+    return OnInterval(SmoothEdges(jump, delta), Y_MIN, Y_MAX)
+
+
+@dataclass(frozen=True)
+class SeparableReference:
+    """``u(x, y, t) = e^{c t} sin(κ x) v(y)`` through a flat band of edge width δ.
+
+    E4.2 (#33), plan D4: with α a function of ``y`` alone,
+    ``u_t = ∇·(α ∇u)`` separates as in eq. 86, and ``v`` solves
+
+        (α v′)′ − (κ² α + c) v = 0,   v(0) = 0,   v(1) = 1,
+
+    the elliptic problem at ``c = 0`` and, at ``c > 0``, the 1-D parabolic
+    problem in ``y``: ``e^{ct} v(y)`` solves ``w_t = (α w_y)_y − κ² α w``
+    with ``w(0, t) = 0``, ``w(1, t) = e^{ct}``, exactly in ``t``. So no time
+    integrator enters (none of Radau's tolerance floor, stiff note §2.1),
+    and the reference is callable at any ``t``, BD4's analytic history at
+    ``t < 0`` included. ``v`` is ``heat1d.exact.chebyshev_profile`` on
+    ``medium``'s elements (``profile_medium``: E3.2's ``EDGE_CUTS`` about
+    each edge, wider elements split at ``max_width``), ``v`` and ``α v′``
+    matched at every cut. At δ = 0 it is ``LayeredExact`` to 4e-13; at
+    δ > 0 its accuracy is its agreement with a finer resolution (stiff note
+    §4.1). The methods mirror ``LayeredExact``'s; a point on an element edge
+    reads the element above it, as ``LayeredExact`` reads the layer above a
+    break.
+    """
+
+    medium: Medium1D
+    growth: float = 0.0
+    wavenumber: float = TWO_PI
+    n_cheb: int = REFERENCE_N_CHEB
+    max_width: float | None = REFERENCE_MAX_WIDTH
+    pieces: ChebyshevPieces = field(init=False, repr=False, compare=False)
+    nodal: np.ndarray = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        cp, v = chebyshev_profile(
+            self.medium,
+            0.0,
+            1.0,
+            self.n_cheb,
+            self.growth,
+            self.max_width,
+            self.wavenumber,
+        )
+        v_y = cp.derivative @ v
+        object.__setattr__(self, "pieces", cp)
+        # v, v', and the flux α v' from each element's own α (one-sided at a
+        # jump), per node.
+        object.__setattr__(self, "nodal", np.stack([v, v_y, cp.alpha * v_y]))
+
+    @property
+    def elements(self) -> int:
+        return len(self.pieces.edges) - 1
+
+    @property
+    def unknowns(self) -> int:
+        """The collocation nodes that are not element ends (E3.2's count)."""
+        return int(self.pieces.interior.size)
+
+    def v(self, y: np.ndarray) -> np.ndarray:
+        return self.pieces.evaluate(self.nodal[0], y)
+
+    def v_y(self, y: np.ndarray) -> np.ndarray:
+        return self.pieces.evaluate(self.nodal[1], y)
+
+    def _factor(self, x: np.ndarray, t: float) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        return np.exp(self.growth * t) * np.sin(self.wavenumber * x)
+
+    def __call__(self, x: np.ndarray, y: np.ndarray, t: float = 0.0) -> np.ndarray:
+        return self._factor(x, t) * self.v(y)
+
+    def flux_y(self, x: np.ndarray, y: np.ndarray, t: float = 0.0) -> np.ndarray:
+        """``α u_y``, continuous across the band."""
+        return self._factor(x, t) * self.pieces.evaluate(self.nodal[2], y)
+
+    def top(self, x: np.ndarray, y: np.ndarray, t: float = 0.0) -> np.ndarray:
+        """The Dirichlet row at ``y = 1``: ``e^{ct} sin κx``, exactly (``v(1) = 1``)."""
+        return self._factor(x, t)
+
+    def boundary_values(self) -> tuple[float, Callable[..., np.ndarray]]:
+        """``(0, top)`` for the Dirichlet curves of ``STRIP`` (y = 0, then y = 1).
+
+        What ``solve_equilibrium`` and ``march_parabolic`` take as ``values``;
+        ``top`` takes ``t`` with a default, so one tuple serves both.
+        """
+        return 0.0, self.top
+
+
+def separable_reference(
+    material: Band | SmoothBand,
+    growth: float = 0.0,
+    n_cheb: int = REFERENCE_N_CHEB,
+    max_width: float | None = REFERENCE_MAX_WIDTH,
+) -> SeparableReference:
+    """The ``SeparableReference`` of a flat band with constant pieces, ``κ = 2π``."""
+    return SeparableReference(
+        profile_medium(material), growth, TWO_PI, n_cheb, max_width
+    )
+
+
+def case1_reference(
+    delta: float = 0.0,
+    growth: float = 0.0,
+    n_cheb: int = REFERENCE_N_CHEB,
+    max_width: float | None = REFERENCE_MAX_WIDTH,
+) -> SeparableReference:
+    """Case 1 with tanh edges of width ``delta``; ``case1_exact`` at δ = 0 to 4e-13."""
+    band = SmoothBand(case1().material, delta)
+    return separable_reference(band, growth, n_cheb, max_width)
 
 
 @dataclass(frozen=True)

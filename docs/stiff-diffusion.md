@@ -7,8 +7,9 @@ fourth order through it because their polynomial basis is replaced by
 (plan D11); the manuscript quotes this note and never becomes a second
 source of truth. §1 is the formulation (E3.1, #26); §2 holds the 1-D
 results (E3.2, #27, to E3.6, #31, which closes it in §2.5); §3 is the
-2-D design (E4.1, #32) and §4–5 will hold the 2-D results (E4.2, #33,
-to E4.10, #41). The port of the 2016 methods this builds on is in
+2-D design (E4.1, #32) and §4–5 hold the 2-D results, from the smooth
+flat band and its references (E4.2, #33, §4.1) to E4.10 (#41). The port
+of the 2016 methods this builds on is in
 `docs/port-notes.md`.
 
 The construction is the one of the wave-equation companion, *Seed
@@ -1995,7 +1996,11 @@ ring's width to only 8e-8 relative at `s ≥ 10¹⁰` (E2.9's breadcrumb on
 **The smooth ring.** With δ of the order of `w` or above, §3.1's product
 profile `α_out + (α_in − α_out) s(d₁/δ) (1 − s(d₂/δ))` never reaches the
 ring's plateau: the effective contrast is reduced and the "ring" is a
-resistive bump of height `(α_in − α_out) tanh(w/2δ)` to leading order.
+resistive bump of height `(α_in − α_out) s(w/2δ)²` at its midline, which
+tends to a quarter of the contrast, not to zero, as `w/δ → 0` (corrected
+by E4.2, §4.1: the first version of this sentence gave `tanh(w/2δ)`, the
+peak of the *difference* of the two edges `s(d₁/δ) − s(d₂/δ)`, which is
+another composition; which one the smooth ring should use is E4.8's call).
 That is a different problem from the jump ring, on purpose (it is what a
 sub-grid smooth layer *is*), and the notes must say at each δ what the
 bump's contact resistance `∫ dr/α` across it is, since that, not the
@@ -2189,3 +2194,214 @@ for routes (b) and (c) of §3.5, the multiscale FEM of Hou & Wu and the
 harmonic coordinates of Owhadi & Zhang named in plan R1; those two
 enter `paper/references.bib` only through E5.2's verification, and
 nothing in §3 claims novelty over them.
+
+## 4. Results in 2-D (E4.2–E4.10)
+
+### 4.1 The smooth flat band and the separable references (E4.2, #33)
+
+**The medium.** `heat2d.domain.SmoothBand(band, delta)` is §3.1's
+medium, built as §3.8's decision 1 says: the jump's protocol kept, only
+`alpha` and `gradient` blended. Decisions, each pinned by a test in
+`tests/heat2d/test_domain.py` unless named otherwise:
+
+- **δ = 0 is the band bit for bit** in `alpha`, `gradient`,
+  `piece_index`, `region_index`, `region_piece`, `interfaces` and
+  `taylor`, on all three cases (delegation, not a limit).
+- **One blend step for both dimensions.** The per-edge step of
+  `heat1d.domain.SmoothEdges._blend` is factored out as
+  `heat1d.domain.edge_blend` (the blend from the near side and
+  `s′ = 2 s (1 − s)`); the refactor is bit-identical (a SHA-256 of
+  `alpha` and `alpha_x` on both 1-D study media and a thin layer at six
+  δ, 200,001 points, the same before and after). The 2-D medium folds the
+  edges in from the outside piece, across the lower curve into the inside
+  piece, then across the upper curve back out, with `z = d/δ` for the
+  curve's `signed_distance` `d`. On case 1 `alpha` and `gradient`'s y
+  component are therefore E3.2's 1-D medium in `y` bit for bit, and the x
+  component is zero.
+- **The gradient** is the blend's: the pieces' gradients blended, plus
+  `s′(d/δ) (b − a) ∇d / δ` with `∇d` the unit normal at the foot point
+  (`curve.normal(curve.closest(x, y))`). It matches central differences of
+  `alpha` near the edges on all three cases at δ = 0.01 to the
+  differences' own error. That, the tanh-blend identity on a flat edge
+  (to 1e-15 in `alpha`, 1e-13 in `gradient`) and the tails are what "the
+  edge is smooth to rounding" means here.
+- **The tails.** Beyond `TANH_REACH δ` = 20δ from both curves `alpha` is
+  the piece bit for bit (cases 1–3 at δ = 0.01 and 0.0025; at δ = 0.04
+  the reach covers the strip). `gradient` there is the blend's true
+  derivative, 7e-16 at 20δ, not zero (E3.2's tails, §2.1).
+- **Every operator runs on it unchanged** (`tests/heat2d/
+  test_operators.py`, 1250 nodes). At δ = 0 the naive, direct and aware
+  operators are the jump's bit for bit. At δ = 0.01 the aware operator's
+  crossing rows are the jump's bit for bit, since they read the pieces'
+  data, and its direct rows read the smooth α, which makes it §3.1's
+  "δ = 0 construction on a smooth edge" with no new code. The direct rows
+  beyond 20δ move by at most 7e-15, against entries up to 2.6e4: the
+  gradient's tail.
+- `with_smooth_edges(domain, δ)` swaps the material and nothing else, so
+  a smooth domain's node sets are the jump's.
+
+**A band thinner than its edges, and a correction to §3.6.** The fold
+gives `o + (i − o) s(d₁/δ) (1 − s(d₂/δ))` for outside and inside pieces
+`o`, `i`. At the midline of a band of width `w` that is `s(w/2δ)²` of the
+contrast: 0.78 at `w = 2δ`, 0.39 at `w = δ/2` and ¼ at `w = 0` (measured to
+1e-14). Under the fold, then, a band does not fade out with its width: a
+zero-width band keeps a bump `¼ (i − o) sech²(d/δ)`. §3.6 had given the
+ring's bump height as `(α_in − α_out) tanh(w/2δ)`. That is the peak of
+the other natural composition, the difference of the two edges,
+`o + (i − o) [s(d₁/δ) − s(d₂/δ)]`: also a partition of unity for ordered
+edges, and the one whose bump vanishes with `w`. The two differ by
+`(i − o) s(d₂/δ) (1 − s(d₁/δ))`, about `e^{−2w/δ}` of the contrast at the
+midline. On case 1 that is rounding for δ ≤ 0.01 and 3.6e-5 at δ = 0.04
+(`α(0.7)` = 0.21067 by the fold, 0.21071 by the difference), so for E4.3–E4.6
+the choice does not matter; the fold is kept for its bit-for-bit match
+with E3.2's 1-D medium. For E4.8's ring (`w = 0.001` against
+δ = 0.0025) it defines the problem: the fold's midline reaches 0.36 of the
+contrast, the difference's 0.20, neither near the plateau. §3.6 is
+corrected in place, and the choice is E4.8's (breadcrumb on #39).
+
+**The normal profile.** `SmoothBand.normal_profile(j, x, y, scale)` returns
+a `NormalProfile`, what E4.4's march samples. The line is
+`(x, y) + scale η n`, with `n` the unit normal at interface `j`'s foot
+point nearest the anchor (`frame_at`'s `y′`). The stops are both curves'
+crossings of the line and, at δ > 0, their `± EDGE_STOP δ` flanks. They
+are formed as `heat1d.stiff._stops` forms them, so on case 1 they are the
+1-D march's stops bit for bit (`(0.6 − y_e)/h_s` and `(0.8 − y_e)/h_s` at
+δ = 0). `pieces[k]` is α on segment `k`: at δ = 0 the piece of the region
+the segment lies in, one-sided at a stop (tested there, with the segment
+named), and at δ > 0 the smooth band on every segment. `alpha_e` is α at
+the anchor. Two limits, both deliberate:
+- Flat interfaces only. A curved one raises `NotImplementedError` naming
+  E4.7 (#38), whose route (a) needs Newton crossings, and E4.8 (#39),
+  whose ring is carried as widths.
+- The stops are not merged. When a band is exactly 20δ wide (case 1 at
+  δ = 0.01) the inner flanks of its two edges land 1e-16 apart, and
+  E4.4's march merges its stops with its node targets at `MERGE_TOL`
+  anyway, as the 1-D one does.
+
+**The references.** `heat2d.exact.SeparableReference` (made by
+`case1_reference(δ, c)` or `separable_reference(material, c)`). With α a
+function of `y` alone, `u = e^{ct} sin 2πx v(y)` with
+
+    (α v′)′ − (4π² α + c) v = 0,    v(0) = 0,   v(1) = 1,
+
+and `v` is E3.2's Chebyshev-element collocation in `y`.
+`heat1d.exact.chebyshev_equilibrium(..., wavenumber=κ)` gains the
+`− κ² α v` term, with α one-sided per element (`ChebyshevPieces.alpha`,
+new), and `chebyshev_profile` returns the nodal solution. The medium in `y`
+is `profile_medium(material)`: `SmoothEdges` over `outside | inside |
+outside` at the two lines, restricted to `[0, 1]` by the new
+`heat1d.domain.OnInterval`, which clips E3.2's elements and drops a cut
+closer than δ/2 to an end as `SmoothEdges.elements` drops one near ±1. It
+is bit for bit the 2-D medium's α in `y` (`tests/heat2d/test_exact.py`).
+It refuses curved interfaces and non-constant pieces, which do not
+separate. The resolution is E3.2's recipe, 20 nodes per element and
+elements no wider than 0.1 (`REFERENCE_N_CHEB`, `REFERENCE_MAX_WIDTH`),
+checked against 24 nodes and 0.05. The methods mirror `LayeredExact`'s
+(`v`, `v_y`, `__call__`, `flux_y`; a point on an element edge reads the
+element above it), and `boundary_values()` is `(0, e^{ct} sin 2πx)` for
+`solve_equilibrium` and `march_parabolic`, exact since `v(1) = 1`.
+
+*Decision: the parabolic reference is the separable mode, not a Radau
+march.* The ticket's "matching 1-D parabolic problem in `y`" is
+`w_t = (α w_y)_y − 4π² α w` with `w(0, t) = 0` and `w(1, t) = e^{ct}`. It
+has the solution `e^{ct} v_c(y)` exactly, with `v_c` the BVP above at
+`c = c_t = 1`: E2.5's problem (port notes §2.5), which H4 compares
+against. So no time integrator enters: no Radau floor, and the `atol`
+trap of §2.1 cannot arise. The reference can be called at any `t`, BD4's
+analytic history at `−3dt … −dt` included (E2.5's breadcrumb on this
+ticket, item 2), and the ticket's 1e-12 is within reach where Radau's
+1e-9 tolerance gave agreement of 1e-12 to 6e-11 in 1-D. This departs from
+the E4.1 breadcrumb (item 3), which proposed `chebyshev_parabolic` with
+the extra term. A transient reference from non-separable initial data is
+not built; if E4.6 wants one it is `parabolic_reference` with the
+`κ² α` term added to the operator, a few lines.
+
+`scripts/heat2d_stiff.py` (0.5 s) prints the table, per δ and `c`: the
+elements, interior unknowns and build time; the agreement with the finer
+resolution on 4001 points (*agreement*); the distance from the δ = 0
+reference, `sup |v_δ − v₀|`, or at δ = 0 from `case1_exact` (*distance*);
+and the band's midline deficit `α(0.7) − 0.2`. Two runs gave the same
+digits. The last three rows are from `--deltas 0.002 0.001 0.0005
+--growth 0`.
+
+| δ | c | elements | unknowns | ms | agreement | distance | distance / δ | α(0.7) − 0.2 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 10 | 190 | 0.4 | 7.2e-13 | 3.8e-13 (exact) | – | 0 |
+| 0.04 | 0 | 15 | 285 | 2.3 | 1.1e-12 | 2.82e-2 | 0.705 | 1.07e-2 |
+| 0.01 | 0 | 21 | 399 | 3.5 | 3.1e-12 | 1.17e-2 | 1.169 | 3.3e-9 |
+| 0.005 | 0 | 21 | 399 | 3.4 | 4.4e-12 | 6.80e-3 | 1.359 | 0 |
+| 0.0025 | 0 | 23 | 437 | 4.0 | 1.2e-11 | 3.68e-3 | 1.472 | 0 |
+| 0 | 1 | 10 | 190 | 0.4 | 4.1e-13 | 9.0e-14 (exact) | – | 0 |
+| 0.04 | 1 | 15 | 285 | 2.3 | 1.4e-12 | 2.82e-2 | 0.705 | 1.07e-2 |
+| 0.01 | 1 | 21 | 399 | 3.4 | 2.1e-12 | 1.20e-2 | 1.196 | 3.3e-9 |
+| 0.005 | 1 | 21 | 399 | 3.4 | 9.2e-13 | 6.95e-3 | 1.389 | 0 |
+| 0.0025 | 1 | 23 | 437 | 3.8 | 4.7e-12 | 3.76e-3 | 1.504 | 0 |
+| 0.002 | 0 | 23 | 437 | 4.2 | 1.3e-11 | 2.99e-3 | 1.496 | 0 |
+| 0.001 | 0 | 24 | 456 | 4.0 | 9.4e-12 | 1.55e-3 | 1.549 | 0 |
+| 0.0005 | 0 | 24 | 456 | 3.9 | 2.1e-11 | 7.89e-4 | 1.578 | 0 |
+
+- **δ = 0 recovers the analytic case-1 solution**: `v` to 3.8e-13
+  (`c = 0`) and 9e-14 (`c = 1`), `v_y` and the flux to 3e-12, `u` at
+  `t = −0.3, 0, 0.1` to 1e-12. Through the 2016 solver, the aware operator
+  on `SmoothBand(case 1, 0)` at 1250 nodes, solved with the reference's
+  `boundary_values`, has RMS error 1.5976e-5 against the reference. That is
+  port notes §2.4's 1.60e-5, and it equals the error against `case1_exact`
+  to 3.5e-14.
+- **The reference is converged**, to the collocation's round-off floor:
+  1e-12 at δ = 0.04, 1e-12 to 4e-12 at δ = 0.01 and 0.005, 5e-12 to
+  1.2e-11 at 0.0025, 2e-11 at 5e-4. The disagreement is not confined to
+  the δ-wide elements (at δ = 0.0025: 6e-13 below the band, 9e-12 inside
+  it, 1.2e-11 at the upper edge). It is a global perturbation from their
+  round-off, E3.2's floor. Row-equilibrating the collocation system takes
+  its condition number from 3e10 to 9e5 at δ = 0.0025 and leaves the
+  disagreement at 1e-11, so the floor is in the differentiation matrices,
+  not in the solve (scratch, not committed). Against the ticket's 1e-12:
+  met at δ = 0 (7e-13), about 1e-12 at δ = 0.04, within 4× at δ = 0.01
+  and 0.005, 12× at 0.0025. The smallest errors the study will read
+  against it are E2.5's 40,000-node points, 5.28e-9 elliptic and 5.51e-9
+  parabolic, about 400× above the worst agreement. Independently of the
+  collocation, the flux differentiated by central differences matches
+  `(4π² α + c) v` to 2e-8 relative through the edges, at δ = 0.01 and
+  0.0025.
+- **The jump limit is first order in δ.** `sup |v_δ − v₀| / δ` climbs
+  from 1.17 at δ = 0.01 to 1.58 at 5e-4 toward a constant of about 1.6,
+  the correction roughly linear in δ (the slope between consecutive rows
+  is 45–58). At δ = 0.04 (0.705) the band's two edges overlap
+  (`w/δ = 5`, next bullet), so that row is pre-asymptotic. `c = 1` is
+  within 3 % of `c = 0` throughout. This is H10's floor for the δ = 0
+  construction, exact from the two separable solves; E4.3 reads it in the
+  RMS over the nodes.
+- **δ = 0.04 never reaches the plateau**: `α(0.7) = 0.2107`
+  (`w/δ = 5`), against 0.2 + 3.3e-9 at δ = 0.01 and 0.2 to the bit from
+  0.005. E4.3's widest edge is therefore a resolved edge whose band is not
+  the jump's band: its line should be read against its own reference,
+  which it is.
+
+Tests: `tests/heat2d/test_domain.py` (δ = 0 bit for bit on all three
+cases; case 1 = the 1-D medium bit for bit at three δ; the tanh blend to
+rounding; the tails at two δ on three cases; the gradient against
+differences on three cases; the fold's thin-band profile at `w/δ = 0,
+½, 2`; the ring in its radial distance; `with_smooth_edges` keeping the
+node set; the normal profile's stops, pieces and one-sidedness at δ = 0,
+its stops against `heat1d.stiff._stops` at three δ, the refusal of curved
+interfaces). `tests/heat2d/test_operators.py`: every operator on the
+smooth band, bit for bit at δ = 0, and the crossing and far rows at
+δ = 0.01. `tests/heat2d/test_exact.py`: δ = 0 against `case1_exact` at
+`c = 0, 1`; convergence at the four study δ and both `c`; the ODE by
+differences; first order in δ; `profile_medium` bit for bit and its
+refusals; the boundary values at any `t` and a general flat band against
+`LayeredExact`; the δ = 0 solver check above. `tests/heat1d/`:
+`edge_blend`, `OnInterval`'s clipping and refusals, the α-weighted
+wavenumber term against `sinh`, and `ChebyshevPieces.alpha` one-sided at a
+jump. `tests/test_heat2d_stiff.py` runs the driver.
+
+**What E4.3–E4.8 inherit.** E4.3 (#34) runs `naive_operator(nodes,
+SmoothBand(...), stencils)` on `build_node_set(with_smooth_edges(case1(),
+δ), n)` against `case1_reference(δ, c)`, marching BD4 with
+`solution=ref` and `values=ref.boundary_values()`; the δ = 0
+construction is `interface_aware_operator` on the same medium, and its
+floor is `ref_δ − ref_0` at the nodes. E4.4 (#35) marches on
+`normal_profile`'s segments. E4.6 (#37) reuses the references, which need
+no cache at a few milliseconds each. E4.7 (#38) adds the curved crossings
+to `normal_profile`. E4.8 (#39) decides the fold or the difference for
+the smooth ring.

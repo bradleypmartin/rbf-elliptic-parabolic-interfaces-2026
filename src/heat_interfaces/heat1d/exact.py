@@ -256,7 +256,10 @@ class ChebyshevPieces:
     ends, one unknown per row. ``evaluate`` reads a point on a shared edge
     from the element to its right; E1.3's version read it from the piece
     ``PiecewiseAlpha.at_interface`` names, and the matching row makes the
-    two readings equal to solver precision.
+    two readings equal to solver precision. ``alpha`` is alpha at ``x``
+    from each element's own piece (one-sided at a jump) and ``derivative``
+    the block-diagonal ``D``, for operators built on the same elements
+    (E4.2's ``- κ² alpha`` term, and the flux ``alpha u'`` at the nodes).
     """
 
     medium: Medium1D
@@ -267,6 +270,8 @@ class ChebyshevPieces:
     constraints: np.ndarray
     constrained: np.ndarray
     interior: np.ndarray
+    alpha: np.ndarray
+    derivative: np.ndarray
 
     @classmethod
     def build(
@@ -287,14 +292,16 @@ class ChebyshevPieces:
         x = _element_nodes(edges, n_cheb)
         operator = np.zeros((size, size))
         derivative = np.zeros((size, size))
+        alpha = np.empty(size)
         for k, piece in enumerate(pieces):
             a, b = edges[k], edges[k + 1]
             rows = slice(k * width, (k + 1) * width)
             xk = x[rows]
             dk = 2.0 / (b - a) * d
             derivative[rows, rows] = dk
+            alpha[rows] = piece.alpha(xk)
             operator[rows, rows] = (
-                piece.alpha(xk)[:, None] * (dk @ dk) + piece.alpha_x(xk)[:, None] * dk
+                alpha[rows][:, None] * (dk @ dk) + piece.alpha_x(xk)[:, None] * dk
             )
         starts = np.arange(count) * width
         ends = starts + n_cheb
@@ -313,7 +320,16 @@ class ChebyshevPieces:
         constraints[-1, ends[-1]] = 1.0
         interior = np.setdiff1d(np.arange(size), constrained)
         return cls(
-            medium, n_cheb, edges, x, operator, constraints, constrained, interior
+            medium,
+            n_cheb,
+            edges,
+            x,
+            operator,
+            constraints,
+            constrained,
+            interior,
+            alpha,
+            derivative,
         )
 
     def constraint_values(self, u_left: float, u_right: float) -> np.ndarray:
@@ -326,6 +342,29 @@ class ChebyshevPieces:
         return _evaluate_elements(self.edges, self.n_cheb, self.x, values, x)
 
 
+def chebyshev_profile(
+    medium: Medium1D,
+    u_left: float,
+    u_right: float,
+    n_cheb: int = 48,
+    shift: float = 0.0,
+    max_width: float | None = None,
+    wavenumber: float = 0.0,
+) -> tuple[ChebyshevPieces, np.ndarray]:
+    """The elements and the nodal solution of ``chebyshev_equilibrium``'s problem.
+
+    ``(alpha v')' - wavenumber² alpha v = shift v`` with ``v = u_left``,
+    ``u_right`` at the ends of the medium's elements, for callers that want
+    the nodes themselves (the derivative, the flux, their own evaluation).
+    """
+    cp = ChebyshevPieces.build(medium, n_cheb, max_width)
+    matrix = cp.operator - np.diag(shift + wavenumber**2 * cp.alpha)
+    rhs = np.zeros(cp.x.size)
+    matrix[cp.constrained] = cp.constraints
+    rhs[cp.constrained] = cp.constraint_values(u_left, u_right)
+    return cp, np.linalg.solve(matrix, rhs)
+
+
 def chebyshev_equilibrium(
     medium: Medium1D,
     u_left: float,
@@ -334,6 +373,7 @@ def chebyshev_equilibrium(
     n_cheb: int = 48,
     shift: float = 0.0,
     max_width: float | None = None,
+    wavenumber: float = 0.0,
 ) -> np.ndarray:
     """``(alpha v')' = shift v`` with ``v(-1) = u_left``, ``v(1) = u_right``, at ``x``.
 
@@ -341,15 +381,16 @@ def chebyshev_equilibrium(
     quadrature reference); ``shift = c > 0`` gives the profile of the
     separable solution ``u = e^{ct} v(x)`` of the heat equation with
     ``u(-1, t) = u_left e^{ct}``, the 1-D twin of dissertation eq. 85–86.
-    ``max_width`` splits wide elements (``ChebyshevPieces.build``).
+    ``max_width`` splits wide elements (``ChebyshevPieces.build``). A
+    ``wavenumber`` κ adds ``- κ² alpha v`` on the left: the profile of
+    ``e^{ct} sin(κ s) v`` in a medium that varies along ``v``'s coordinate
+    only, E4.2's separable reference across a smooth flat band (with the
+    ends those of the medium's elements, ``OnInterval``).
     """
-    cp = ChebyshevPieces.build(medium, n_cheb, max_width)
-    size = cp.x.size
-    matrix = cp.operator - shift * np.eye(size)
-    rhs = np.zeros(size)
-    matrix[cp.constrained] = cp.constraints
-    rhs[cp.constrained] = cp.constraint_values(u_left, u_right)
-    return cp.evaluate(np.linalg.solve(matrix, rhs), x)
+    cp, values = chebyshev_profile(
+        medium, u_left, u_right, n_cheb, shift, max_width, wavenumber
+    )
+    return cp.evaluate(values, x)
 
 
 @dataclass(frozen=True)
