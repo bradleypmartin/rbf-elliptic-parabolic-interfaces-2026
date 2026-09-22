@@ -8,7 +8,8 @@ fourth order through it because their polynomial basis is replaced by
 source of truth. §1 is the formulation (E3.1, #26); §2 holds the 1-D
 results (E3.2, #27, to E3.6, #31, which closes it in §2.5); §3 is the
 2-D design (E4.1, #32) and §4–5 hold the 2-D results, from the smooth
-flat band and its references (E4.2, #33, §4.1) to E4.10 (#41). The port
+flat band and its references (E4.2, #33, §4.1) and the naive baseline
+through it (E4.3, #34, §4.2) to E4.10 (#41). The port
 of the 2016 methods this builds on is in
 `docs/port-notes.md`.
 
@@ -2316,8 +2317,9 @@ the extra term. A transient reference from non-separable initial data is
 not built; if E4.6 wants one it is `parabolic_reference` with the
 `κ² α` term added to the operator, a few lines.
 
-`scripts/heat2d_stiff.py` (0.5 s) prints the table, per δ and `c`: the
-elements, interior unknowns and build time; the agreement with the finer
+`scripts/heat2d_stiff.py --mode references` (0.5 s) prints the table, per
+δ and `c`: the elements, interior unknowns and build time; the agreement
+with the finer
 resolution on 4001 points (*agreement*); the distance from the δ = 0
 reference, `sup |v_δ − v₀|`, or at δ = 0 from `case1_exact` (*distance*);
 and the band's midline deficit `α(0.7) − 0.2`. Two runs gave the same
@@ -2405,3 +2407,403 @@ floor is `ref_δ − ref_0` at the nodes. E4.4 (#35) marches on
 no cache at a few milliseconds each. E4.7 (#38) adds the curved crossings
 to `normal_profile`. E4.8 (#39) decides the fold or the difference for
 the smooth ring.
+
+### 4.2 The naive baseline through a smooth flat edge (E4.3, #34)
+
+![knee](figures/heat2d_stiff_knee.png)
+
+`scripts/heat2d_stiff.py --mode naive` (the default `--mode all` runs it
+after §4.1's table: 2 min cold at the default counts 1250–10,000 with the
+growing-mode check at 1250 and 2500, under a second cached; the documented
+sweep, `--counts 1250 2500 5000 10000 20000 40000 80000 160000`, took 58
+min once, 37 of them at 160,000, and its numbers are kept in
+`outputs/heat2d_stiff_knee.json`). On case 1's node sets (seed 0; a smooth
+domain's set is the jump's) two operators run on `SmoothBand(case1(), δ)`
+at δ ∈ {0, 0.04, 0.01, 0.005, 0.0025}: *naive* `Dx A Dx + Dy A Dy` on port
+notes §2.2's stencils with α at the nodes (`naive_operator`; the E4.1
+breadcrumb on #34, item 1), and *the δ = 0 construction*,
+`interface_aware_operator` with E2.4's warp on the same medium (§3.1,
+§4.1). Both problems of §4.1: the equilibrium (`c = 0`) and E2.5's
+parabolic mode (`c = 1`, BD4 at `dt = h` from the reference's analytic
+history to `t = 0.1`), against `case1_reference(δ, c)`. Errors are the RMS
+over all nodes, Dirichlet rows included, orders per halving of
+`h = 1/round(0.95 √N)` (port notes §2.10). `h = δ` falls near 11,000,
+44,000 and 177,000 nodes for δ = 0.01, 0.005 and 0.0025, and δ = 0.04 has
+`h < δ` at every count. Beside the two lines are the *floor*, the RMS of
+`ref_δ − ref_0` at the nodes (§4.1), and the *uniform* run, the naive
+operator on the same nodes with α ≡ 1 against `control_exact`: the
+problem without the feature, which is what the companion called its
+resolution floor.
+
+*Decision: the naive systems are factored with `solve.PRODUCT_ORDERING =
+"MMD_ATA"`.* The product reaches the neighbours of the neighbours (147
+nonzeros per row), and SuperLU's default `COLAMD` factor of it takes 11.6 s
+at 20,000 nodes and 52 s at 40,000, against 3.7 s and 10.4 s, with the two
+solutions agreeing to 5e-12 (δ = 0.01; `MMD_AT_PLUS_A` is no faster than
+`COLAMD`: 12 s and 72 s). `solve_equilibrium`, `march_parabolic` and
+`heat1d.march.bd4_march` gained a `permc_spec` argument whose default
+(`None`) is SuperLU's own, bit for bit (pinned in
+`tests/heat2d/test_solve.py` and `test_march.py`), so no earlier table
+moves. The construction keeps the default ordering, and its δ = 0 line is
+port notes §2.4–2.5's to the digit (1.598e-5 at 1250 … 5.276e-9 at 40,000;
+new here, 1.145e-9 at 80,000 and 3.58e-10 at 160,000). A flux-variable
+form (`q = A D u` as unknowns, three times the size and 56 nonzeros per
+row) was tried in scratch and fills worse: 48 s (`COLAMD`) and 19 s
+(`MMD_ATA`) at 20,000.
+
+**The naive knee (H10's first clause: there is one, and it is corrected).**
+RMS error (order per halving of h):
+
+| n | h | uniform α ≡ 1 | δ = 0 (jump) | δ = 0.04 | δ = 0.01 | δ = 0.005 | δ = 0.0025 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| *equilibrium* | | | | | | | |
+| 1250 | 0.0294 | 9.68e-05 | 4.14e-03 | 6.66e-05 | 2.55e-03 | 3.66e-03 | 3.89e-03 |
+| 2500 | 0.0208 | 2.23e-06 (10.94) | 2.78e-03 (1.15) | 7.20e-06 (6.45) | 7.62e-04 (3.51) | 2.05e-03 (1.68) | 2.47e-03 (1.32) |
+| 5000 | 0.0149 | 1.35e-07 (8.40) | 1.36e-03 (2.14) | 2.77e-06 (2.87) | 1.51e-04 (4.86) | 7.18e-04 (3.15) | 1.17e-03 (2.24) |
+| 10000 | 0.0105 | 2.78e-08 (4.53) | 1.28e-03 (0.19) | 4.22e-07 (5.38) | 1.03e-04 (1.08) | 2.48e-04 (3.05) | 1.00e-03 (0.45) |
+| 20000 | 0.0075 | 5.81e-09 (4.55) | 4.42e-04 (3.08) | 4.27e-08 (6.67) | 1.03e-05 (6.70) | 6.20e-05 (4.02) | 2.16e-04 (4.46) |
+| 40000 | 0.0053 | 8.24e-10 (5.59) | 3.44e-04 (0.72) | 8.22e-09 (4.72) | 2.45e-06 (4.12) | 2.89e-05 (2.19) | 8.36e-05 (2.72) |
+| 80000 | 0.0037 | 1.83e-10 (4.33) | 4.12e-04 (−0.52) | 1.13e-09 (5.72) | 3.71e-07 (5.43) | 5.97e-06 (4.53) | 3.50e-05 (2.51) |
+| 160000 | 0.0026 | 6.05e-11 (3.20) | 2.07e-04 (1.99) | 1.64e-10 (5.57) | 7.79e-08 (4.52) | 1.17e-06 (4.71) | 1.68e-05 (2.13) |
+| *parabolic, t = 0.1* | | | | | | | |
+| 1250 | 0.0294 | 8.30e-05 | 7.79e-03 | 6.97e-05 | 4.24e-03 | 7.17e-03 | 7.55e-03 |
+| 2500 | 0.0208 | 2.42e-06 (10.26) | 2.98e-03 (2.79) | 7.74e-06 (6.37) | 8.01e-04 (4.83) | 2.18e-03 (3.45) | 2.63e-03 (3.06) |
+| 5000 | 0.0149 | 1.53e-07 (8.27) | 1.19e-03 (2.74) | 2.32e-06 (3.62) | 1.64e-04 (4.76) | 5.86e-04 (3.94) | 9.34e-04 (3.10) |
+| 10000 | 0.0105 | 3.10e-08 (4.57) | 9.53e-04 (0.64) | 4.35e-07 (4.79) | 7.73e-05 (2.15) | 2.28e-04 (2.70) | 6.76e-04 (0.93) |
+| 20000 | 0.0075 | 5.68e-09 (4.94) | 4.35e-04 (2.28) | 4.30e-08 (6.73) | 1.07e-05 (5.75) | 6.49e-05 (3.65) | 2.11e-04 (3.38) |
+| 40000 | 0.0053 | 9.16e-10 (5.23) | 3.09e-04 (0.98) | 8.78e-09 (4.55) | 2.15e-06 (4.59) | 3.09e-05 (2.12) | 6.49e-05 (3.38) |
+| 80000 | 0.0037 | 1.67e-10 (4.90) | 2.87e-04 (0.21) | 1.17e-09 (5.81) | 3.78e-07 (5.00) | 4.55e-06 (5.51) | 3.13e-05 (2.10) |
+| 160000 | 0.0026 | 4.43e-11 (3.84) | 1.68e-04 (1.55) | 1.74e-10 (5.51) | 8.25e-08 (4.40) | 8.47e-07 (4.87) | 1.42e-05 (2.28) |
+
+- *The jump* is port notes §2.2's line (4.14e-3 … 1.28e-3 at 1250–10,000)
+  carried to 2.07e-4 at 160,000: first order with the node set's scatter,
+  rates −0.52 to 3.08, a least-squares fit of 1.23 over the eight counts.
+- *The rates alone do not show a knee*, because every line carries that
+  scatter: seed 0's δ = 0.01 line goes 4.86, 1.08, 6.70 across `h = δ`.
+  Dividing by the jump's error on the same node set (the `÷ jump` column
+  below) cancels it, and then the knee is plain and nearly a function of
+  `h/δ` alone. The naive error is 0.86–0.94 of the jump's while
+  `h ≥ 6δ`, 0.74–0.79 at `4.2δ`, 0.49–0.62 at `3δ`, 0.19–0.27 at `2.1δ`,
+  0.085–0.14 at `1.5δ`, 0.081–0.084 at `h ≈ δ` for all three δ, and then
+  0.014–0.023 at `0.75δ` and 0.006–0.007 at `0.53δ`.
+- *It stalls at `h ≈ δ` and drops right after*, 1-D's shape (§2.2, where
+  MATLAB δ = 0.0025 went at rate 0.96 into `h = δ` and 6.84 out of it):
+  δ = 0.01 at rates 1.08 then 6.70 and δ = 0.005 at 2.19 then 4.53.
+- *Its depth.* From `h ≈ 2δ` to `h ≈ δ/2` the naive error falls 311×
+  (δ = 0.01, 2500 → 40,000) and 212× (δ = 0.005, 10,000 → 160,000). Over
+  the same counts the jump's falls 8.1× and 6.2×, so the knee is 38× and
+  34× in the jump's units. 1-D fell 220× (MATLAB medium) and 1000× (eq.
+  75) over the same range while its jump fell 4×: 55× and 250× in the
+  jump's units. The 2-D knee is the shallower. At `h = 2δ` the 2-D line
+  is at 0.19–0.27 of the jump, where 1-D's was at 0.085 (MATLAB medium)
+  and 0.27 (eq. 75).
+- *Past the knee* (`h ≲ 0.75δ`) the rates are 4.1–5.4: δ = 0.01 at 4.12,
+  5.43, 4.52 (fit 4.76 over 20,000–160,000), δ = 0.005 at 4.71, and
+  δ = 0.04, resolved at every count, fits 5.31 over 1250–160,000. That is
+  the uniform run's order (fit 4.98 from 2500), the order of the 42-node
+  degree-5 stencils, not four. The resolved edge is not free: δ = 0.04
+  costs 3.2× the uniform medium's error at 2500, 20× at 5000 and 2.7× at
+  160,000.
+- *δ = 0.0025* reaches `h = δ` only at 160,000 (÷ jump 0.081, the other
+  two δ's value there); its rates of 2.1–4.5 from 20,000 on are the upper
+  half of its knee.
+- *The parabolic table repeats the elliptic one* to 0.67–1.09× from 2500
+  nodes on, at every δ, so the knee belongs to the operator, not to the
+  problem, as in 1-D. The 1250-node parabolic row is the exception (the
+  growing mode, below).
+
+So H10's "first order while `h ≳ δ` and fourth order once `h ≲ δ`" is
+corrected. The naive line follows the jump's (first order, with its
+scatter) only while `h ≳ 6δ`. The knee spans `4δ ≳ h ≳ 0.75δ`, with a
+stall at `h ≈ δ`, and below it the order is the stencils' 5, not 4.
+
+**The δ = 0 construction (H10's second clause: holds).** RMS error
+(error / floor):
+
+| n | δ = 0 (E2.4's line) | δ = 0.04 | δ = 0.01 | δ = 0.005 | δ = 0.0025 |
+| --- | --- | --- | --- | --- | --- |
+| *equilibrium* | | | | | |
+| 1250 | 1.598e-05 | 4.697e-03 (1.040) | 2.192e-03 (1.000) | 1.235e-03 (1.000) | 6.315e-04 (1.001) |
+| 2500 | 3.795e-06 | 5.622e-03 (1.215) | 2.104e-03 (1.000) | 1.218e-03 (1.000) | 6.323e-04 (1.000) |
+| 5000 | 6.108e-07 | 9.058e-03 (1.913) | 2.069e-03 (0.985) | 1.197e-03 (1.000) | 6.355e-04 (1.000) |
+| 10000 | 1.453e-07 | 1.294e-02 (2.695) | 1.996e-03 (0.950) | 1.177e-03 (1.000) | 6.319e-04 (1.000) |
+| 20000 | 1.923e-08 | 1.655e-02 (3.435) | 1.864e-03 (0.885) | 1.156e-03 (0.985) | 6.251e-04 (1.000) |
+| 40000 | 5.276e-09 | 1.902e-02 (3.943) | 3.687e-03 (1.753) | 1.067e-03 (0.912) | 6.183e-04 (0.999) |
+| 80000 | 1.145e-09 | 2.074e-02 (4.285) | 7.233e-03 (3.432) | 1.329e-03 (1.135) | 6.072e-04 (0.984) |
+| 160000 | 3.575e-10 | 2.184e-02 (4.505) | 1.057e-02 (5.012) | 3.589e-03 (3.068) | 5.568e-04 (0.904) |
+| *parabolic, t = 0.1* | | | | | |
+| 1250 | 1.764e-05 | 5.252e-03 (1.049) | 2.453e-03 (0.999) | 1.382e-03 (0.999) | 7.067e-04 (0.999) |
+| 2500 | 3.988e-06 | 5.989e-03 (1.168) | 2.314e-03 (0.980) | 1.342e-03 (0.982) | 6.968e-04 (0.982) |
+| 5000 | 6.007e-07 | 9.764e-03 (1.859) | 2.303e-03 (0.977) | 1.332e-03 (0.991) | 7.064e-04 (0.991) |
+| 10000 | 1.538e-07 | 1.411e-02 (2.650) | 2.207e-03 (0.936) | 1.304e-03 (0.987) | 7.004e-04 (0.988) |
+| 20000 | 2.126e-08 | 1.811e-02 (3.388) | 2.048e-03 (0.866) | 1.283e-03 (0.975) | 6.940e-04 (0.989) |
+| 40000 | 5.508e-09 | 2.086e-02 (3.898) | 4.027e-03 (1.706) | 1.183e-03 (0.901) | 6.865e-04 (0.989) |
+| 80000 | 1.224e-09 | 2.276e-02 (4.240) | 7.934e-03 (3.355) | 1.454e-03 (1.107) | 6.743e-04 (0.974) |
+| 160000 | 4.179e-10 | 2.399e-02 (4.460) | 1.162e-02 (4.910) | 3.935e-03 (2.997) | 6.161e-04 (0.891) |
+
+- *On the floor, to three digits, while `h ≥ 2.1δ`*: 0.999–1.001 for
+  δ = 0.01 at 1250–2500, δ = 0.005 to 10,000 and δ = 0.0025 to 40,000
+  (parabolic 0.980–0.999). It is 0.984–0.985 at `1.5δ` and dips below
+  the floor at `h ≈ δ` (0.950, 0.912, 0.904 for the three δ) as the
+  partly resolved direct rows pull the solution part of the way to the
+  truth, as in 1-D. Then it grows: 1.75 and 3.07 at `0.53δ`, 3.43 and
+  5.01 at `0.37δ` and `0.26δ` (δ = 0.01). δ = 0.04 goes from 1.04 to 4.51
+  at `0.066δ` and is flattening at 2.2e-2 (2.07e-2 and 2.18e-2 at 80,000
+  and 160,000), 1-D's "grows to an O(1) constant" (§2.2: 0.127, in its
+  relative norm).
+- *The floor* is 0.25δ, 0.24δ, 0.21δ and 0.12δ in the RMS for
+  δ = 0.0025 … 0.04 (6.2e-4, 1.2e-3, 2.1e-3, 4.5–4.8e-3); §4.1's sup
+  norm gave 1.47δ … 0.70δ.
+- *It is the better baseline only while `h ≳ 3δ`.* The naive line
+  crosses the floor between `h = 4.2δ` and `3δ` for δ = 0.0025 (1.00e-3
+  and 2.16e-4 against 6.3e-4) and δ = 0.005 (2.05e-3 and 7.18e-4 against
+  1.2e-3), and between `2.9δ` and `2.1δ` for δ = 0.01 (2.55e-3 and
+  7.62e-4 against 2.2e-3). Above the crossing the construction is better
+  by at most 6× (δ = 0.0025 at 11.8δ). To use it one has to know δ and
+  switch it off near `h ≈ 3δ`, before it leaves its floor (§2.2 put the
+  1-D switch at `h ≈ 2δ`, where the construction leaves the floor
+  there).
+
+**The growing mode at 1250 nodes (the E2.5 breadcrumb's check).** The
+interior spectra per δ at 1250 and 2500 nodes (`growing_modes`, dense):
+
+| n | operator | max Re λ | positive | BD4 max \|ζ\| at dt = h | parabolic / elliptic error |
+| --- | --- | --- | --- | --- | --- |
+| 1250 | naive, δ = 0, 0.01, 0.005, 0.0025 | 17.68, 14.78, 17.46, 17.68 | 1 | 1.55–1.69 | 1.88, 1.66, 1.96, 1.94 |
+| 1250 | naive, δ = 0.04 | 25.07 | 1 | 2.12 | 1.05 |
+| 1250 | construction, every δ | −7.27 (−7.30 at 0.04) | 0 | 0.807 | 1.10–1.12 |
+| 2500 | naive, every δ | −7.33 … −7.73 | 0 | 0.85–0.86 | 1.05–1.08 |
+| 2500 | construction, every δ | −7.27 (−7.40 at 0.04) | 0 | 0.857–0.860 | 1.05–1.10 |
+
+The naive operator's coarse-set mode is there at every δ on the 1250-node
+set (the jump's +17.7 is port notes §2.5's), BD4 at `dt = h` amplifies it,
+and it shows: the parabolic naive errors at 1250 are 1.7–2.0× the
+elliptic ones for δ ≤ 0.01, where the construction's ratio is 1.10–1.12
+and every ratio at 2500 is 1.05–1.10 (port notes §2.5: 0.98–1.11). So the
+1250-node parabolic naive row carries the mode, and the parabolic rates
+from 1250 to 2500 (2.8–4.8, against 1.2–3.5 elliptic) are inflated by it;
+δ = 0.04's ratio of 1.05 says the mode is present but barely excited when
+the edge is resolved. Its eigenvector sits on the free nodes in the band's
+middle, `y ≈ 0.70` between the two curves' straddling rows (a quarter of
+its mass on five nodes; 27–35 % in `0.6 < y < 0.7`), the twin of port
+notes §2.2's `y ≈ 0.67` on the control (scratch). From 2500 nodes on no
+operator has a positive eigenvalue at any δ and BD4 damps every mode, so
+from there the parabolic table reads as the elliptic one does.
+
+**What separates a resolved edge from an unresolved one (H10's third
+clause: holds, with company).** The readings on the straddling rows
+(`edge_diagnostics`; the E4.1 breadcrumb's item 3 names the candidates).
+The fixed rows of E2.1 are equispaced in `x` over the period, so a row's
+`sin 2πx` coefficient, `(2/m) Σ u sin 2πx` (`row_profile`), is
+`e^{ct} v(y_row)` exactly for the separable mode, and it averages out the
+scattered solution's x-dependence. Each solution gets three readings, all
+linear and applied to the error `e = u − u_ref`, so that their own
+truncation cancels against the reference's:
+
+- *profile*: the largest `|row_profile(e)|` on the innermost pair of
+  either curve (`±h/2` off it), the y-profile error where the edge is,
+  absolute like the RMS;
+- *flux*: on each side of each curve, the quadratic through that side's
+  three rows' profiles (`ROW_OFFSETS`, the staggered middle row included)
+  differentiated at the innermost row, times α there (`pair_fluxes`). It
+  is the discrete solution's own flux `α ∂_y u` on that side, read without
+  crossing the curve. The largest of the four, over the reference's flux
+  `|α v′|` at that curve (0.28 at `y = 0.6` and 0.62 at 0.8 on the jump);
+- *jump*: the error in the flux jump `q₊ − q₋` across a pair, over the
+  same scale (H10's candidate).
+
+Beside them are the max error and `÷ jump`, the naive RMS error over the
+jump's naive RMS error on the same node set. `matched_ratios` sets each
+reading at `(δ, n)` against `(δ/2, 4n)`: `h` halves to 1.5 % when `n`
+quadruples, so the two share `h/δ` to 2 %. A reading that depends on
+`h/δ` alone has ratio 1; one that also scales like `h^p` has `2^p`.
+
+The naive equilibrium's readings, ordered by `h/δ` (the construction's
+flux reading last):
+
+| h/δ | δ | n | RMS | ÷ jump | profile | flux | jump | construction: flux |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| jump | 0 | 1250 … 160000 | 4.14e-03 … 2.07e-04 | 1 | 1.74e-02 … 1.21e-03 | 0.853, 0.493, 0.553, 0.370, 0.351, 0.345, 0.337, 0.364 | 0.55–0.88 | 3.0e-04 … 1.2e-08 |
+| 11.76 | 0.0025 | 1250 | 3.89e-03 | 0.938 | 1.39e-02 | 8.58e-01 | 8.64e-01 | 1.80e-02 |
+| 8.33 | 0.0025 | 2500 | 2.47e-03 | 0.887 | 1.10e-02 | 4.67e-01 | 8.06e-01 | 1.81e-02 |
+| 5.97 | 0.0025 | 5000 | 1.17e-03 | 0.860 | 4.32e-03 | 5.45e-01 | 7.23e-01 | 1.77e-02 |
+| 5.88 | 0.005 | 1250 | 3.66e-03 | 0.884 | 1.05e-02 | 8.39e-01 | 8.25e-01 | 3.46e-02 |
+| 4.21 | 0.0025 | 10000 | 1.00e-03 | 0.785 | 2.50e-03 | 3.11e-01 | 4.99e-01 | 1.98e-02 |
+| 4.17 | 0.005 | 2500 | 2.05e-03 | 0.738 | 7.63e-03 | 4.07e-01 | 6.73e-01 | 3.53e-02 |
+| 2.99 | 0.005 | 5000 | 7.18e-04 | 0.527 | 2.04e-03 | 2.92e-01 | 3.77e-01 | 4.32e-02 |
+| 2.99 | 0.0025 | 20000 | 2.16e-04 | 0.490 | 5.51e-04 | 2.11e-01 | 2.74e-01 | 4.57e-02 |
+| 2.94 | 0.01 | 1250 | 2.55e-03 | 0.616 | 5.15e-03 | 4.99e-01 | 4.30e-01 | 7.00e-02 |
+| 2.11 | 0.005 | 10000 | 2.48e-04 | 0.194 | 1.24e-03 | 1.57e-01 | 6.19e-02 | 1.67e-01 |
+| 2.11 | 0.0025 | 40000 | 8.36e-05 | 0.243 | 2.61e-04 | 9.11e-02 | 5.72e-02 | 1.90e-01 |
+| 2.08 | 0.01 | 2500 | 7.62e-04 | 0.274 | 3.56e-03 | 2.48e-01 | 1.21e-01 | 1.30e-01 |
+| 1.49 | 0.01 | 5000 | 1.51e-04 | 0.111 | 8.97e-04 | 1.38e-01 | 9.04e-02 | 4.19e-01 |
+| 1.49 | 0.005 | 20000 | 6.20e-05 | 0.140 | 4.19e-04 | 9.51e-02 | 7.41e-02 | 4.67e-01 |
+| 1.49 | 0.0025 | 80000 | 3.50e-05 | 0.085 | 1.82e-04 | 8.17e-02 | 7.15e-02 | 4.97e-01 |
+| 1.05 | 0.01 | 10000 | 1.03e-04 | 0.081 | 2.95e-04 | 5.02e-02 | 4.85e-02 | 8.05e-01 |
+| 1.05 | 0.005 | 40000 | 2.89e-05 | 0.084 | 1.37e-04 | 4.33e-02 | 5.01e-02 | 8.61e-01 |
+| 1.05 | 0.0025 | 160000 | 1.68e-05 | 0.081 | 3.71e-05 | 3.51e-02 | 5.25e-02 | 8.88e-01 |
+| 0.75 | 0.01 | 20000 | 1.03e-05 | 0.023 | 3.17e-05 | 1.07e-02 | 1.51e-02 | 1.11e+00 |
+| 0.74 | 0.005 | 80000 | 5.97e-06 | 0.0145 | 1.03e-05 | 1.32e-02 | 1.80e-02 | 1.15e+00 |
+| 0.74 | 0.04 | 1250 | 6.66e-05 | 0.0161 | 2.66e-04 | 1.18e-02 | 1.65e-02 | 8.93e-01 |
+| 0.53 | 0.01 | 40000 | 2.45e-06 | 0.0071 | 5.73e-06 | 2.53e-03 | 3.04e-03 | 1.18e+00 |
+| 0.53 | 0.005 | 160000 | 1.17e-06 | 0.0057 | 1.92e-06 | 2.68e-03 | 3.31e-03 | 1.21e+00 |
+| 0.52 | 0.04 | 2500 | 7.20e-06 | 0.0026 | 2.42e-05 | 4.17e-03 | 3.77e-03 | 1.07e+00 |
+| 0.37 | 0.04 | 5000 | 2.77e-06 | 0.0020 | 5.46e-06 | 4.42e-04 | 4.70e-04 | 1.09e+00 |
+| 0.37 | 0.01 | 80000 | 3.71e-07 | 0.0009 | 4.59e-07 | 3.41e-04 | 4.11e-04 | 1.08e+00 |
+| 0.26 | 0.04 | 10000 | 4.22e-07 | 3.3e-04 | 7.75e-07 | 1.13e-04 | 6.98e-05 | 9.83e-01 |
+| 0.26 | 0.01 | 160000 | 7.79e-08 | 3.8e-04 | 1.36e-07 | 1.04e-04 | 5.65e-05 | 9.12e-01 |
+| 0.19 | 0.04 | 20000 | 4.27e-08 | 9.7e-05 | 7.68e-08 | 1.76e-05 | 1.48e-05 | 9.09e-01 |
+| 0.13 | 0.04 | 40000 | 8.22e-09 | 2.4e-05 | 1.99e-08 | 3.77e-06 | 2.70e-06 | 8.27e-01 |
+| 0.09 | 0.04 | 80000 | 1.13e-09 | 2.7e-06 | 3.11e-09 | 3.96e-07 | 4.69e-07 | 7.67e-01 |
+| 0.07 | 0.04 | 160000 | 1.64e-10 | 7.9e-07 | 4.32e-10 | 6.10e-08 | 1.06e-07 | 7.23e-01 |
+
+The matched pairs, `Q(δ, n) / Q(δ/2, 4n)`:
+
+| δ → δ/2 | n → 4n | h/δ | RMS | ÷ jump | max | profile | flux | jump |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.01 → 0.005 | 1250 → 5000 | 2.94 | 3.56 | 1.17 | 7.94 | 2.52 | 1.71 | 1.14 |
+| 0.01 → 0.005 | 2500 → 10000 | 2.08 | 3.08 | 1.41 | 3.40 | 2.87 | 1.58 | 1.96 |
+| 0.01 → 0.005 | 5000 → 20000 | 1.49 | 2.43 | 0.79 | 2.38 | 2.14 | 1.46 | 1.22 |
+| 0.01 → 0.005 | 10000 → 40000 | 1.05 | 3.58 | 0.96 | 2.12 | 2.15 | 1.16 | 0.97 |
+| 0.01 → 0.005 | 20000 → 80000 | 0.75 | 1.73 | 1.61 | 2.14 | 3.09 | 0.81 | 0.84 |
+| 0.01 → 0.005 | 40000 → 160000 | 0.53 | 2.09 | 1.26 | 1.77 | 2.98 | 0.94 | 0.92 |
+| 0.005 → 0.0025 | 1250 → 5000 | 5.88 | 3.12 | 1.03 | 6.65 | 2.44 | 1.54 | 1.14 |
+| 0.005 → 0.0025 | 2500 → 10000 | 4.17 | 2.05 | 0.94 | 3.60 | 3.05 | 1.31 | 1.35 |
+| 0.005 → 0.0025 | 5000 → 20000 | 2.99 | 3.32 | 1.08 | 1.61 | 3.71 | 1.38 | 1.37 |
+| 0.005 → 0.0025 | 10000 → 40000 | 2.11 | 2.96 | 0.80 | 2.22 | 4.75 | 1.72 | 1.08 |
+| 0.005 → 0.0025 | 20000 → 80000 | 1.49 | 1.77 | 1.65 | 2.00 | 2.31 | 1.16 | 1.04 |
+| 0.005 → 0.0025 | 40000 → 160000 | 1.05 | 1.72 | 1.04 | 0.72 | 3.70 | 1.24 | 0.95 |
+
+(The parabolic readings repeat these: matched flux 0.81–1.66, ÷ jump
+0.81–1.55, RMS 2.08–3.51, profile 2.12–4.75.)
+
+- *The flux on the innermost pair is a function of `h/δ`* to within 1.7×
+  on every matched pair (0.81–1.72). It is 0.31–0.86 of the flux while
+  `h ≥ 4δ` at every count. On the jump it does not converge at all
+  (0.85 at 1250, 0.34–0.37 from 10,000 to 160,000, a fit of 0.32 while
+  the RMS falls 20×). It is 0.21–0.50 at `3δ`, 0.09–0.25 at `2.1δ`,
+  0.08–0.14 at `1.5δ`, 0.035–0.050 at `h ≈ δ`, 0.011–0.013 at `0.75δ`,
+  2.5e-3–4.2e-3 at `0.53δ`, 3.4e-4–4.4e-4 at `0.37δ` and 1.0e-4–1.1e-4 at
+  `0.26δ`, then falls as `(h/δ)⁵` (δ = 0.04 fits 5.18 from 5000 on,
+  6.1e-8 at `0.066δ`). The flux jump across the pair reads the same
+  (matched 0.84–1.96), but it is not monotone (0.057–0.12 at `2.1δ`,
+  0.071–0.090 at `1.5δ`), and on the jump it scatters 0.55–0.88.
+- *So does `÷ jump`* (matched 0.79–1.65), and at `h ≥ 4δ` it is the
+  tighter collapse of the two (0.74–0.94 against 0.31–0.86). It needs the
+  jump's solve on the same nodes, and it is a ratio of RMS errors, not a
+  statement about the solution at the edge.
+- *The RMS, the max and the y-profile error do not collapse.* They carry
+  `h` as well: matched 1.72–3.58 (the RMS, `h^0.8 … h^1.8` at fixed
+  `h/δ`), 2.14–4.75 (the profile, `h^1.1 … h^2.2`) and 0.72–7.94 (the
+  max, which also scatters). On one node set they cannot tell a
+  coarse grid on a resolved edge from a fine grid on an unresolved one.
+  The profile error is the RMS's local twin and separates no better than
+  it.
+- *The construction's flux reading is the naive's mirror image*: 1.8e-2
+  to 2.0e-2 while `h ≥ 4δ` (δ = 0.0025; 3.5e-2 at δ = 0.005), where its
+  RMS is the floor; 0.13–0.19 at `2.1δ`, 0.42–0.50 at `1.5δ`, 0.81–0.89
+  at `h ≈ δ` and 0.72–1.21 below. The reading flags the construction's
+  failure in the resolved regime as it flags the naive operator's in the
+  unresolved one.
+
+*Read without the reference, the flux jump is not an indicator.* The jump
+taken from the discrete solution alone, `|q₊ − q₋|` over the mean `|q±|`,
+is 0.57–1.8 on the lower curve for the jump and for edges with `h ≥ 6δ`,
+against the reference's 0.03–0.12. On the upper curve it is 0.02–0.25
+against the reference's 0.12–0.42: below it at 1250 and 5000 nodes and
+above it at 20,000 (scratch). The cause is the problem, not the reading:
+the flux is continuous at the curve but changes across the pair by
+`∫ 4π² α v dy`, which is O(h) with the local `v` (0.04 at `y = 0.6`, 0.44
+at 0.8), and on the upper curve that change is as large as the naive
+solution's error. So H10's "read from the discrete solution" needs the
+reference's same functional subtracted, as `edge_diagnostics` does.
+
+**Node-set scatter** (seeds 1 and 2 at 1250–20,000, `--seed 1`,
+`--seed 2`, cached beside seed 0's). Across seeds 0, 1 and 2 at equal
+(n, δ), the elliptic naive RMS error spreads 1.03–2.0× (the jump
+1.17–1.56×, port notes §2.2's scatter), `÷ jump` 1.05–1.6× and the
+profile 1.08–1.9×. From 2500 nodes on the flux spreads 1.07–1.45×. At
+1250 it spreads 2.5–3.5× on the jump and the unresolved edges (0.36–1.12
+on the jump), and the coarse set's reading is the least stable of all.
+The rates in the tables are seed 0's and carry that scatter.
+
+So H10's bet on the flux holds, with two qualifications. First, the flux
+reading needs the reference's same functional subtracted. Second, the
+RMS measured against the jump's on the same node set separates just as
+cleanly, at the price of a second solve. The one-sided flux is the
+reading to carry forward: it needs one solve, it is monotone in `h/δ`,
+it scatters least across node sets from 2500 on, and it states what is
+wrong. While `h ≳ 4δ` the flux on the first rows off the edge is off by
+a third to nine-tenths of itself at every count; it is off by 4–5 % at
+`h = δ` and by 1 % at `0.75δ`.
+
+**What the resolution floor hides.** There are three floors here.
+
+- *The companion's floor*, the problem without the feature (the uniform
+  α ≡ 1 run): 9.68e-5 at 1250 (the growing mode; port notes §2.2), then
+  2.23e-6 to 6.05e-11 from 2500 to 160,000. Every unresolved edge sits
+  three to five decades above it (δ = 0.0025: 2.47e-3 against 2.23e-6 at
+  2500, 1.68e-5 against 6.05e-11 at 160,000), and from 2500 on the
+  resolved δ = 0.04 sits 2.7–20× above it. It hides nothing: the knee is
+  plain in `u` itself, as the companion's was not, since its floor stood
+  at 1e-2 and hid the knee in `v`.
+- *The O(δ) floor* hides the construction's own error. While `h ≥ 2δ` the
+  construction's RMS is the floor to three digits, and E2.4's 1.6e-5 …
+  3.6e-10 underneath it is invisible: the number says that the
+  construction converges to the jump's solution and nothing about how
+  well.
+- *The RMS itself hides the flux at the edge.* On the jump the naive RMS
+  falls 20× from 1250 to 160,000 while the flux on the innermost pair
+  stays at 0.34–0.85 of itself, and every edge with `h ≳ 4δ` behaves the
+  same: the naive solution converges on average and not at the edge. The
+  seeds must remove exactly this, and E4.6's seed line should be read in
+  the flux column first.
+
+**H10, ticked.** (1) There is a knee on scattered nodes, and the clause
+is corrected: it is not "first order while `h ≳ δ`, fourth once
+`h ≲ δ`". The line is jump-like only while `h ≳ 6δ`, the knee spans
+`4δ ≳ h ≳ 0.75δ` with a stall at `h ≈ δ`, and the order below it is the
+stencils' 5. (2) Holds: the construction sits on the O(δ) floor for
+`h ≳ 2δ` to three digits, dips 5–10 % below it at `h ≈ δ`, and then
+grows to 3–5× the floor. (3) Holds with the two qualifications above.
+The growing mode was checked: it is on every 1250-node naive operator
+and on no 2500-node one, and the 1250 parabolic naive row carries it.
+
+**What E4.4–E4.6 inherit.**
+
+- `edge_diagnostics(nodes, medium, ref, u, t)` reads any solution on any
+  node set with straddling rows. E4.6's seed line goes through the same
+  tables: `OPERATORS` gains `"seeds"`, and since the cache is keyed by
+  label the naive and construction entries are reused. Bump
+  `KNEE_CACHE_META["version"]` only when an operator, a reading or the
+  march changes (§3.8's trap).
+- What the seeds must show (H4, H8): no plateau in the flux column. Their
+  flux reading should fall with `h` at every δ, from `h ≥ 4δ` down, and
+  their RMS should sit far below the jump's (`÷ jump` ≪ 1) already
+  where the naive line's is 0.74–0.94.
+- `PRODUCT_ORDERING` factors the naive operator; the aware operators keep
+  SuperLU's default. A 1250-node parabolic naive number carries the
+  growing mode, so quote it with that caveat or start at 2500.
+- Single-seed rates at these counts scatter by up to 2× per count in the
+  RMS. An order claim needs a fit, or the `÷ jump` or flux columns, not a
+  pair of counts.
+- The 160,000-node count costs 37 min for the ten naive and construction
+  solves and the uniform run. E4.6 should extend this cache rather than
+  re-solve the naive line (the E4.1 breadcrumb on #37, item 5, asked for
+  re-solving to keep that driver self-contained; this driver is the same
+  one).
+
+Tests: `tests/test_heat2d_stiff.py` pins `row_profile` exact on the
+separable mode, and blind to `cos 2πx` and `sin 4πx`, on every fixed row;
+`curve_level`; `pair_fluxes` one-sided and exact on a profile quadratic on
+each side with a kink at either curve; `edge_diagnostics` zero on the
+reference and exact on a planted one-sided error; `matched_ratios`
+pairing; the cache's round trip and its refusal of another version; and
+the driver at 1250 and 2500 nodes. At δ = 0 the driver reproduces port
+notes §2.2's naive and uniform lines and §2.4's aware line; the
+construction sits on its floor to 2 % while `h ≥ 4δ`; the flux reading
+is above 0.3 unresolved and below 0.02 resolved; the 1250-node growing
+mode is on every naive operator and on no construction; and a second
+run is served from the cache in under 10 s. The E4.2 reference test now
+runs `--mode references`. `tests/heat2d/test_solve.py` and
+`test_march.py` pin the `permc_spec` pass-through.

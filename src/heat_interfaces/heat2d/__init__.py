@@ -172,6 +172,7 @@ from .resample import Reference, reference_solution, resample
 from .solve import (
     ILU_ORDERING,
     METHODS,
+    PRODUCT_ORDERING,
     IterativeResult,
     ReducedSystem,
     ilu_preconditioner,
@@ -313,6 +314,7 @@ __all__ = [
     "resample",
     "ILU_ORDERING",
     "METHODS",
+    "PRODUCT_ORDERING",
     "NEIGHBOURS",
     "SWEEPS",
     "IterativeResult",
