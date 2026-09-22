@@ -1704,7 +1704,7 @@ degree ≤ 4 march together as one linear first-order system of
     22 levels  (5 + 4 + 6 + 4 + 3 for a = 0 … 4),  44 states,
 
 against about 600 for the companion's elastic seeds (plan §3.1's "about
-70" counted every level below `a`; the parity trim halves it). With
+70" counted every level below `a`; the parity trim cuts it to two-thirds). With
 constant α the solution is the monomial itself (`g_a = ηᵇ`, every lower
 level zero, by induction on the degree as in §1.2), which is E4.4's first
 check.
@@ -2008,7 +2008,8 @@ never sees (16.5 row-equilibrated at every s), and that what does grow
 into the 2016 weights is the far side's translated basis, `O(s κ² scale)`
 from the ring polynomial's normal terms coupling through the curvature
 and the frame shift, with the weights' residual on the matched radial
-quadratic growing like `1.4e-18 s` at the worst stencil. The seeds have
+quadratic growing like `1.5e-18 s` at the worst stencil (the fitted line
+from s = 10⁵ on; the s = 10¹¹ point is 1.4e-7). The seeds have
 no such intermediate. What they carry instead is physical: across a
 resistive ring the constant-flux seed `φ₀₁` climbs by `α_e w / α_ring`,
 i.e. `O(s w / h_s)` in stencil units (about `2e9` at `s = 10¹¹`), in one
@@ -2020,7 +2021,7 @@ the march itself is exact in the `(g, ψ)` form, `ψ` continuous and
 own, the worst and median relative residual of the seed weights on the
 matched radial quadratic per s (`matched_residual` in
 `scripts/heat2d_extremes.py`, formed from the stored radii), next to
-port notes §2.9's `1.4e-18 s` line. With a smooth ring the matched profile is the
+port notes §2.9's `1.5e-18 s` fitted line. With a smooth ring the matched profile is the
 radial solution of `∇·(α ∇u) = 4` regular at the centre,
 `u′ = 2r/α(r)`, `u = ∫ 2r/α dr`, one quadrature with the smooth `α(r)`:
 the reference-free instrument of E4.8 at any `(s, δ)`.
@@ -2061,7 +2062,7 @@ radial quadratic on the ring.
 | H8 | **The rule needs no δ**: seeded rows are those that see the edge (reach 20δ), the seed operator needs no threshold to be switched off, and the resolved-edge penalty at δ = 0.04 (every row seeded) is ≤ 1.2× the direct operator's error (P4: the seed weights tend to the standard ones as δ/h grows; §1.4's different-space remark bounds the rest). | the δ = 0.04 column of the flat sweep, seeded vs direct | E4.6 |
 | H9 | **Route (a) reproduces the flat numbers** at δ ≥ 0.005 for n ≥ 5000 and shows its geometric floor `κ r²/2` (§3.5's table) at δ = 0.0025 on the coarse sets as a factor ≤ 1.5 above the flat line; the seed rows' residual on the true curved solution (E4.7's probe) converges at the bulk rows' rate; the tangential-α term of case 2's inside piece changes the constant, not the order. Route (a′) is built only if the probe's residual stalls. | the curved sweep against the flat one at equal δ; the residual probe | E4.7 |
 | H10 | **The 2-D knee** (P2's twin, measured first): naive `Dx A Dx + Dy A Dy` on scattered nodes is first order while `h ≳ δ` and fourth order once `h ≲ δ`, elliptic and parabolic; the δ = 0 construction sits on an O(δ) floor (the two references' difference, exact from the separable solves) for `h ≳ 2δ` and grows once the grid resolves the edge (§2.2); what separates resolved from unresolved most sharply is the flux jump across the edge read from the discrete solution. Watch the naive operator's coarse-set growing mode (+847 at 900 nodes, +17.7 at 1250) before quoting a parabolic naive number. | the naive and construction lines of the flat sweep | E4.3, E4.6 |
-| H11 | **The ring**: the seed march through both edges reproduces E2.9's s = 10³ line at δ = 0 (the Fig. 19 twin) and the matched radial residual stays at or below port notes §2.9's `1.4e-18 s` worst-stencil line at every s, with no `O(s κ² scale)` term; the raw seed block conditions like `s w/h_s` (one column) and O(1) column-scaled; the march floor of §3.3 is the first limit to appear, at the largest s and smallest δ, and the stored width's 8e-8 the second. | `matched_residual` per (s, δ); Fig. 20's twin with a seeds line | E4.8 |
+| H11 | **The ring**: the seed march through both edges reproduces E2.9's s = 10³ line at δ = 0 (the Fig. 19 twin) and the matched radial residual stays at or below port notes §2.9's worst-stencil line at every s (the fit `1.5e-18 s`, not the single s = 10¹¹ point 1.4e-7), with no `O(s κ² scale)` term; the raw seed block conditions like `s w/h_s` (one column) and O(1) column-scaled; the march floor of §3.3 is the first limit to appear, at the largest s and smallest δ, and the stored width's 8e-8 the second. | `matched_residual` per (s, δ); Fig. 20's twin with a seeds line | E4.8 |
 | H12 | **The comparators** (P10's twin): the disc harmonic and arithmetic means and the widened edge cap the naive operator at second order once `h ≲ δ/4` and are first order while the edge is unresolved; T0 is the worst, sitting on the widened floor; there is no conservative scheme on scattered nodes, so T1-FV has no twin and the strongest low-order comparator is the two-cell disc harmonic mean; the seeds are 3–4 orders below every treatment at δ ≤ h/4 on the parabolic problem. The ranking is quoted in the RMS norm with the max norm beside it. | the comparator tables per δ, elliptic and parabolic | E4.9 |
 
 ### 3.8 For the implementer of E4.2–E4.10
