@@ -59,7 +59,7 @@ reproduction tables are in `docs/port-notes.md` (§1.7 and §2.10). See
 | --- | --- |
 | `heat1d_convergence.py` | dissertation Fig. 4-5, 4-6, 4-7 (1-D equilibrium) |
 | `heat1d_parabolic.py` | 1-D parabolic convergence and operator spectra |
-| `heat1d_stiff.py` | the stiff-edge study (E3): the references at every δ, cached, with their convergence checks |
+| `heat1d_stiff.py` | the stiff-edge study (E3): the references at every δ, cached, with their convergence checks; the naive knee and the δ = 0 construction on a smooth edge, elliptic and parabolic, with the floor constants and the rows' residuals |
 | `heat2d_nodesets.py` | the case-1/2/3 node sets (Fig. 5-3, EABE Fig. 8 and 12) |
 | `heat2d_control.py` | the α ≡ 1 control and the interface-blind case-1 operators |
 | `heat2d_interface.py` | interface-aware case 1 with plain Gaussians, continuity and conditioning tables |

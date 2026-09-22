@@ -363,12 +363,16 @@ solutions, which is first order in δ: with `F_δ(x) = ∫_{−1}^{x} dξ/α_δ`
 
 a quadrature of the closed-form integrand: c = 8.79 for the 9 : 1 contrast
 of the MATLAB medium and 10.36 for the 10 : 1 contrast of eq. 75's edges,
-in either direction (2026-09-21, scratch; E3.3 confirms). On the MATLAB
-medium `F₀(1) = 10`, so the flux and the solution shift by about 0.9 δ
-relative, 2e-3 at δ = 0.0025: comparable to the naive error on the
+in either direction (2026-09-21, scratch; E3.3 found the closed form
+`c = (a − b) ln(a/b) / (2ab)`, `exact.edge_resistance_deficit`, §2.2). On
+the MATLAB medium `F₀(1) = 10`, so the flux and the solution shift by about
+0.9 δ relative, 2e-3 at δ = 0.0025: comparable to the naive error on the
 coarsest grids and five orders above the seeds'. E3.3 tabulates this floor
 exactly from the two quadrature references, elliptic; the parabolic floor
 is O(δ) with a time-dependent constant and is measured, not predicted.
+(§2.2 qualifies the saturation: the construction sits on the floor only
+while `h ≳ 2δ`; once the grid resolves the edge its error grows to an
+O(1) constant instead, since the rebuilt rows keep enforcing a kink.)
 
 **Seeds.** Fourth order at every δ with a constant that does not depend on
 δ; the δ = 0.0025 and 0.01 parabolic lines should agree with the δ = 0
@@ -434,7 +438,8 @@ The predictions above, numbered so §2 can tick them off:
 - **P3 (E3.3)** The δ = 0 construction: weights first order in δ/h from
   the seeds'; elliptic error saturating at the floor `c δ` of §1.7 with
   c = 8.79 (9 : 1) and 10.36 (10 : 1), reproduced exactly from the two
-  quadrature references; parabolic error O(δ), measured.
+  quadrature references; parabolic error O(δ), measured. (§2.2: the
+  saturation holds for `h ≳ 2δ` only.)
 - **P4 (E3.4)** Constant α gives Fornberg's weights times α to rounding;
   on constant pieces the seed weights reach E1.2's at first order in δ/h
   (84 %, 47 %, 11 %, 1.1 %, 0.11 % at δ/h = 1, ½, 0.1, 0.01, 0.001 for
@@ -631,3 +636,239 @@ the quadrature at δ = 0.04 and 0.0025; the two-resolution agreement below
 with the recorded run time, rebuilt when `t_end` changes, a dot in the
 file stem kept). `tests/test_heat1d_stiff.py` runs the driver at two δ and
 checks that the second run reads every reference from the cache.
+
+### 2.2 The naive knee, and the δ = 0 construction on a smooth edge (E3.3, #28)
+
+![knee](figures/heat1d_stiff_knee.png)
+
+`scripts/heat1d_stiff.py` (the knee study appended to the reference check;
+45 s cold, 4 s with everything cached; the sweep to 6400 nodes behind
+`--counts`, 3 min once, its parabolic errors kept in
+`outputs/heat1d_stiff_knee.json`). Two operators on the smooth medium at
+δ ∈ {0, 0.04, 0.01, 0.0025}: naive `Dx A Dx` (`naive_operator`, the α
+sampled at the nodes) and the δ = 0 construction (`jump_aware_operator`,
+E1.2's rows across the edge centre with the pieces' data, the direct rows
+on the smooth α elsewhere; §1.7). Both problems of §2.1: the equilibrium
+against the quadrature, the ramp problem at t = 2 (BD4, dt = h) against the
+cached Chebyshev reference, errors `‖e‖₂/‖u‖₂` at the nodes. Node counts
+double from 50 to 6400 with E1's placements, the MATLAB edge mid-cell
+(even counts) and eq. 75's two edges on nodes (`4k + 1`); eq. 75 starts at
+101 because at 49 nodes `h α′/α ≈ 1` where the sinusoid meets the layer's
+edges and the jump-aware operator's spectrum crosses into the right
+half-plane (largest real part 248; 8.8 at 53 nodes, −2.1 at 101), which E1
+never ran either. Each δ > 0 line is read against its **floor**, the two
+exact solutions' difference at the nodes, `‖u₀ − u_δ‖₂/‖u_δ‖₂` (quadrature
+against quadrature; reference against reference for the ramp), which is
+what the δ = 0 construction converges to while the grid does not resolve
+the edge. Rates are `log₂` of consecutive errors; `h = δ` falls at n = 51,
+201 and 801 for the three δ.
+
+**The naive knee (P2 holds).** Errors and rates, both media:
+
+| n | δ = 0 (jump) | δ = 0.04 | δ = 0.01 | δ = 0.0025 |
+| --- | --- | --- | --- | --- |
+| *MATLAB medium, equilibrium* | | | | |
+| 50 | 8.26e-3 | 8.58e-4 | 7.64e-3 | 8.68e-3 |
+| 100 | 4.08e-3 (1.02) | 1.97e-5 (5.44) | 3.15e-4 (4.60) | 4.23e-3 (1.04) |
+| 200 | 2.04e-3 (1.00) | 1.23e-6 (4.01) | 1.85e-4 (0.77) | 1.69e-3 (1.32) |
+| 400 | 1.02e-3 (1.00) | 7.81e-8 (3.97) | 2.51e-6 (6.20) | 8.70e-5 (4.28) |
+| 800 | 5.12e-4 (1.00) | 4.90e-9 (3.99) | 1.46e-7 (4.11) | 4.47e-5 (0.96) |
+| 1600 | 2.56e-4 (1.00) | 3.07e-10 (4.00) | 9.34e-9 (3.97) | 3.90e-7 (6.84) |
+| 3200 | 1.28e-4 (1.00) | 1.93e-11 (3.99) | 5.88e-10 (3.99) | 1.80e-8 (4.43) |
+| 6400 | 6.42e-5 (1.00) | 1.50e-11 (0.36) | 1.05e-10 (2.49) | 1.16e-9 (3.96) |
+| *MATLAB medium, ramp, t = 2* | | | | |
+| 50 | 3.86e-3 | 4.50e-4 | 3.09e-3 | 3.85e-3 |
+| 100 | 1.97e-3 (0.98) | 1.29e-5 (5.12) | 1.79e-4 (4.11) | 2.04e-3 (0.92) |
+| 200 | 9.90e-4 (0.99) | 8.19e-7 (3.98) | 9.25e-5 (0.95) | 7.90e-4 (1.37) |
+| 400 | 4.97e-4 (0.99) | 5.22e-8 (3.97) | 1.54e-6 (5.91) | 4.36e-5 (4.18) |
+| 800 | 2.49e-4 (1.00) | 3.28e-9 (3.99) | 9.32e-8 (4.04) | 2.19e-5 (0.99) |
+| 1600 | 1.25e-4 (1.00) | 2.05e-10 (4.00) | 5.96e-9 (3.97) | 2.20e-7 (6.64) |
+| 3200 | 6.24e-5 (1.00) | 1.35e-11 (3.93) | 3.76e-10 (3.99) | 1.14e-8 (4.27) |
+| 6400 | 3.12e-5 (1.00) | 1.64e-11 (−0.28) | 2.57e-11 (3.87) | 7.27e-10 (3.96) |
+| *eq. 75 medium, equilibrium* | | | | |
+| 101 | 2.06e-2 | 6.12e-5 | 5.83e-3 | 1.02e-2 |
+| 201 | 8.05e-3 (1.35) | 3.26e-6 (4.23) | 1.38e-4 (5.40) | 3.44e-3 (1.56) |
+| 401 | 3.98e-3 (1.01) | 2.12e-7 (3.95) | 7.38e-6 (4.22) | 1.06e-3 (1.70) |
+| 801 | 1.98e-3 (1.01) | 1.34e-8 (3.98) | 4.77e-7 (3.95) | 2.85e-5 (5.22) |
+| 1601 | 9.87e-4 (1.00) | 8.39e-10 (4.00) | 3.07e-8 (3.96) | 1.04e-6 (4.77) |
+| 3201 | 4.92e-4 (1.00) | 5.30e-11 (3.98) | 1.94e-9 (3.99) | 6.08e-8 (4.10) |
+| 6401 | 2.46e-4 (1.00) | 1.32e-11 (2.01) | 1.52e-10 (3.67) | 3.90e-9 (3.96) |
+| *eq. 75 medium, ramp, t = 2* | | | | |
+| 101 | 1.93e-2 | 6.06e-5 | 5.68e-3 | 9.61e-3 |
+| 201 | 7.30e-3 (1.40) | 3.25e-6 (4.22) | 1.34e-4 (5.40) | 3.23e-3 (1.57) |
+| 401 | 3.62e-3 (1.01) | 2.11e-7 (3.95) | 7.36e-6 (4.19) | 1.01e-3 (1.68) |
+| 801 | 1.80e-3 (1.01) | 1.33e-8 (3.98) | 4.76e-7 (3.95) | 2.74e-5 (5.20) |
+| 1601 | 8.96e-4 (1.00) | 8.36e-10 (3.99) | 3.06e-8 (3.96) | 1.03e-6 (4.73) |
+| 3201 | 4.47e-4 (1.00) | 5.62e-11 (3.90) | 1.93e-9 (3.99) | 6.07e-8 (4.09) |
+| 6401 | 2.24e-4 (1.00) | 4.54e-11 (0.31) | 2.02e-10 (3.26) | 3.90e-9 (3.96) |
+
+While `h ≳ 4δ` the naive line is the jump's, at about first order (rates
+0.9–1.7; the pre-knee rates are noisy because the nodes sample the tanh at
+grid-dependent positions, as §1.7 said, and on the MATLAB medium the
+δ = 0.01 line even shows a 4.6 followed by a 0.77). Across the knee the
+error drops by two to three orders between `h = 2δ` and `h = δ/2` (MATLAB
+δ = 0.0025: 8.70e-5 → 3.90e-7, a factor 220; eq. 75: 1.06e-3 → 1.04e-6, a
+factor 1000; the companion saw 200 between `h = 2δ` and `h = δ`), the
+single doubling `h = δ → δ/2` carrying most of it (rates 5.9–6.8 there).
+Below `h ≈ δ/2` every line is fourth order (3.9–4.4) down to the direct
+solve's round-off at 6400 nodes (1–5e-11, where the δ = 0.04 rates
+collapse). The ramp problem repeats the equilibrium's numbers and rates
+to two digits at every count: at t = 2 the ramp solution is close to
+equilibrium, and the knee is a property of the operator, not of the
+problem. On eq. 75 the knee sits at the same `h/δ`, one to two orders
+higher in error, since the sinusoid piece is not resolved to rounding by
+any of these grids.
+
+**The δ = 0 construction (P3 holds for `h ≳ 2δ`, and fails below).** The
+same runs, the floor quoted at the finest count (it moves by 3 % over the
+sweep as the nodal norm converges):
+
+| n | δ = 0.04, floor 2.92e-2 | δ = 0.01, floor 7.47e-3 | δ = 0.0025, floor 1.88e-3 |
+| --- | --- | --- | --- |
+| *MATLAB medium, equilibrium* | | | |
+| 50 | 1.68e-2 | 7.35e-3 | 1.836e-3 |
+| 100 | 6.85e-2 | 7.21e-3 | 1.861e-3 |
+| 200 | 1.05e-1 | 1.23e-2 | 1.869e-3 |
+| 400 | 1.18e-1 | 6.86e-2 | 1.743e-3 |
+| 800 | 1.23e-1 | 1.00e-1 | 1.42e-2 |
+| 1600 | 1.25e-1 | 1.12e-1 | 6.87e-2 |
+| 3200 | 1.26e-1 | 1.16e-1 | 9.91e-2 |
+| 6400 | 1.27e-1 | 1.18e-1 | 1.10e-1 |
+
+| n | δ = 0.04, floor 1.14e-2 | δ = 0.01, floor 2.87e-3 | δ = 0.0025, floor 7.19e-4 |
+| --- | --- | --- | --- |
+| *MATLAB medium, ramp, t = 2* | | | |
+| 50 | 8.80e-3 | 2.823e-3 | 6.970e-4 |
+| 100 | 2.51e-2 | 2.782e-3 | 7.122e-4 |
+| 200 | 3.91e-2 | 4.79e-3 | 7.158e-4 |
+| 400 | 4.45e-2 | 2.34e-2 | 7.009e-4 |
+| 800 | 4.67e-2 | 3.54e-2 | 4.65e-3 |
+| 1600 | 4.77e-2 | 3.99e-2 | 2.30e-2 |
+| 3200 | 4.81e-2 | 4.17e-2 | 3.45e-2 |
+| 6400 | 4.84e-2 | 4.25e-2 | 3.88e-2 |
+
+| n | δ = 0.04, floor 3.05e-2 / 2.71e-2 | δ = 0.01, floor 1.20e-2 / 1.06e-2 | δ = 0.0025, floor 3.59e-3 / 3.20e-3 |
+| --- | --- | --- | --- |
+| *eq. 75 medium, equilibrium / ramp* | | | |
+| 101 | 1.08e-1 / 1.12e-1 | 1.62e-2 / 1.53e-2 | 7.39e-3 / 7.51e-3 |
+| 201 | 1.68e-1 / 1.73e-1 | 3.89e-2 / 4.09e-2 | 3.79e-3 / 3.41e-3 |
+| 401 | 1.99e-1 / 2.04e-1 | 1.21e-1 / 1.27e-1 | 4.60e-3 / 4.29e-3 |
+| 801 | 2.13e-1 / 2.18e-1 | 1.70e-1 / 1.77e-1 | 4.24e-2 / 4.60e-2 |
+| 1601 | 2.20e-1 / 2.24e-1 | 1.90e-1 / 1.97e-1 | 1.25e-1 / 1.32e-1 |
+| 3201 | 2.23e-1 / 2.27e-1 | 1.99e-1 / 2.06e-1 | 1.67e-1 / 1.75e-1 |
+| 6401 | 2.24e-1 / 2.29e-1 | 2.03e-1 / 2.09e-1 | 1.84e-1 / 1.92e-1 |
+
+Two regimes, and the prediction covered only the first:
+
+- **`h ≳ 4δ`: on the floor, to three digits.** MATLAB δ = 0.0025 at 50,
+  100, 200 nodes: 1.836e-3, 1.861e-3, 1.869e-3 against floors 1.836e-3,
+  1.861e-3, 1.869e-3; the ramp 6.970e-4, 7.122e-4, 7.158e-4 against
+  6.983e-4, 7.122e-4, 7.158e-4; eq. 75 at 101 nodes 7.39e-3 against
+  3.60e-3 (the 101-node grid also carries E1's own 4.3e-3 at δ = 0, so
+  it is not yet on the floor), at 201 nodes 3.79e-3 against 3.60e-3. The
+  construction converges to the *jump's* solution, and its error is the
+  distance between the two problems, first order in δ: the elliptic floor
+  is 0.73–0.75 δ on the MATLAB medium (2.92e-2, 7.47e-3, 1.88e-3), the
+  ramp's at t = 2 is 0.28 δ (1.14e-2, 2.87e-3, 7.19e-4), the
+  "time-dependent constant" of §1.7 measured at one time. On eq. 75 the
+  floors are 0.76 δ, 1.20 δ, 1.44 δ (elliptic) and 0.68 δ, 1.06 δ, 1.28 δ
+  (ramp): not proportional to δ at these widths, for the reason the next
+  paragraph gives.
+- **`h ≲ δ`: off the floor and growing, to an O(1) constant.** Once the
+  plain rows resolve the edge (they are fourth-order rows on the smooth α,
+  nothing wrong with them), the three or four rebuilt rows still impose
+  the translated basis, a kink with slope ratio `α⁺/α⁻` at the centre,
+  on a solution whose slope ratio across the centre cell tends to one.
+  The discrete solution takes the kink, and the error saturates at a
+  constant of the contrast and the problem: 0.127 (equilibrium) and 0.048
+  (ramp) on the MATLAB medium, 0.22 and 0.23 on eq. 75, reached from
+  below with rate −0.6, −0.2, −0.06, −0.02 per doubling. Between the two
+  regimes the error dips slightly *below* the floor at `h ≈ 2δ` (MATLAB
+  δ = 0.0025: 1.743e-3 against 1.871e-3; the partly resolved plain rows
+  pull the solution part of the way to the truth) and is 7–10× the floor
+  at `h = δ`. On constant pieces the error is nearly a function of `h/δ`
+  alone: 6.85e-2, 6.86e-2, 6.87e-2 at `h/δ ≈ ½` for the three δ, 0.105,
+  0.100, 0.099 at ¼. So "treat the edge as a jump" is the right baseline
+  exactly where the grid cannot see the edge, and the worst of all the
+  lines where it can; to use it one has to know δ and switch it off at
+  `h ≈ 2δ`, which the seeds never need (§1.4's last paragraph: for
+  δ ≳ h every row is seeded and the seeds' weights tend to the standard
+  ones). The naive line never does anything that bad, and the
+  jump-aware line at δ = 0 is E1's: exact to rounding on the two
+  constants (6e-15 to 3e-10 as the solve's conditioning grows), fourth
+  order on eq. 75 (3.85–4.12).
+
+**The floor's constant.** With `F(1) = ∫_{−1}^{1} dξ/α` the total
+resistance, `(F₀(1) − F_δ(1)) / δ` against §1.7's `c`, which E3.3 found
+in closed form: the antiderivative of the blended integrand in
+`z = (x − x_c)/δ` is `z/a + (a − b)/(2ab) ln(a + b e^{2z})`
+(`tests/heat1d/test_exact.py::tanh_edge_integral`), and subtracting the
+jump's `z/a`, `z/b` on the two sides leaves, as `Z → ∞`, only the
+logarithms' difference:
+
+    c(a, b) = (a − b) ln(a/b) / (2ab)    (`exact.edge_resistance_deficit`),
+
+symmetric in `a ↔ b`, positive since `1/α` is convex (the blend's
+resistance is below the jump's), 8.788898 for `1/9 | 1` and 10.361633 for
+`1 | 0.1`. On the MATLAB medium the measured ratio is 8.788898 at all
+three δ (ratio 1.0000: the tails are exponentially small and the shift is
+`c δ` to rounding). On eq. 75, whose two edges both have contrast ten so
+that `Σ c = 20.72`, the measured ratio is 9.06, 15.31, 18.95 at δ = 0.04,
+0.01, 0.0025 (0.44, 0.74, 0.91 of the limit; 19.96 at δ = 0.001, 20.64 at
+0.0001): the sinusoid piece has `α′/α = 25` where it meets the layer's
+edges, so at δ = 0.01 its value changes by 75 % across `±3δ` and the
+"constant contrast" the closed form assumes is not what the edge sees.
+The approach is first order in δ with a constant of that slope; the
+floors above are the exact quantity and carry it. E3.5's T0 (widen δ to
+`m h`) inherits `c m h` on constant pieces and this slower approach on
+eq. 75.
+
+**"How far off in weights" as a residual (the first-order-in-δ/h defect).**
+The seed weights the ticket compares against are E3.4's (P4 keeps §1.4's
+scratch numbers, 84 % … 0.11 % at δ/h = 1 … 0.001); what E3.3 measures
+without seeds is the same defect as the rows' residual on the true-δ
+equilibrium, which is what enters the solution error. At fixed h (200 and
+201 nodes, h = 0.01) with δ = (δ/h) h, `max |L_h (u_δ − u₀)|` over the
+rows whose windows straddle a centre, `h²` of it over δ, `h² |L_h u₀|`
+on the same rows (rounding on the constants, E1.2's exactness; the
+sinusoid's own third-order truncation on eq. 75, which is why the
+residual is taken on the difference), and the naive rows' `h · max |L_h
+u_δ|` for the scale of a row that misses the slope jump outright:
+
+| δ/h | MATLAB: residual | h² res / δ | h² \|L_h u₀\| | naive h \|L_h u_δ\| | eq. 75: residual | h² res / δ | h² \|L_h u₀\| | naive h \|L_h u_δ\| |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 6.58 | 0.066 | 4e-17 | 7.0e-3 | 20.2 | 0.20 | 3.6e-6 | 2.3e-2 |
+| 0.5 | 5.34 | 0.107 | 4e-17 | 8.2e-3 | 20.5 | 0.41 | 3.6e-6 | 0.11 |
+| 0.1 | 2.38 | 0.239 | 4e-17 | 7.9e-2 | 5.02 | 0.502 | 3.6e-6 | 0.32 |
+| 0.01 | 0.238 | 0.2387 | 4e-17 | 0.109 | 0.515 | 0.515 | 3.6e-6 | 0.39 |
+| 0.001 | 0.0238 | 0.2387 | 4e-17 | 0.112 | 0.0516 | 0.516 | 3.6e-6 | 0.39 |
+
+`h² · residual / δ` settles to 0.2387 (MATLAB) and 0.516 (eq. 75) by
+δ/h = 0.01, so the rows are off by `C δ/h²` against the naive rows'
+`0.11/h` and `0.39/h`: a first-order-in-δ/h fraction of a wrong row,
+ratio about `2 δ/h` on the MATLAB medium, and `u_δ − u₀ → −B c δ` past the
+edge is what the row sees (a step of that size across the window). At
+δ = h the scaled residual is a third of the constant: the edge is partly
+inside the window and the rows are less wrong per unit δ, consistent with
+the dip below the floor at `h ≈ 2δ` above.
+
+**What this changes downstream.** P2 is ticked. P3 is ticked for the
+unresolved regime and corrected for the resolved one; the manuscript's
+baseline paragraph should say both, and the reason. The knee figure is
+the frame E3.4's seed lines go on (one δ-independent fourth-order line
+through the whole plot is the claim, P7), and E3.5's treatments are read
+against the same floors. On eq. 75 the study's δ are not in the
+asymptotic range of the floor constant, so any statement there quotes the
+measured floor, not `c δ`.
+
+Tests: `tests/test_heat1d_stiff.py` pins the grids' placements and the
+101 floor, the knee on both media (pre-knee rates averaging below 2, a
+first post-knee rate above 3.8, a factor above 100 between `h = 2δ` and
+`h = δ/2`, E1's δ = 0 line), the construction on the floor to 1 % for
+`h ≥ 4δ` and above 10× it at `h = δ/2` (elliptic, δ = 0.01 and 0.0025;
+ramp at δ = 0.01 with the floor at 0.28 δ), the floor constants (exact on
+the MATLAB medium, a first-order approach on eq. 75), the scaled residual
+constant to 5 % between δ/h = 0.01 and 0.001 and below half of it at
+δ/h = 1, and the driver's figure and cache;
+`tests/heat1d/test_exact.py` pins the closed form against the quadrature
+gap in both directions of the contrast.
