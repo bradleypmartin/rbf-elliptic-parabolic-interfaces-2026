@@ -365,6 +365,11 @@ def test_the_seed_functions_meet_the_translated_basis_at_first_order_in_delta_ov
         d = np.array([rows[r]["vs_jump"][k] for r in (0.1, 0.01, 0.001)])
         assert np.all(np.abs(np.log10(d[:-1] / d[1:]) - 1) < 0.1), (k, d)
     assert rows[0.001]["vs_jump"][0] == pytest.approx(5.12e-4, rel=0.02)
+    # On eq. 75 the δ = 0 gap is E1.2's truncation of the sinusoid pieces
+    # (0.19–0.40 at h = 0.01, the 1.25 of the weights) and no δ closes it.
+    eq75 = {r["ratio"]: r for r in seed_functions("eq75", 200, ratios=(0.1,))["rows"]}
+    assert 0.15 < min(eq75[0.0]["vs_jump"]) and max(eq75[0.0]["vs_jump"]) < 0.45
+    assert min(eq75[0.1]["vs_jump"]) > 0.15
     # Stencil units: the nodes at 0, ±½, ±1, the edge a quarter of the way right;
     # on the node's side of it the δ = 0 seeds are the monomials themselves.
     np.testing.assert_allclose(data["xi_nodes"], [-1.0, -0.5, 0.0, 0.5, 1.0])

@@ -1014,8 +1014,13 @@ def seed_functions(
     (``translated_basis`` at δ = 0) re-centred at the evaluation point with
     ``shift_matrix`` and scaled by ``h_s^k``, which is what the seeds'
     initial conditions ``phi_k(x_e) = phi_k'(x_e) = 0`` pick out of its
-    span: the two agree to rounding at δ = 0 (``rows[0]``), function by
-    function, the check P4 made on the weights only. Seed ``k`` is
+    span. On a jump between constant pieces (the MATLAB medium) the two
+    agree to rounding at δ = 0 (``rows[0]``), function by function, the
+    check P4 made on the weights only; on eq. 75 they differ by the
+    ``O(h alpha'/alpha)`` gap between E1.2's degree-4-truncated pieces and
+    the exact chain (0.19–0.40 at h = 0.01, §2.3's P4), which no δ closes,
+    so the eq. 75 seeds are read against the reference solution, never
+    against E1.2 (§2.5). Seed ``k`` is
     multiplied by ``(alpha_0 / alpha_e)^ceil(k/2)``, ``alpha_0`` the δ = 0
     medium's value at the evaluation point and ``alpha_e`` the blend's, so
     the lines are comparable across δ: the seeds carry the normalisation

@@ -1394,7 +1394,8 @@ sweeps, every one cached in `heat1d_stiff_knee.json` afterwards.
   the monomials stay O(1) away at every δ, the kink. On eq. 75's window
   (201 nodes, the edge on the node) the δ = 0 distance is 0.19–0.40 and does not shrink with δ: that is the
   `O(h α′/α)` gap between E1.2's degree-4-truncated pieces and the exact
-  chain that P4 recorded in the weights (50 % at h = 0.01), so the figure
+  chain that P4 recorded in the weights (1.25, i.e. 125 %, at h = 0.01), so
+  the figure
   is the MATLAB window's and the eq. 75 seeds are compared to the
   reference solution, not to E1.2, throughout §2.
 - **The snapshot (second figure).** The ramp problem at t = 2 on 100 nodes
@@ -1537,9 +1538,12 @@ not built); the eq. 75 seed line being the plain rows' pre-asymptotic
 sinusoid line, so the medium's fourth-order claim rests on its δ > 0
 rows and the MATLAB medium; the seed-function figure's `(α₀/α_e)^⌈k/2⌉`
 normalisation, stated in its caption; the snapshot's grid chosen at
-`h = 8δ` because it is the one row of the sweep at which all four regimes
-are separated by more than a decade (at h = 2δ the naive operator is in
-§2.2's dip); and the knee cache's blindness to operator changes.
+`h = 8δ` because it is the row of the sweep at which the four lines are
+ordered and do not overlap, the naive operator and the δ = 0 construction
+2.9× apart (near the knee those two are never more than about 5× apart,
+which is what a knee is), T1-FV a further 22× below and the seeds 1000×
+below that (at h = 2δ the naive operator is in §2.2's dip); and the knee
+cache's blindness to operator changes.
 
 Tests: `tests/test_results_cache.py` (`jsonable` on numpy, paths and float
 keys; write-and-read round trip with the provenance, a second `add`

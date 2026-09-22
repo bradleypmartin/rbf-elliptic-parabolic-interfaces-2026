@@ -53,6 +53,17 @@ def test_write_and_read_round_trip_with_the_provenance(tmp_path):
         read_results(tmp_path / "other.json")
 
 
+def test_write_refuses_a_nan_or_an_infinity(tmp_path):
+    cache = ResultsCache("demo")
+    cache.add("bad", [{"local": np.float64("nan")}])
+    with pytest.raises(ValueError):
+        cache.write(tmp_path / "demo.json")
+    cache.add("bad", [{"rate": float("inf")}])
+    with pytest.raises(ValueError):
+        cache.write(tmp_path / "demo.json")
+    assert not (tmp_path / "demo.json").exists()
+
+
 def test_git_state_names_this_checkout_and_nothing_outside_one(tmp_path):
     state = git_state()
     assert isinstance(state["sha"], str) and len(state["sha"]) == 40

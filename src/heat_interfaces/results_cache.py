@@ -75,7 +75,7 @@ def jsonable(obj: Any) -> Any:
 def _key(k: Any) -> str:
     if isinstance(k, (float, np.floating)):
         return f"{float(k):g}"
-    if isinstance(k, (bool, int, np.integer)):
+    if isinstance(k, (int, np.integer)):
         return str(int(k))
     return str(k)
 
@@ -113,7 +113,9 @@ class ResultsCache:
 
     def write(self, *paths: Path) -> list[Path]:
         """The same payload to every path: ``outputs/`` and, given, ``--data-dir``."""
-        text = json.dumps(self.payload(), indent=1) + "\n"
+        # A NaN or an infinity would be written as a token no strict parser
+        # reads; the number check must see it fail here instead.
+        text = json.dumps(self.payload(), indent=1, allow_nan=False) + "\n"
         written = []
         for path in paths:
             path = Path(path)
