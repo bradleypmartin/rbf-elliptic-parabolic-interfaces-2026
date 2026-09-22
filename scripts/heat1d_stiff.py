@@ -128,9 +128,13 @@ MIN_COUNT = {"matlab": 5, "eq75": 101}
 
 Eq. 75 needs 101: with ``h α′/α ≈ 1`` where the sinusoid meets the layer's
 edges (49 nodes) the translated basis is under-resolved and the jump-aware
-operator's spectrum crosses into the right half-plane (largest real part 248
-at 49 nodes, 8.8 at 53, −2.1 at 101), so E1 never ran it coarser and neither
-does this sweep.
+operator's spectrum crosses into the right half-plane (largest real part
+248 at 49 nodes, 8.8 at 53, −2.1 at 101 and −2.06 from 201 to 801, with no
+eigenvalue in the right half-plane from 101 on), so E1 never ran it coarser
+and neither does this sweep. Measured on the *interior* operator, the
+Dirichlet rows removed (``interior_operator``, what BD4 steps and what port
+notes §1.5 plot); the full matrix keeps two one-sided end rows in place of
+the boundary condition and its spectrum says nothing about the march.
 """
 
 OPERATORS = {"naive": naive_operator, "δ = 0 construction": jump_aware_operator}
@@ -146,7 +150,22 @@ RESIDUAL_RATIOS = (1.0, 0.5, 0.1, 0.01, 0.001)
 """δ/h at which the δ = 0 rows are tested at fixed h (§1.4's list for the weights)."""
 
 KNEE_CACHE = "heat1d_stiff_knee.json"
-"""Where the parabolic knee errors are kept between runs, keyed by ``knee_key``."""
+"""Where the parabolic knee errors are kept between runs.
+
+``{"meta": KNEE_CACHE_META, "errors": {knee_key: error}}``. The header names
+the problem (its label, ``T_END``, ``BC``, Radau's tolerances) and a file
+whose header differs is ignored and overwritten, as ``ParabolicReference``
+does for the references. A change to the BD4 marcher or to an operator's
+construction is not detectable this way: delete the file after one.
+"""
+
+KNEE_CACHE_META = {
+    "problem": PROBLEM,
+    "t_end": T_END,
+    "bc": list(BC),
+    "rtol": RADAU_RTOL,
+    "atol": RADAU_ATOL,
+}
 
 MARKERS = ("o", "s", "^", "D", "v")
 
@@ -334,13 +353,19 @@ def parabolic_sweep(
 
 
 def load_knee_cache(outputs: Path) -> dict[str, float]:
+    """The cached errors; empty when the file is missing or from another problem."""
     path = outputs / KNEE_CACHE
-    return json.loads(path.read_text()) if path.exists() else {}
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text())
+    if data.get("meta") != KNEE_CACHE_META:
+        return {}
+    return dict(data["errors"])
 
 
 def save_knee_cache(outputs: Path, cache: dict[str, float]) -> None:
-    text = json.dumps(cache, indent=1, sort_keys=True)
-    (outputs / KNEE_CACHE).write_text(text + "\n")
+    data = {"meta": KNEE_CACHE_META, "errors": dict(sorted(cache.items()))}
+    (outputs / KNEE_CACHE).write_text(json.dumps(data, indent=1) + "\n")
 
 
 def floor_constants(name: str, deltas: Sequence[float]) -> list[dict]:

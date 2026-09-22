@@ -13,16 +13,19 @@ from heat1d_stiff import (  # noqa: E402
     CHECK_MAX_WIDTH,
     CHECK_N_CHEB,
     KNEE_CACHE,
+    KNEE_CACHE_META,
     MAX_WIDTH,
     N_CHEB,
     check_references,
     elliptic_sweep,
     floor_constants,
     knee_grids,
+    load_knee_cache,
     main,
     parabolic_sweep,
     reference_path,
     row_residuals,
+    save_knee_cache,
 )
 
 
@@ -43,10 +46,30 @@ def test_main_builds_checks_and_then_reuses_the_references(tmp_path, capsys):
                 assert (tmp_path / (stem.name + suffix)).exists(), stem.name + suffix
     assert (tmp_path / "heat1d_stiff_knee.png").exists()
     cache = json.loads((tmp_path / KNEE_CACHE).read_text())
-    assert len(cache) == 2 * 2 * 2 and all(0 < v < 1 for v in cache.values())
+    assert cache["meta"] == KNEE_CACHE_META
+    errors = cache["errors"]
+    assert len(errors) == 2 * 2 * 2 and all(0 < v < 1 for v in errors.values())
     main(argv)
     out = capsys.readouterr().out
     assert out.count("cached") == 2 + 4 and "solved" not in out
+    # A cache from another problem is ignored and the knee runs are redone.
+    cache["meta"]["t_end"] = 3.0
+    (tmp_path / KNEE_CACHE).write_text(json.dumps(cache))
+    main(argv)
+    out = capsys.readouterr().out
+    assert out.count("cached") == 2 and out.count("solved") == 4
+    assert json.loads((tmp_path / KNEE_CACHE).read_text())["meta"] == KNEE_CACHE_META
+
+
+def test_knee_cache_round_trips_and_rejects_another_problems_file(tmp_path):
+    save_knee_cache(tmp_path, {"b": 2.0, "a": 1.0})
+    assert load_knee_cache(tmp_path) == {"a": 1.0, "b": 2.0}
+    data = json.loads((tmp_path / KNEE_CACHE).read_text())
+    assert list(data["errors"]) == ["a", "b"]
+    data["meta"]["bc"] = [1.0, 0.5]
+    (tmp_path / KNEE_CACHE).write_text(json.dumps(data))
+    assert load_knee_cache(tmp_path) == {}
+    assert load_knee_cache(tmp_path / "missing") == {}
 
 
 def test_rows_carry_the_run_and_both_checks(tmp_path):

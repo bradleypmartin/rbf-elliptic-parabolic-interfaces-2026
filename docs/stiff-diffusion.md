@@ -655,8 +655,10 @@ double from 50 to 6400 with E1's placements, the MATLAB edge mid-cell
 (even counts) and eq. 75's two edges on nodes (`4k + 1`); eq. 75 starts at
 101 because at 49 nodes `h α′/α ≈ 1` where the sinusoid meets the layer's
 edges and the jump-aware operator's spectrum crosses into the right
-half-plane (largest real part 248; 8.8 at 53 nodes, −2.1 at 101), which E1
-never ran either. Each δ > 0 line is read against its **floor**, the two
+half-plane (largest real part 248; 8.8 at 53 nodes, −2.1 at 101, −2.06 from
+201 to 801, none positive from 101 on; measured on the interior operator
+with the Dirichlet rows removed, `interior_operator`, as BD4 steps it and
+as port notes §1.5 plots it), which E1 never ran either. Each δ > 0 line is read against its **floor**, the two
 exact solutions' difference at the nodes, `‖u₀ − u_δ‖₂/‖u_δ‖₂` (quadrature
 against quadrature; reference against reference for the ramp), which is
 what the δ = 0 construction converges to while the grid does not resolve
