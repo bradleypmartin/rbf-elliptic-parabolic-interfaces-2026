@@ -45,13 +45,29 @@ conservative scheme with exact face conductances (stiff note §1.8 item 3,
 its own operator), and the seeds (the target). T0 is also read against its
 own floor, the widened medium's exact equilibrium against the true one.
 Figure: ``heat1d_stiff_treatments.png``; the parabolic errors share the knee
-cache, keyed by label. The manuscript figures (E3.6) are added by their
-ticket.
+cache, keyed by label.
+
+E3.6 (#31; §2.5 records) adds the two figures the manuscript draws its
+construction and its headline from, and the results file. The *seed
+functions* (``heat1d_stiff_seeds.png``): the five seeds across P4's window
+in stencil units at δ/h = ½ and 0.1, against the monomials (constant α)
+and E1.2's translated basis (δ = 0, re-centred at the evaluation point), with
+the sup distances per seed; the march at δ = 0 is checked against the
+algebra function by function. The *parabolic snapshot*
+(``heat1d_stiff_snapshot.png``): the ramp solution at ``T_END`` on a coarse
+grid with the edge unresolved (``--snapshot-n``, ``--snapshot-delta``; 100
+nodes and δ = 0.0025, h = 8δ), the reference against naive, the δ = 0
+construction, T1-FV and the seeds, with the pointwise errors and where they
+sit. Every table the driver prints goes to ``outputs/heat1d_stiff.json``
+(``results_cache.ResultsCache``: args, date, git SHA, timings, tables) and,
+with ``--data-dir``, to that directory too, for the manuscript's number
+check (E5.3, #44).
 
     uv run python scripts/heat1d_stiff.py     # 2 min cold, 6 s with everything cached
     uv run python scripts/heat1d_stiff.py --counts 50 100 200 400 800 1600 3200 6400
                                               # the two extra counts: + 3 min, once
     uv run python scripts/heat1d_stiff.py --deltas 0 0.0025 --media matlab
+    uv run python scripts/heat1d_stiff.py --data-dir paper/data
 """
 
 from __future__ import annotations
@@ -96,15 +112,20 @@ from heat_interfaces.heat1d import (  # noqa: E402
     ramp_boundary,
     seed_basis,
     seed_operator,
+    seed_profiles,
     seed_weights,
     seeded_windows,
+    shift_matrix,
     solve_equilibrium,
     stencil_weights,
     straddling_windows,
+    translated_basis,
     widened_edge,
 )
 from heat_interfaces.heat1d.domain import X_MAX, X_MIN  # noqa: E402
+from heat_interfaces.heat1d.interface import region_index  # noqa: E402
 from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
+from heat_interfaces.results_cache import ResultsCache  # noqa: E402
 
 STUDY_DELTAS = (0.0, 0.04, 0.01, 0.0025)
 """The edge widths of the study (E3.3, #28): the jump, and three sub-grid ones."""
@@ -257,6 +278,44 @@ KNEE_CACHE_META = {
 }
 
 MARKERS = ("o", "s", "^", "D", "v")
+
+SEED_RATIOS = (0.5, 0.1)
+"""δ/h of the seed-function figure (E3.6): the edge at half a cell, and at a tenth.
+
+Half a cell is where the seeds differ most from both limits (P4's 47 % in
+the weights, P5's condition-number peak); a tenth is where they are within
+11 % of E1.2's translated basis. The window is P4's (``study_window`` at
+``--residual-n`` nodes).
+"""
+
+SNAPSHOT_N, SNAPSHOT_DELTA = 100, 0.0025
+"""The parabolic snapshot's grid: 100 nodes (h = 0.02) and δ = 0.0025, so h = 8δ.
+
+The edge is unresolved by a factor eight and the naive operator sits on its
+first-order line (2.0e-3 at this point of §2.2's table), the δ = 0
+construction on its floor (7.1e-4, the resistance deficit ``c δ``), T1-FV
+on its second-order line and the seeds on the δ = 0 jump-aware line
+(3.0e-8): the four regimes of §2 in one picture.
+"""
+
+SNAPSHOT_OPERATORS = {
+    "naive": naive_operator,
+    "δ = 0 construction": jump_aware_operator,
+    "T1-FV": face_conductance_operator,
+    "seeds": seed_operator,
+}
+"""The snapshot's solutions: the knee's baselines, the best treatment, the seeds."""
+
+SNAPSHOT_STYLE = {
+    "naive": (NAIVE, "o"),
+    "δ = 0 construction": (CONSTRUCTION, "s"),
+    "T1-FV": (COMPARATOR_STYLE["T1-FV"][0], "^"),
+    "seeds": (AWARE, "D"),
+}
+"""Colour and marker per snapshot solution; the comparators' colours kept."""
+
+RESULTS = "heat1d_stiff.json"
+"""The run's results file (``results_cache``) under ``--outputs`` and ``--data-dir``."""
 
 
 def study_medium(name: str, delta: float) -> SmoothEdges:
@@ -941,6 +1000,302 @@ def plot_comparators(
     plt.close(fig)
 
 
+def seed_functions(
+    name: str,
+    n: int,
+    ratios: Sequence[float] = SEED_RATIOS,
+    points: int = 201,
+) -> dict:
+    """The seeds across P4's window against the monomials and the translated basis.
+
+    Everything in stencil units: ``xi = (x - x_e) / h_s`` on ``[-1, 1]``
+    (``points`` of them plus the nodes), in which the march works and
+    constant α gives ``xi^k`` exactly. ``jump`` is E1.2's translated basis
+    (``translated_basis`` at δ = 0) re-centred at the evaluation point with
+    ``shift_matrix`` and scaled by ``h_s^k``, which is what the seeds'
+    initial conditions ``phi_k(x_e) = phi_k'(x_e) = 0`` pick out of its
+    span: the two agree to rounding at δ = 0 (``rows[0]``), function by
+    function, the check P4 made on the weights only. Seed ``k`` is
+    multiplied by ``(alpha_0 / alpha_e)^ceil(k/2)``, ``alpha_0`` the δ = 0
+    medium's value at the evaluation point and ``alpha_e`` the blend's, so
+    the lines are comparable across δ: the seeds carry the normalisation
+    ``alpha_e^ceil(k/2)`` (§1.2), each moment condition is homogeneous in
+    it, and the weights never see it. ``rows`` holds, per δ/h, the sup
+    distance of each seed from the translated basis and from the monomials.
+    """
+    g, nodes, centre, jumps = study_window(name, n)
+    jump_medium = MEDIA[name]()
+    h_s = float(np.max(np.abs(nodes - centre)))
+    xi_nodes = (nodes - centre) / h_s
+    xi = np.union1d(np.linspace(-1.0, 1.0, points), xi_nodes)
+    x = centre + h_s * xi
+    count = nodes.size
+    k = np.arange(count)
+    scale = h_s ** k[:, None]
+    monomials = xi[None, :] ** k[:, None]
+    anchor = int(region_index(jumps, centre)[0])
+    regions = translated_basis(jumps, anchor)
+    recentre = shift_matrix(jumps[regions[anchor].jump].position - centre, count - 1)
+    which = region_index(jumps, x)
+    jump = np.empty((count, xi.size))
+    for r, region in enumerate(regions):
+        mask = which == r
+        if mask.any():
+            jump[:, mask] = (region.evaluate(jumps, x[mask]) @ recentre).T
+    jump /= scale
+    alpha_0 = float(jump_medium.alpha(np.array([centre]))[0])
+    seeds, alpha, rows = {}, {}, []
+    for ratio in (0.0, *ratios):
+        medium = SmoothEdges(jump_medium, ratio * g.h)
+        alpha_e = float(medium.alpha(np.array([centre]))[0])
+        phi = seed_profiles([centre], [h_s], xi, medium, count)[0]
+        phi *= (alpha_0 / alpha_e) ** np.ceil(k / 2)[:, None]
+        seeds[ratio] = phi
+        alpha[ratio] = medium.alpha(x)
+        rows.append(
+            {
+                "ratio": ratio,
+                "vs_jump": np.max(np.abs(phi - jump), axis=1)[1:].tolist(),
+                "vs_monomials": np.max(np.abs(phi - monomials), axis=1)[1:].tolist(),
+            }
+        )
+    return {
+        "medium": name,
+        "n": g.n,
+        "h": g.h,
+        "h_s": h_s,
+        "xi": xi,
+        "xi_nodes": xi_nodes,
+        "xi_edges": [(xc - centre) / h_s for xc in jump_medium.interfaces],
+        "monomials": monomials,
+        "jump": jump,
+        "seeds": seeds,
+        "alpha": alpha,
+        "rows": rows,
+    }
+
+
+def print_seed_functions(data: dict) -> None:
+    print(
+        f"\nseed functions on P4's window, {data['medium']}, {data['n']} nodes"
+        f" (h = {data['h']:.4g}, h_s = {data['h_s']:.4g}), in stencil units:"
+        f" max |φ_k^seed − φ_k^jump| against E1.2's translated basis re-centred"
+        f" at the node, and max |φ_k^seed − ξ^k| against the monomials, k = 1 … 4"
+    )
+    print(
+        f"    {'δ/h':>6s}"
+        + "".join(f"{'jump k=' + str(k):>12s}" for k in range(1, 5))
+        + "".join(f"{'mono k=' + str(k):>12s}" for k in range(1, 5))
+    )
+    for r in data["rows"]:
+        print(
+            f"    {r['ratio']:6g}"
+            + "".join(f"{v:12.2e}" for v in r["vs_jump"])
+            + "".join(f"{v:12.2e}" for v in r["vs_monomials"])
+        )
+
+
+def plot_seeds(data: dict, path: Path) -> None:
+    """α across the window on top; the seeds k = 1 … 4 below, three lines each.
+
+    Grey dashed the monomial ``xi^k``, purple E1.2's translated basis (the
+    δ = 0 limit), blue the seeds at each δ/h of ``SEED_RATIOS`` (solid the
+    first, dashed the rest), the nodes marked on the first; the dotted
+    verticals are the edge centres.
+    """
+    xi, ratios = data["xi"], [r for r in data["seeds"] if r > 0]
+    fig = plt.figure(figsize=(8.0, 7.2))
+    grid = fig.add_gridspec(3, 2, height_ratios=(1.0, 2.2, 2.2))
+    top = fig.add_subplot(grid[0, :])
+    styles = ["-", "--", "-.", ":"]
+    for j, ratio in enumerate(ratios):
+        top.plot(
+            xi,
+            data["alpha"][ratio],
+            color=AWARE,
+            ls=styles[j % 4],
+            lw=1.0,
+            label=f"δ/h = {ratio:g}",
+        )
+    top.plot(xi, data["alpha"][0.0], color=CONSTRUCTION, lw=0.8, label="δ = 0")
+    top.set_ylabel("α")
+    top.set_title(
+        f"P4's window on the {data['medium']} medium, {data['n']} nodes"
+        f" (h = {data['h']:.3g}), ξ = (x − x_e) / h_s",
+        fontsize=10,
+    )
+    top.legend(fontsize=8, loc="upper left", ncol=3)
+    for k in range(1, 5):
+        ax = fig.add_subplot(grid[1 + (k - 1) // 2, (k - 1) % 2])
+        ax.plot(xi, data["monomials"][k], color=REFERENCE, ls="--", lw=0.9)
+        ax.plot(xi, data["jump"][k], color=CONSTRUCTION, lw=1.0)
+        for j, ratio in enumerate(ratios):
+            ax.plot(xi, data["seeds"][ratio][k], color=AWARE, ls=styles[j % 4], lw=1.1)
+        node_values = np.interp(data["xi_nodes"], xi, data["seeds"][ratios[0]][k])
+        ax.plot(data["xi_nodes"], node_values, "o", color=AWARE, ms=4)
+        for xc in data["xi_edges"]:
+            if -1 <= xc <= 1:
+                ax.axvline(xc, color=REFERENCE, lw=0.6, ls=":")
+        ax.set_title(f"$\\varphi_{k}$", fontsize=10)
+        ax.grid(True, alpha=0.3)
+        if k >= 3:
+            ax.set_xlabel("ξ")
+    handles = [
+        Line2D(
+            [], [], color=REFERENCE, ls="--", label="monomial $\\xi^k$ (constant α)"
+        ),
+        Line2D([], [], color=CONSTRUCTION, label="translated basis (δ = 0, E1.2)"),
+        *[
+            Line2D([], [], color=AWARE, ls=styles[j % 4], label=f"seeds, δ/h = {r:g}")
+            for j, r in enumerate(ratios)
+        ],
+        Line2D([], [], color=AWARE, marker="o", ls="", ms=4, label="nodes"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=len(handles), fontsize=8)
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def snapshot(
+    name: str,
+    delta: float,
+    n: int,
+    outputs: Path,
+    resolution: tuple[int, float] = (N_CHEB, MAX_WIDTH),
+    operators=SNAPSHOT_OPERATORS,
+    points: int = 2001,
+) -> dict:
+    """The ramp solution at ``T_END`` on one coarse grid: reference, solutions, errors.
+
+    ``rows`` per operator: ``‖e‖₂/‖u‖₂`` (the sweep's number for this grid),
+    ``max`` the largest nodal error and ``at`` its node, and ``local`` the
+    share of ``‖e‖₂²`` on the nodes within ``2h`` of an edge centre: near 1
+    would say the error is confined to the edge, near 0 that a wrong
+    effective resistance has shifted the whole profile.
+    """
+    (g,) = knee_grids(name, [n])
+    medium = study_medium(name, delta)
+    ref = study_reference(name, delta, outputs, *resolution)
+    boundary = ramp_boundary(RAMP, *BC)
+    x_fine = np.linspace(X_MIN, X_MAX, points)
+    at_nodes = ref.evaluate(g.x)
+    centres = np.asarray(medium.interfaces, dtype=float)
+    near = np.min(np.abs(g.x[:, None] - centres[None, :]), axis=1) <= 2 * g.h
+    solutions, rows = {}, []
+    for label, op in operators.items():
+        u = bd4_march(op(g, medium), np.zeros(g.n), T_END, g.h, boundary)
+        e = u - at_nodes
+        solutions[label] = u
+        rows.append(
+            {
+                "label": label,
+                "error": normalized_l2(u, at_nodes),
+                "max": float(np.max(np.abs(e))),
+                "at": float(g.x[int(np.argmax(np.abs(e)))]),
+                "local": float(np.sum(e[near] ** 2) / np.sum(e**2)),
+            }
+        )
+    return {
+        "medium": name,
+        "delta": delta,
+        "n": g.n,
+        "h": g.h,
+        "x": g.x,
+        "u": at_nodes,
+        "x_fine": x_fine,
+        "u_fine": ref.evaluate(x_fine),
+        "alpha_fine": medium.alpha(x_fine),
+        "centres": centres,
+        "solutions": solutions,
+        "rows": rows,
+    }
+
+
+def print_snapshot(data: dict) -> None:
+    print(
+        f"\nsnapshot: ramp problem at t = {T_END:g}, {data['medium']}, δ ="
+        f" {data['delta']:g}, {data['n']} nodes (h = {data['h']:.4g}, h/δ ="
+        f" {data['h'] / data['delta']:.3g}): ‖e‖₂/‖u‖₂, max |e| and its node, and"
+        f" the share of ‖e‖₂² within 2h of an edge centre"
+    )
+    print(
+        f"    {'operator':>20s}{'‖e‖₂/‖u‖₂':>12s}{'max |e|':>11s}"
+        f"{'at x':>9s}{'local':>8s}"
+    )
+    for r in data["rows"]:
+        print(
+            f"    {r['label']:>20s}{r['error']:12.3e}{r['max']:11.3e}{r['at']:9.3f}"
+            f"{r['local']:8.3f}"
+        )
+
+
+def plot_snapshot(data: dict, path: Path) -> None:
+    """Left the solution (reference, nodal solutions, a zoom at the edge); right the
+    interior nodes' errors on a log scale; the dashed verticals are the edge centres."""
+    fig, (left, right) = plt.subplots(1, 2, figsize=(9.6, 3.9))
+    left.plot(
+        data["x_fine"], data["u_fine"], color=REFERENCE, lw=1.0, label="reference"
+    )
+    for label, (colour, marker) in SNAPSHOT_STYLE.items():
+        if label in data["solutions"]:
+            left.plot(
+                data["x"],
+                data["solutions"][label],
+                marker,
+                color=colour,
+                ms=3,
+                mfc="none",
+                lw=0,
+                label=label,
+            )
+    for xc in data["centres"]:
+        left.axvline(xc, color=REFERENCE, lw=0.6, ls="--")
+        right.axvline(xc, color=REFERENCE, lw=0.6, ls="--")
+    left.set_xlabel("x")
+    left.set_ylabel("u")
+    left.set_title(
+        f"ramp problem at $t = {T_END:g}$, {data['n']} nodes, δ = {data['delta']:g}"
+        f" (h = {data['h'] / data['delta']:.3g} δ)",
+        fontsize=10,
+    )
+    left.legend(fontsize=8, loc="upper right", bbox_to_anchor=(0.98, 0.5))
+    xc = float(data["centres"][0])
+    span = 4 * data["h"]
+    inset = left.inset_axes((0.56, 0.52, 0.4, 0.38))
+    window = np.abs(data["x_fine"] - xc) <= span
+    inset.plot(data["x_fine"][window], data["u_fine"][window], color=REFERENCE, lw=1.0)
+    nodes = np.abs(data["x"] - xc) <= span
+    for label, (colour, marker) in SNAPSHOT_STYLE.items():
+        if label in data["solutions"]:
+            inset.plot(
+                data["x"][nodes],
+                data["solutions"][label][nodes],
+                marker,
+                color=colour,
+                ms=3,
+                mfc="none",
+                lw=0,
+            )
+    inset.axvline(xc, color=REFERENCE, lw=0.6, ls="--")
+    inset.set_title("the edge, ±4h", fontsize=7)
+    inset.tick_params(labelsize=6)
+    interior = slice(1, -1)  # the Dirichlet ends are exact by construction
+    for label, (colour, _marker) in SNAPSHOT_STYLE.items():
+        if label in data["solutions"]:
+            e = np.abs(data["solutions"][label] - data["u"])[interior]
+            right.semilogy(data["x"][interior], e, color=colour, lw=0.9, label=label)
+    right.set_xlabel("x")
+    right.set_ylabel("$|u_h - u|$ at the interior nodes")
+    right.set_title("pointwise error", fontsize=10)
+    right.set_ylim(bottom=1e-12)
+    right.grid(True, which="both", alpha=0.3)
+    right.legend(fontsize=8, loc="lower center", ncol=2)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--deltas", type=float, nargs="+", default=list(STUDY_DELTAS))
@@ -962,9 +1317,18 @@ def main(argv: Sequence[str] | None = None) -> None:
         default=200,
         help="target node count of the δ/h residual table",
     )
+    parser.add_argument("--snapshot-n", type=int, default=SNAPSHOT_N)
+    parser.add_argument("--snapshot-delta", type=float, default=SNAPSHOT_DELTA)
     parser.add_argument("--outputs", type=Path, default=Path("outputs"))
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help=f"also write the results file {RESULTS} here (paper/data for E5.3)",
+    )
     args = parser.parse_args(argv)
     args.outputs.mkdir(parents=True, exist_ok=True)
+    results = ResultsCache("heat1d_stiff", vars(args))
 
     t0 = time.perf_counter()
     resolution = (args.n_cheb, args.max_width)
@@ -972,6 +1336,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     rows = check_references(args.media, args.deltas, args.outputs, resolution, check)
     print_references(rows, resolution, check)
     worst = max(r["agreement"] for r in rows)
+    results.add("references", rows)
+    results.time("references", time.perf_counter() - t0)
     print(
         f"\nworst agreement between resolutions {worst:.1e}"
         f" ({'within' if worst < 1e-10 else 'OUTSIDE'} the 1e-10 of #27);"
@@ -1006,11 +1372,21 @@ def main(argv: Sequence[str] | None = None) -> None:
         floors = floor_constants(name, args.deltas)
         if floors:
             print_floors(name, floors)
-        print_residuals(name, row_residuals(name, args.residual_n))
-        print_weights(name, weights_vs_jump(name, args.residual_n))
+            results.add(f"floor_constants/{name}", floors)
+        residuals = row_residuals(name, args.residual_n)
+        print_residuals(name, residuals)
+        results.add(f"row_residuals/{name}", residuals)
+        weights = weights_vs_jump(name, args.residual_n)
+        print_weights(name, weights)
+        results.add(f"weights_vs_jump/{name}", weights)
         deltas = sorted({0.0, *(d for d in args.deltas if d > 0)}, reverse=True)[-2:]
-        print_spectra(name, seed_spectra(name, SPECTRUM_COUNTS[name], deltas))
+        spectra = seed_spectra(name, SPECTRUM_COUNTS[name], deltas)
+        print_spectra(name, spectra)
+        results.add(f"seed_spectra/{name}", spectra)
     plot_knee(elliptic, parabolic, args.outputs / "heat1d_stiff_knee.png")
+    results.add("knee/equilibrium", elliptic)
+    results.add("knee/ramp", parabolic)
+    results.time("knee", time.perf_counter() - t1)
     print(
         f"\nknee study {time.perf_counter() - t1:.1f} s; figure and"
         f" {KNEE_CACHE} in {args.outputs}/"
@@ -1042,15 +1418,48 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         for d in args.deltas:
             if d > 0:
-                print_widened_floors(
-                    name, d, compared_e[name][d], widened_floors(name, d, grids)
-                )
+                floors = widened_floors(name, d, grids)
+                print_widened_floors(name, d, compared_e[name][d], floors)
+                results.add(f"widened_floors/{name}/{d:g}", floors)
     plot_comparators(
         compared_e, compared_p, args.outputs / "heat1d_stiff_treatments.png"
     )
+    results.add("comparators/equilibrium", compared_e)
+    results.add("comparators/ramp", compared_p)
+    results.time("comparators", time.perf_counter() - t2)
     print(
         f"\ncomparators {time.perf_counter() - t2:.1f} s; figure"
         f" heat1d_stiff_treatments.png in {args.outputs}/"
+    )
+
+    t3 = time.perf_counter()
+    name = args.media[0]
+    functions = seed_functions(name, args.residual_n)
+    print_seed_functions(functions)
+    plot_seeds(functions, args.outputs / "heat1d_stiff_seeds.png")
+    results.add(
+        "seed_functions",
+        {k: functions[k] for k in ("medium", "n", "h", "h_s", "rows")},
+    )
+    picture = snapshot(
+        name, args.snapshot_delta, args.snapshot_n, args.outputs, resolution
+    )
+    print_snapshot(picture)
+    plot_snapshot(picture, args.outputs / "heat1d_stiff_snapshot.png")
+    results.add(
+        "snapshot", {k: picture[k] for k in ("medium", "delta", "n", "h", "rows")}
+    )
+    results.time("figures", time.perf_counter() - t3)
+    results.time("total", time.perf_counter() - t0)
+    paths = [args.outputs / RESULTS]
+    if args.data_dir is not None:
+        paths.append(args.data_dir / RESULTS)
+    results.write(*paths)
+    print(
+        f"\nseed functions and snapshot {time.perf_counter() - t3:.1f} s; figures"
+        f" heat1d_stiff_seeds.png and heat1d_stiff_snapshot.png in {args.outputs}/;"
+        f" {time.perf_counter() - t0:.1f} s in all; results in"
+        f" {', '.join(str(p) for p in paths)}"
     )
 
 

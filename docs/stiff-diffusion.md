@@ -6,7 +6,7 @@ fourth order through it because their polynomial basis is replaced by
 *seeds*, functions continued through the edge by ODEs. Canonical for E3–E4
 (plan D11); the manuscript quotes this note and never becomes a second
 source of truth. §1 is the formulation (E3.1, #26); §2 holds the 1-D
-results as the tickets land (E3.2, #27 onward, closed by E3.6, #31) and
+results (E3.2, #27, to E3.6, #31, which closes it in §2.5) and
 later sections the 2-D design and results (E4.1, #32; E4.10, #41). The
 port of the 2016 methods this builds on is in `docs/port-notes.md`.
 
@@ -1339,3 +1339,227 @@ constant, the ranking where the edge is unresolved, the one-cell means
 equal to naive at δ = 0 mid-cell, the elliptic exactness of T1-FV and the
 seeds; T0 on its floor to 1 % for m = 2 and the floor constant in
 0.65–0.76; the driver's second figure and the cache keys).
+
+### 2.5 Closing the 1-D study: the seed functions, a snapshot, the driver, and what §2 states (E3.6, #31)
+
+![seed functions](figures/heat1d_stiff_seeds.png)
+
+![snapshot](figures/heat1d_stiff_snapshot.png)
+
+E3.6 adds the two figures the manuscript draws its construction and its
+headline from, the run's results file, and this closing section, which
+states what §2 has established with the numbers and the subsection each
+traces to. `scripts/heat1d_stiff.py` now runs, in this order: the
+references and their checks (§2.1), the knee sweep with the seed line and
+the P4–P9 tables (§2.2–2.3), the comparators (§2.4), the seed functions and
+the snapshot (this section), then writes `outputs/heat1d_stiff.json`. From
+a populated `outputs/` the whole driver takes 6.0 s (references 0.1 s,
+knee 3.3 s, comparators 2.1 s, the two figures 0.6 s), well under the
+minute #31 asks for; cold it is about 2 min, all of it the parabolic
+references (20 s) and the 396 BD4 marches of the knee and comparator
+sweeps, every one cached in `heat1d_stiff_knee.json` afterwards.
+
+- **The seed functions (first figure).** P4's window on the MATLAB medium
+  (200 nodes, h = 0.01005, the `1/9 | 1` edge half a cell right of the
+  evaluation node, `h_s = 2h`), in the stencil coordinate `ξ = (x −
+  x_e)/h_s` in which the march works (§1.3): α across the window on top,
+  and below it seeds `φ₁ … φ₄` at δ/h = ½ and 0.1 against the monomials
+  `ξ^k` (constant α) and E1.2's translated basis (δ = 0, `translated_basis`
+  re-centred at `x_e` with `shift_matrix`, which is what the initial
+  conditions `φ_k(x_e) = φ_k′(x_e) = 0` pick out of its span). Each seed is
+  multiplied by `(α₀/α_e)^⌈k/2⌉`, `α₀` the jump's value at `x_e` and `α_e`
+  the blend's, so that the lines are comparable across δ: the seeds carry
+  the normalisation `α_e^⌈k/2⌉` of §1.2, every moment condition is
+  homogeneous in it, and the weights never see it (without the factor the
+  δ/h = ½ seeds sit a factor two off, `α_e` being 0.22 there against the
+  owner's 0.11). On the node's side of the edge the δ = 0 seeds are the
+  monomials themselves (checked to 1e-13), across it they are the
+  translated polynomials with the 9 : 1 slope, and the δ > 0 seeds bend
+  through the edge instead of kinking at it. The sup distances over the
+  window (`seed_functions`; the driver prints δ/h = 0, ½, 0.1 and the
+  test the ladder below it):
+
+  | δ/h | vs E1.2, k = 1 | k = 2 | k = 3 | k = 4 | vs `ξ^k`, k = 1 | k = 2 |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | 0 | 2.9e-15 | 2.7e-15 | 2.1e-15 | 1.4e-15 | 0.667 | 0.833 |
+  | 1 | 0.312 | 0.198 | 0.559 | 0.440 | 0.831 | 0.861 |
+  | 0.5 | 0.167 | 0.045 | 0.204 | 0.094 | 0.822 | 0.870 |
+  | 0.1 | 5.12e-2 | 2.12e-2 | 1.67e-2 | 1.02e-2 | 0.715 | 0.853 |
+  | 0.01 | 5.12e-3 | 2.51e-3 | 1.81e-3 | 1.20e-3 | 0.672 | 0.836 |
+  | 0.001 | 5.12e-4 | 2.55e-4 | 1.83e-4 | 1.22e-4 | 0.667 | 0.834 |
+
+  At δ = 0 the march *is* E1.2's algebra function by function, to 3e-15
+  (P4 checked the weights only, §2.3); from δ/h = 0.1 down the distance is
+  first order in δ/h to three digits (P4's weights: 11 %, 1.1 %, 0.11 %);
+  the monomials stay O(1) away at every δ, the kink. On eq. 75's window
+  (201 nodes, the edge on the node) the δ = 0 distance is 0.19–0.40 and does not shrink with δ: that is the
+  `O(h α′/α)` gap between E1.2's degree-4-truncated pieces and the exact
+  chain that P4 recorded in the weights (50 % at h = 0.01), so the figure
+  is the MATLAB window's and the eq. 75 seeds are compared to the
+  reference solution, not to E1.2, throughout §2.
+- **The snapshot (second figure).** The ramp problem at t = 2 on 100 nodes
+  (h = 0.0202) with δ = 0.0025, `h = 8δ`: the reference, the four nodal
+  solutions (naive, the δ = 0 construction, T1-FV, the seeds) with a zoom
+  at the edge, and the interior nodes' errors. The point of the grid is
+  that the four regimes of §2 are in one picture: naive on its first-order
+  line, the construction on its `c δ` floor, T1-FV on its second-order
+  line, the seeds on the δ = 0 jump-aware line, and the errors are the
+  sweeps' own numbers for this row (`snapshot` repeats them to 1e-12):
+
+  | operator | ‖e‖₂/‖u‖₂ | max \|e\| | at x | share of ‖e‖₂² within 2h of the edge |
+  | --- | --- | --- | --- | --- |
+  | naive `Dx A Dx` | 2.04e-3 | 2.78e-3 | −0.030 | 0.16 |
+  | δ = 0 construction | 7.12e-4 | 8.79e-4 | −0.010 | 0.23 |
+  | T1-FV | 3.20e-5 | 2.16e-5 | −0.616 | 0.03 |
+  | seeds | 2.95e-8 | 1.80e-8 | −0.394 | 0.07 |
+
+  What it shows: the naive error is largest beside the edge (1.5 h to its
+  left) and carries a node-to-node oscillation, the checkerboard mode of
+  `Dx A Dx` excited by the sampled edge, but 84 % of its energy lies more
+  than 2h away, on the α = 1/9 side where the profile is steep; the
+  construction's error is smooth and global, the profile shifted by the
+  resistance deficit `c δ` (§1.7) with its maximum at the edge; T1-FV's
+  is largest far from the edge (its second-order truncation on the
+  curved profile, the edge itself handled exactly by the face
+  conductances); the seeds' 1e-8 is the BD4 time error at `dt = h`, the
+  δ = 0 line's 2.95e-8 at this count, flat across the domain with two
+  sign changes (the dips). The zoom makes the naive and construction
+  errors visible to the eye at u ≈ 0.05: this is what an unresolved edge
+  costs at fourth order's price.
+- **The results file and `--data-dir`.** `results_cache.py` (plan D1;
+  E5.3, #44) is now in the package: `ResultsCache(driver, args)` collects
+  every table the driver prints (`add`) and its phases' seconds (`time`),
+  and `write` puts `{"schema": 1, "driver", "date", "git": {"sha",
+  "dirty"}, "args", "timings", "tables"}` at every path it is given, float
+  keys as `%g` (`"0.0025"`), numpy as Python. The driver writes
+  `outputs/heat1d_stiff.json` on every run and, with `--data-dir
+  paper/data`, the same file there for the manuscript's number check; its
+  tables are `references`, `knee/equilibrium`, `knee/ramp`,
+  `floor_constants/<medium>`, `row_residuals/<medium>`,
+  `weights_vs_jump/<medium>`, `seed_spectra/<medium>`,
+  `comparators/equilibrium`, `comparators/ramp`,
+  `widened_floors/<medium>/<δ>`, `seed_functions` and `snapshot`, each a
+  list of row dicts or a medium → δ → rows map. Two caveats carried from
+  §2.2 and §2.4: the knee cache is a working cache keyed by label and
+  reference resolution and does not notice a change to an operator's
+  construction or to the marcher (delete `heat1d_stiff_knee.json` after
+  one); the results file is never read back by a driver, only by E5.3's
+  scripts, and records `dirty: true` when the tree has uncommitted
+  changes, which `paper_numbers.py` should refuse.
+
+**What §2 states.** The four things #31 asks the section to say, with
+their numbers and where they were measured:
+
+1. **The knee (§2.2, P2 ✓).** Naive `Dx A Dx` on a smooth edge of width δ
+   is first order in h while `h ≳ δ`, turns at `h ≈ δ` and is fourth
+   order below, elliptic and parabolic, on both media: on the MATLAB ramp
+   problem 1.8e-4 at h = 2δ to 1.5e-6 at h = δ/2 (δ = 0.01), 4.4e-5 to
+   2.2e-7 (δ = 0.0025), a 100–200× drop across the knee, and on eq. 75
+   5.7e-3 to 7.4e-6 (δ = 0.01), 1.0e-3 to 1.0e-6 (δ = 0.0025), 800–1000×.
+   The δ = 0 construction (E1.2's rows at the edge centre) sits on the
+   resistance-deficit floor `‖u₀ − u_δ‖/‖u_δ‖ = c δ`, `c = (a − b)
+   ln(a/b)/(2ab) = 8.79` on the MATLAB medium, reproduced to six digits
+   from the two quadratures, for `h ≳ 2δ` only (P3, corrected in §2.2):
+   once the grid resolves the edge its rebuilt rows enforce a kink the
+   solution lacks and its error grows to O(1) (at 1600 nodes and δ = 0.01,
+   0.11 at equilibrium and 0.04 on the ramp problem), so it needs δ to be
+   switched off. Both baselines are in the
+   snapshot above.
+2. **The seeds' rates (§2.3, P4–P9 ✓).** The seed operator is fourth
+   order at every δ with a δ-independent constant: on the MATLAB ramp
+   problem one line for every δ, rates 6.4, 4.2, 4.05 and 4.0–4.1 from 50
+   to 800 nodes (2.5e-6 → 6e-12, then the reference's 2e-12 floor), with δ =
+   0.0025 on the δ = 0 jump-aware line to 0.1–0.3 %, δ = 0.01 to 1–1.5 %
+   and δ = 0.04 to 3–5 % where δ ≈ h and the solutions genuinely differ
+   (P7 as measured: "one line", not "three digits at every n"). At
+   equilibrium the seeds are exact to solver precision at every δ (P6:
+   below 1e-12 to 400 nodes, then the direct solve's own growth). The
+   seeds are E1.2's operator at δ = 0 on constant pieces (2e-14 in the
+   weights, 3e-15 in the functions above) and need no δ to be switched
+   off: §2.2's `h ≲ 2δ` regime costs them nothing. On eq. 75 the seeded
+   rows are exact where the reach covers the layer and the line is the
+   plain rows' sinusoid line, still pre-asymptotic at these counts (rates
+   2.7 → 3.75 at δ = 0, 1.3e-4 → 1.4e-8 from 101 to 1601 nodes); with the
+   edge rows seeded at δ = 0.04 the line is 2.6e-8, 1.5e-9, 1.1e-10 and
+   the 2e-11 reference floor (rates 4.1, 3.8). Two floors to quote: the
+   references' own error (2e-12 MATLAB, 6e-11 eq. 75, §2.1) and the DOP853
+   march's at δ ≲ h/40 (row residual 1e-12, solution 4e-11, §2.3).
+3. **The comparator ranking (§2.4, P10 corrected).** With the edge
+   unresolved (h ≥ 4δ, δ = 0 included), on both media and both problems,
+   in ‖e‖₂/‖u‖₂: *seeds < T1-FV < T1 (two cells) < naive ≳ T1 (one cell)
+   ≈ T2 < T0 (m = 1) < T0 (m = 2)*; at 200 nodes and δ = 0.0025 on the
+   MATLAB ramp problem 1.6e-9, 8.0e-6, 8.9e-5, 7.9e-4 / 4.0e-4 / 4.6e-4,
+   2.2e-3, 5.0e-3. T1-FV, the conservative scheme with exact face
+   conductances, is exact at equilibrium and second order at every δ with
+   one constant (rate 2.00; 1.31e-4 → 1.26e-7 from 50 to 1600 nodes), the
+   strongest low-order comparator; every nodal treatment (cell means,
+   widened edge) caps the naive operator at second order once `h ≲ δ/4`
+   and so shares the construction's need to know δ; T0 is the worst,
+   sitting on the floor `c (m h − δ)`. Two caveats the manuscript's
+   comparator paragraph must carry: on eq. 75 T1-FV is *ahead of the
+   seeds* at δ = 0 below 801 nodes and at δ = 0.0025 at 101, where the
+   seeds' sinusoid line is pre-asymptotic (item 2); and the two-cell
+   harmonic mean's order 1.5 is a local O(h) defect on the two nodes
+   beside the edge, first order in the max norm, so the norm is named
+   wherever the ranking is quoted.
+4. **The elliptic remark (§1.8, §2.2, §2.4; plan §3.2).** The 1-D
+   equilibrium problem cannot rank the methods: its solution has constant
+   flux and lies in `span{φ₀, φ₁} = ker L`, so the seeds are exact at any
+   δ and any h (1.9e-14 at 50 nodes, δ = 0.01, growing with n to 1.7e-11
+   at 1600 through the solver), and so is any finite-volume scheme with
+   exact face conductances (T1-FV, 1e-14 → 6.5e-12). What the elliptic
+   tables do show is the same knee for the naive operator (7.6e-3 at
+   h = 4δ to 9.3e-9 at h = δ/8, δ = 0.01, MATLAB) and the construction on
+   the same `c δ` floor, so the elliptic row of the knee figure is the
+   sanity check and the limit case, one figure row and one remark; the
+   ranking is the parabolic tables'. In 2-D the tangential variation takes
+   the equilibrium solution out of the normal operator's kernel and the
+   elliptic problem becomes a real test (E4).
+
+**The predictions of §1.9, as they stand.**
+
+| | Section | Status |
+| --- | --- | --- |
+| P1 the medium and the references | §2.1 | holds: δ = 0 bit for bit, references agree to 6.3e-11 (eq. 75) and 2e-12 (MATLAB) between resolutions |
+| P2 the naive knee at h ≈ δ | §2.2 | holds, elliptic and parabolic, both media |
+| P3 the δ = 0 construction on the `c δ` floor | §2.2 | holds for `h ≳ 2δ` with c = 8.79 to six digits; corrected: O(1) growth once `h ≲ 2δ` |
+| P4 the seed weights → E1.2's at first order in δ/h | §2.3, §2.5 | holds (84 % … 0.11 %), and function by function to 3e-15 at δ = 0; eq. 75's `O(h α′/α)` floor recorded |
+| P5 `cond A` Vandermonde-like | §2.3 | holds: 90 → 138 (peak at δ = h/2) → 23.5 |
+| P6 equilibrium exact at every δ | §2.3 | holds below 1e-12 to 400 nodes; the march floor at δ ≲ h/40 added |
+| P7 fourth order at every δ, one line | §2.3 | holds as "one line for every δ" (0.3 %, 1.5 %, 5 %), not three digits; local truncation O(h³) seeded / O(h⁴) plain |
+| P8 the double-cross | §2.3 | holds: 7.6e-15 at δ = 0, first order in δ/h |
+| P9 spectra real and negative | §2.3 | holds, and the seeds are stable on eq. 75 at 49 and 53 nodes where the construction is not |
+| P10 the treatments' ranking | §2.4 | T1-FV exact and second order, T0's floor and constant hold; ranking corrected: T0 is the worst, T2 ≈ T1 (one cell) ≈ naive, T1 (two cells) ahead of naive; eq. 75 exception recorded |
+
+**Limitations to carry into the manuscript.** The DOP853 march's floor
+at δ ≲ h/40 (a collocation integration of the same chain would remove it;
+not built); the eq. 75 seed line being the plain rows' pre-asymptotic
+sinusoid line, so the medium's fourth-order claim rests on its δ > 0
+rows and the MATLAB medium; the seed-function figure's `(α₀/α_e)^⌈k/2⌉`
+normalisation, stated in its caption; the snapshot's grid chosen at
+`h = 8δ` because it is the one row of the sweep at which all four regimes
+are separated by more than a decade (at h = 2δ the naive operator is in
+§2.2's dip); and the knee cache's blindness to operator changes.
+
+Tests: `tests/test_results_cache.py` (`jsonable` on numpy, paths and float
+keys; write-and-read round trip with the provenance, a second `add`
+replacing the first, `read_results` refusing another file; `git_state`
+naming this checkout and nothing outside one) and `tests/test_heat1d_stiff.py`
+(the seed functions on E1.2's translated basis to 1e-13 at δ = 0 and first
+order in δ/h down the ladder 0.1, 0.01, 0.001 with 5.12e-4 for φ₁, the
+monomials on the node's side, the window's stencil units; the snapshot
+repeating the sweep's four errors to 1e-12 with the ranking, the seeds
+four orders below naive, the naive and construction errors mostly away
+from the edge and the naive maximum beside it; `main` with `--data-dir`
+writing the two figures and the same results file to both directories
+with the schema's tables, timings and args).
+
+**What this changes downstream.** E3 (#5) is complete: §2 is the
+canonical 1-D account and every number the manuscript's §3 (E5.5, #46)
+will quote is in it with a subsection to trace to; the figures it lifts
+are the knee with the seeds (§2.3), the seed functions and the snapshot
+(§2.5), the treatments (§2.4), all regenerated by one driver in seconds.
+E5.1 (#42) can scaffold `paper/` against this section. E5.3 (#44) reads
+`outputs/heat1d_stiff.json` into `paper/data/` and adds the content hash
+the knee cache lacks. E4.10 (#41) gives `heat2d_stiff.py` the same
+`--data-dir` and `ResultsCache`. Corners stay out (E2.10's decision).
