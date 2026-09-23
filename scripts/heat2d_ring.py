@@ -167,14 +167,16 @@ COLOURS = {
 CACHE = "heat2d_ring.json"
 CACHE_META = {
     "study": "E4.8 EABE eq. 40 with seeds (tangential, warped) and smooth edges",
-    "version": 2,
+    "version": 3,
     "composition": COMPOSITION,
     "seeds": "degree 4 and the degree-5 flux seeds (20); seeds15 without them",
+    "warp": "level 0 of phi01 on the ring; epsilon from the warped spacing",
 }
 """Bump ``version`` after any change to the chains, their series or sampling, the
 ring's gap or the composition, as the other stiff caches say. Version 2 is the
-flux seeds (§3.11) and exact keys; version 1's lines, built without the flux
-seeds, were carried over as ``seeds15`` and its Fig. 20 rows rebuilt."""
+flux seeds (§3.11) and exact keys. Version 3 is the ring's warp, φ₀₁'s level 0,
+and ε from the warped spacing: every seed line was rebuilt; the E2.3, naive and
+direct lines, which neither touches, were carried over."""
 
 RESULTS = "heat2d_ring_results.json"
 

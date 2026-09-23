@@ -24,6 +24,7 @@ from heat_interfaces.heat2d.domain import (
     SineProduct,
     SmoothBand,
     build_node_set,
+    case2,
     case3,
     layer_share,
     layer_share_at,
@@ -508,3 +509,20 @@ def test_on_a_ring_the_gaussians_are_shaped_on_the_warped_spacing():
     _, _, plain = seeds._gaussian_coordinates(sb, 0.4, False)
     assert plain == pytest.approx(0.4 * sb.scale / physical)
     assert eps > 2.0 * plain
+
+
+def test_on_a_ring_the_warp_is_the_flux_seeds_level_zero():
+    # §3.11: φ₀₁'s higher levels carry the ring's resistance along ξ into the
+    # far side's warped coordinate; on a ring the warp is its level 0 alone,
+    # and elsewhere (case 2) it keeps every level as §3.10 decided.
+    nodes, rows = ring_stencils(1e3, count=2)
+    sb = seed_basis(nodes.xy[rows[0]], case3().material, tangential=True)
+    xi, warp = seeds.seed_coordinates(sb)
+    level = sb.profiles.chain.index(0, 1, 0)
+    np.testing.assert_array_equal(warp, sb.profiles.g[level])
+    assert np.abs(warp - sb.warp).max() > 0.0
+    nodes2 = build_node_set(case2(), 2500, seed=0, iterations=20)
+    index, _ = knn(nodes2.xy, 30)
+    cross = interface_crossings(nodes2, case2().material, index)
+    tb = seed_basis(nodes2.xy[index[cross][0]], case2().material, tangential=True)
+    np.testing.assert_array_equal(seeds.seed_coordinates(tb)[1], tb.warp)

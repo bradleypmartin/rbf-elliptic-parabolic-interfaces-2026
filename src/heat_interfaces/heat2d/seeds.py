@@ -1105,10 +1105,19 @@ def seed_coordinates(
     ``TangentialBasis``' warp is ``φ₀₁(ξ, η)`` with all its levels, whose
     level-0 flux is not constant along the line on a curved or tangentially
     varying edge: only its anchor value enters, as ``anchor_flux`` (§3.10).
+    On a ring with a ``gap`` it is ``φ₀₁``'s level 0 alone, ``g₀(η)``, the
+    same at the anchor to first order (§3.11): the other levels carry the
+    ring's resistance along ξ into the far side, sheared ~4 per stencil radius
+    whatever h, and the Gaussians on it left the case-3 line at 3.3e-6 at
+    80,000 nodes, 11× E2.3's; level 0 alone gives 2.3e-7 there and moves
+    s = 10¹¹ by 3–5 % (2026-09-23).
     """
     if not warp:
         return sb.xi, sb.eta
     if isinstance(sb, TangentialBasis):
+        if sb.medium.gap is not None:
+            ch = sb.profiles.chain
+            return sb.xi, sb.profiles.g[ch.index(0, 1, 0)]
         return sb.xi, sb.warp
     flux = sb.profiles.psi[sb.profiles.chain.index(0, 1, 0)]
     drift = float(np.abs(flux - sb.alpha_e).max() / abs(sb.alpha_e))
