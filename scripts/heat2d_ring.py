@@ -19,7 +19,8 @@ Four parts, each skipped by an empty or zero flag:
    stencils at every node (``full``) and through its standard interpolant only
    where its own stencil sees no interface (``far``), the read part 4 needs.
 2. ``--conditioning-n``: Fig. 20's twin with a seeds line, per s of
-   ``--conditioning-s`` and δ of 0 and ``--deltas``, over every seeded row of the
+   ``--conditioning-s`` at δ = 0 and of ``--conditioning-smooth-s`` (none by
+   default) at the δ of ``--deltas``, over every seeded row of the
    ring at its constant part: the worst and median relative residual of the
    weights on the matched radial profile (``heat2d.exact.matched_radial``,
    ``∇·(α∇u) = 4``, reference-free at any (s, δ)), for the seeds and, at δ = 0,
@@ -44,17 +45,19 @@ Figures ``heat2d_ring_convergence.png``, ``heat2d_ring_conditioning.png`` and
 by part, s, δ, count and line, so an extended sweep reruns only what is new, and
 the tables are written to ``heat2d_ring_results.json`` (and ``--data-dir``).
 
-    uv run python scripts/heat2d_ring.py                           # ~2 min cold
-    uv run python scripts/heat2d_ring.py --s 1e3 1e8 1e9 1e10 1e11 \\
-        --counts 1250 2500 5000 10000 20000 40000 80000 \\
-        --reference-n 160000                                       # Fig. 19 twin
-    uv run python scripts/heat2d_ring.py --counts \\
-        --conditioning-s 1e3 1e4 1e5 1e6 1e7 1e8 1e9 1e10 1e11 \\
-        --conditioning-n 10000 --deltas 0.0025 0.001 0.00025       # Fig. 20 twin
-    uv run python scripts/heat2d_ring.py --counts --conditioning-n 0 \\
-        --smooth-s 1e3 1e8 1e11 --deltas 0.0025 0.001 0.00025 \\
-        --probe-counts 1250 2500 5000 10000 20000 40000 \\
-        --fine-n 160000 --fine-s 1e3 1e11 --spectrum-n 2000         # the smooth ring
+    uv run python scripts/heat2d_ring.py                 # ~3 min cold; seconds cached
+    uv run python scripts/heat2d_ring.py --s 1e3 1e8 1e9 1e10 1e11 \
+        --counts 1250 2500 5000 10000 20000 40000 80000 --reference-n 160000 \
+        --conditioning-s 1e3 1e4 1e5 1e6 1e7 1e8 1e9 1e10 1e11 \
+        --conditioning-smooth-s 1e3 1e7 1e11 --conditioning-n 10000 \
+        --deltas 0.0025 0.001 0.00025 --smooth-s 1e3 1e11 \
+        --probe-counts 2500 5000 10000 20000 40000 --fine-n 160000 \
+        --spectrum-n 5000                                    # stiff note §4.8
+
+The last is some 20 CPU-hours cold: one part and one (s, δ) at a time, as
+concurrent processes sharing ``outputs/`` (the cache merges under a lock), it
+took about 75 min on 14 cores (2026-09-23), the six 160,000-node seed runs 21–30
+min each; stiff note §4.8 has the times per part.
 """
 
 from __future__ import annotations
@@ -268,7 +271,8 @@ def refused(n: int, material):
 
     At δ > 0 the reach rule seeds rows 20δ and a stencil radius from the ring,
     whose normal lines reach nearer the circle's centre; the coarsest count the
-    seeds take grows with δ (2500 at δ = 0.001, 5000 at δ = 0.0025).
+    seeds take grows with δ (1250 at δ = 0; 2500 at δ = 0.001, where ten rows
+    of the 1250-node set are refused).
     """
     try:
         yield
@@ -836,6 +840,13 @@ def print_smooth(results: dict[tuple[float, float], list[dict]]) -> None:
 # --- figures -------------------------------------------------------------------------
 
 
+def _counts_axis(ax, counts) -> None:
+    """The node counts as the only ticks, as E2.9's figures label them."""
+    ticks = sorted({int(n) for n in counts})
+    ax.set_xticks(ticks, [str(k) for k in ticks], fontsize=7, rotation=45)
+    ax.set_xticks([], minor=True)
+
+
 def _colours(values: Sequence[float]) -> dict[float, tuple]:
     cmap = matplotlib.colormaps["viridis"]
     return {
@@ -881,6 +892,7 @@ def figure_convergence(results: dict[float, list[dict]]):
     ax.plot([], [], "k-", label="seeds (tangential, warped)")
     ax.plot([], [], "k--", markerfacecolor="none", label="E2.3 (E2.9's curved line)")
     ax.plot([], [], "k:", linewidth=0.8, label="seeds without the flux seeds (15)")
+    _counts_axis(ax, [r["seeds"]["n"] for rows in results.values() for r in rows])
     ax.set_xlabel("number of nodes N")
     ax.set_ylabel("RMS error in u against the reference at the same s")
     ax.set_title("eq. 40 at δ = 0 with seeds (EABE Fig. 19 twin)")
@@ -1000,14 +1012,24 @@ def figure_smooth(results: dict[tuple[float, float], list[dict]]):
                     )
         title = "the jump" if d == 0.0 else f"δ = {d:g}"
         axes[0, j].set_title(f"probe, {title}", fontsize=9)
+        counts = [
+            r["probe-seeds"]["n"]
+            for (_, dd), rows in results.items()
+            if dd == d
+            for r in rows
+        ]
         if has_error:
+            if d == 0.0:
+                axes[1, j].set_visible(False)
             axes[1, j].set_title(f"error away from the ring, {title}", fontsize=9)
         for ax in axes[:, j]:
             ax.grid(True, which="both", linewidth=0.3)
             ax.set_xlabel("N")
+            _counts_axis(ax, counts)
     axes[0, 0].set_ylabel("RMS of L u over the seeded rows")
     if has_error:
-        axes[1, 0].set_ylabel("RMS error against the fine seed run")
+        first = next(j for j, d in enumerate(deltas) if d > 0.0)
+        axes[1, first].set_ylabel("RMS error against the fine seed run")
     axes[0, 0].legend(fontsize=6, loc="lower left")
     fig.tight_layout()
     return fig
@@ -1021,13 +1043,12 @@ def main(argv: Sequence[str] | None = None) -> dict:
     parser.add_argument("--s", type=float, nargs="+", default=[1e3, 1e11])
     parser.add_argument("--counts", type=int, nargs="*", default=[1250, 2500])
     parser.add_argument("--reference-n", type=int, default=20000)
-    parser.add_argument(
-        "--conditioning-s", type=float, nargs="+", default=[1e3, 1e7, 1e11]
-    )
+    parser.add_argument("--conditioning-s", type=float, nargs="+", default=[1e3, 1e11])
     parser.add_argument("--conditioning-n", type=int, default=2500)
+    parser.add_argument("--conditioning-smooth-s", type=float, nargs="*", default=[])
     parser.add_argument("--deltas", type=float, nargs="*", default=[0.001])
     parser.add_argument("--smooth-s", type=float, nargs="*", default=[1e3])
-    parser.add_argument("--probe-counts", type=int, nargs="*", default=[2500, 5000])
+    parser.add_argument("--probe-counts", type=int, nargs="*", default=[2500])
     parser.add_argument("--fine-n", type=int, default=0)
     parser.add_argument("--fine-s", type=float, nargs="*", default=None)
     parser.add_argument("--spectrum-n", type=int, default=0)
@@ -1077,8 +1098,9 @@ def main(argv: Sequence[str] | None = None) -> dict:
     if args.conditioning_n:
         t0 = time.perf_counter()
         rows = []
-        for s in args.conditioning_s:
-            for delta in (0.0, *args.deltas):
+        smooth_s = args.conditioning_smooth_s
+        for s in sorted(set(args.conditioning_s) | set(smooth_s)):
+            for delta in (0.0, *args.deltas) if s in smooth_s else (0.0,):
                 k = key(
                     "fig20", s, delta, args.conditioning_n, args.seed, args.iterations
                 )
