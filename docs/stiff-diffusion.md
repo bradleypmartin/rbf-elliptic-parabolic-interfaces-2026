@@ -4606,7 +4606,12 @@ seeds to normal-only α) is not needed.
 - *E4.10 (#41)*: the figure `docs/figures/heat2d_stiff_tangential_a0.02_sine.png`, the
   cache entries `tangential` / `tangential-plain` in `heat2d_stiff_curved.json` (the
   first cutoff's are not in it), and the regeneration commands in the driver's
-  docstring.
+  docstring. The labels do not say which level cutoff built an entry, so the curved
+  cache's version moved to 2 with the chain (the /spar review's MEDIUM): a version-1
+  file is refused whole. The local file was re-stamped from 1 to 2 rather than
+  rebuilt, after checking that it held no tangential entry before the level-4 runs
+  were merged; its E4.7 entries do not involve the chain. Bump the version again
+  after any change to either chain, the tangential series or their sampling.
 
 **Tests.** `tests/heat2d/test_seeds.py`: the coupled chain's 75 levels and its rate
 with constant series equal to §3.2's; the flat limit on case 1 (blocks to 1e-12,

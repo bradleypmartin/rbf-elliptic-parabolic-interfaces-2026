@@ -406,6 +406,22 @@ def test_the_geometries_keep_case_ones_keys_and_cache():
         Geometry(0.02, "linear")
 
 
+def test_a_curved_cache_from_before_the_level_cutoff_is_refused(tmp_path):
+    # E4.11's review: the tangential labels do not say which level cutoff
+    # built them, so the file's version does. A version-1 file (E4.7's, or the
+    # first cutoff's) is refused whole rather than read back in silence.
+    two = Geometry(0.02, "sine")
+    key = knee_key("elliptic", 0.0, 1250, "tangential", 0, 100, 0.1, two.tag)
+    cache = {key: {"rms": 1.25e-4}}
+    save_knee_cache(tmp_path, cache, two)
+    assert load_knee_cache(tmp_path, two) == cache
+    assert CURVED_CACHE_META["version"] == 2
+    data = json.loads((tmp_path / CURVED_CACHE).read_text())
+    data["meta"] = {**CURVED_CACHE_META, "version": 1}
+    (tmp_path / CURVED_CACHE).write_text(json.dumps(data))
+    assert load_knee_cache(tmp_path, two) == {}
+
+
 def test_the_curved_sweep_at_the_two_smallest_counts(tmp_path, capsys):
     # E4.7 (#38), stiff note §4.6: route (a) on case 2. At δ = 0 the
     # construction is E2.6's curved line (3.06e-5 at 1250 nodes, now against

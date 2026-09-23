@@ -376,11 +376,16 @@ CURVED_DELTAS = (0.0, 0.01, 0.005, 0.0025)
 CURVED_CACHE = "heat2d_stiff_curved.json"
 CURVED_CACHE_META = {
     "study": "E4.7 sine bands with tanh edges against the product-grid references",
-    "version": 1,
+    "version": 2,
     "reference": ["product grid", PRODUCT_N_X, REFERENCE_N_CHEB, REFERENCE_MAX_WIDTH],
     "naive_ordering": PRODUCT_ORDERING,
 }
-"""Its own file, so that nothing here can move E4.3's and E4.6's case-1 entries."""
+"""Its own file, so that nothing here can move E4.3's and E4.6's case-1 entries.
+
+Version 2 is E4.11's tangential chain with every seed to level 4 (#81): a file
+from before it may hold the first level cutoff's ``tangential`` entries under
+the same labels, and is refused whole. Bump it after any change to either
+chain, the tangential series or their sampling, as ``KNEE_CACHE_META`` says."""
 
 CASE2_REFERENCE = "heat2d_case2_reference_n160000_seed0.npz"
 """E2.6's cached 160,000-node jump-aware run, which the δ = 0 product grid checks."""

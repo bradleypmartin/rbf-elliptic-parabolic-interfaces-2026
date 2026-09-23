@@ -45,10 +45,9 @@ rows into the global matrix on the stencils that see an edge.
 
 ``tangential=True`` (E4.11, #81, §3.10) builds the same stencil in the foot
 curve's own coordinates, ``x = γ(σ) + d n(σ)``, where the edge is a
-coordinate line at every ξ: the seeds keep every level ``j ≤ 4 − b``, and
+coordinate line at every ξ: every seed keeps its levels to ``ξ⁴``, and
 alpha's and the metric's variation along the curve, expanded in ξ, couples
-them (``coupled_chain``, every seed to level 4: 75 levels, 150 states). That
-is what route (a)'s
+them (``coupled_chain``, 75 levels, 150 states). That is what route (a)'s
 frozen profile cannot carry on a curved or tangentially varying edge
 (§4.6); on a flat edge with alpha a function of the normal alone the extra
 levels stay zero and the seeds are the ones above.
@@ -660,8 +659,22 @@ def tangential_profiles(
     eta = np.asarray(eta, dtype=float)
     if eta.ndim != 1:
         raise ValueError("eta must be a 1-D array of points on the line")
-    ch = coupled_chain(degree)
     far = _other_edge(medium, coords, eta) if medium.delta > 0.0 else None
+    return _tangential_march(coords, profile, eta, far, alpha_e, degree, rtol, atol)
+
+
+def _tangential_march(
+    coords: FootCoordinates,
+    profile: NormalProfile,
+    eta: np.ndarray,
+    far: float | Callable[[float], np.ndarray] | None,
+    alpha_e: float,
+    degree: int,
+    rtol: float,
+    atol: float,
+) -> SeedProfiles:
+    """``tangential_profiles`` with the far edge already built (``_other_edge``)."""
+    ch = coupled_chain(degree)
 
     def rate_of(segment: int) -> Callable[[float, np.ndarray], np.ndarray]:
         alpha = _alpha_series(coords, profile.pieces[segment], far)
@@ -857,9 +870,10 @@ def _tangential_basis(
             )
     coords, xi, eta = foot_coordinates(curve, j, x, y, scale, SERIES_DEGREE)
     alpha_e = float(medium.alpha(x[:1], y[:1])[0])
-    profiles = tangential_profiles(
-        coords, profile, eta, medium, alpha_e, degree, rtol, atol
-    )
+    # One far edge for the march and the anchor's coefficients: its
+    # interpolant is a vectorized Newton on 187 points when it is not saturated.
+    far = _other_edge(medium, coords, eta) if medium.delta > 0.0 else None
+    profiles = _tangential_march(coords, profile, eta, far, alpha_e, degree, rtol, atol)
     q = polynomial_count(degree)
     rhs = np.zeros(q)
     rhs[_column(degree, 2, 0)] = rhs[_column(degree, 0, 2)] = 2.0 * alpha_e
@@ -868,7 +882,6 @@ def _tangential_basis(
     # medium's gradient and the metric (m̂ = G − d K is 1 there).
     ch = profiles.chain
     segment = int(profile.segment(np.zeros(1))[0])
-    far = _other_edge(medium, coords, eta) if medium.delta > 0.0 else None
     coefficients = _coefficients(
         coords, _alpha_series(coords, profile.pieces[segment], far)
     )
