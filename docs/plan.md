@@ -289,8 +289,9 @@ otherwise. `CLAUDE.md` carries the working set.
   E4.8, stiff note §3.11). Across a layer thinner than the stencil with a
   contact resistance of O(1), EABE eq. 40's ring, the far side's values carry
   the flux at the layer with no factor of its distance, and the degree-4 seeds
-  lost an order at fine counts (Fig. 19's twin fell at 2.3–2.9, 7.7–11.7×
-  E2.3's at 80,000 nodes). *Answered in E4.8:* on a ring the block adds the
+  lost an order at fine counts (without the flux seeds Fig. 19's twin falls at
+  2.25–3.33 per halving from 10,000 nodes at s = 10³ and ends 8.2 and 11.8×
+  E2.3's at 40,000 and 80,000, stiff note §4.8). *Answered in E4.8:* on a ring the block adds the
   five degree-5 seeds that carry a flux (20 on the 30 nodes), and the seeds
   are fourth order at or below E2.3's line (§4.8).
 
@@ -818,7 +819,7 @@ Found by E4.8 (stiff note §3.11, §4.8): on the smooth ring the rows anchored
 in the layer's tail (α_e a third of the pieces') have warped and plain
 Gaussian weights 100 % apart, and at δ = 0.001 on 20,000 nodes the far-field
 error jumps to 6.2e-5 between 2.6e-5 and 1.9e-6; plain Gaussians give 8.1e-6
-there, while elsewhere at δ > 0 the warp wins by 1.2–1.8×. Design a rule (plain
+there, while elsewhere at δ > 0 the warp wins by 1.0–1.8×. Design a rule (plain
 Gaussians inside the layer, or a warp that does not compress the neighbours
 by α_e/α) and rerun the ring's δ > 0 sweep with it. Numbered after E4.11
 because the plan's ticket ids are numeric.

@@ -2598,11 +2598,14 @@ resistance. Its tail carries the contrast (`(1.5/δ) e^{−2z}` beyond the
 ring), so the fold's saturation shortcut is not used for it.
 
 **The flux seeds.** With the 15 seeds of §3.10 the ring's rows next to the
-ring stalled at fine counts (§4.8: Fig. 19's twin fell at 2.3–2.9 from
-10,000 to 80,000 nodes). Fitted by least squares to the exact mode through
-the ring at its constant part, the seed span is O(h⁵) on the near side alone,
-7× below E2.3's basis, but O(h⁴) on the rows with 10–12 of their 30 nodes
-across the ring, where E2.3's is O(h⁵). A kink carries the flux into the far
+ring stalled at fine counts (§4.8: without the flux seeds the case-3 line at
+s = 10³ falls at 2.25–3.33 per halving from 10,000 nodes and ends 8.2 and 11.8×
+E2.3's at 40,000 and 80,000, 2.2 and 3.2× at s = 10¹¹; the first round of the
+sweep, the 15 seeds with `φ₀₁`'s every level as the warp, fell at 2.3–2.9 and
+ended 11.7 and 7.7× at 80,000 for s = 10³ and 10¹¹). Fitted by least squares to
+the exact mode through the ring at its constant part, the seed span is O(h⁵) on
+the near side alone, 7× below E2.3's basis, but O(h⁴) on the rows with 10–12 of
+their 30 nodes across the ring, where E2.3's is O(h⁵). A kink carries the flux into the far
 side's values times the distance beyond it; a thin resistive layer carries
 it with no such factor, `[u] = R F` with `R = 1.5` the contact resistance and
 `F` the flux at the ring. The degree-4 seeds carry a flux in those with
@@ -4842,15 +4845,15 @@ E2.9's table; E2.3's line here is E2.9's to the digit):
 
 - *Fourth order at every s, at or below E2.3 from 5000 nodes*: 0.74–0.97× at
   s = 10³ and 0.48–0.90× at s ≥ 10⁸, fits 4.42 and 4.64–4.73 against E2.3's
-  4.13–4.18. The coarsest two counts sit 1.24–1.46× above E2.3, §4.7's
+  4.13–4.18. The coarsest two counts sit 1.03–1.46× E2.3, §4.7's
   coarse-set constant of the tangential chain.
 - *The s ≥ 10⁸ lines are one line*: each within 0.88–1.13× of the s = 10¹¹ line
   at every count, the thin-layer limit (E2.9 found the same of E2.3). The
   s = 10³ line is 0.81–1.63× that line, its 0.001-wide ring a different problem
   by `O(w)`, as E2.9's references are 5.3e-6 apart.
 - *Without the flux seeds the line stalls*: seeds (15) fall at 2.25–3.33 per
-  halving at s = 10³ from 10,000 nodes and end 3.2–11.8× E2.3 at 40,000–80,000
-  nodes (8.2 and 11.8× at s = 10³); §3.11's mechanism. The first run of this
+  halving at s = 10³ from 10,000 nodes and end 8.2 and 11.8× E2.3 at 40,000 and
+  80,000 nodes (2.2 and 3.2× at s = 10¹¹); §3.11's mechanism. The first run of this
   sweep, with the flux seeds but `φ₀₁`'s every level as the warp, fell back from
   1.37e-6 at 40,000 to 3.30e-6 at 80,000 at s = 10³, with a 160,000-node seed run
   3.0e-6 from E2.9's reference and every seed count about 3e-6 from every other;
@@ -4894,7 +4897,7 @@ dominance, least and median over the seeded rows (the median over all rows is
 | 10⁸–10¹¹ | 0 | seeds | 0 | −14.301 | −13.48 … −13.71 | 0.27–0.44 | 0.069–0.084 / 0.674–0.678 |
 | 10⁸–10¹¹ | 0 | plain | 0 | −14.301 | −13.48 … −13.71 | 0.74–0.99 | 0.090–0.099 / 0.681–0.684 |
 | 10³, 10¹¹ | 0.0025 | seeds | 0 | −14.158, −14.140 | −13.62, −13.50 | 0.28, 0.38 | 0.052, 0.044 / 0.676, 0.675 |
-| 10³, 10¹¹ | 0.0025 | plain | 0 | −14.158, −14.140 | −25.5, −26.5 | 2.06, 1.87 | 0.040, 0.012 / 0.674, 0.675 |
+| 10³, 10¹¹ | 0.0025 | plain | 0 | −14.158, −14.140 | −25.5, −26.5 | 2.06, 1.86 | 0.040, 0.012 / 0.674, 0.675 |
 | 10³, 10¹¹ | 0.001 | seeds | 0 | −14.251, −14.232 | −13.60, −13.52 | 0.78, 0.74 | 0.088, 0.071 / 0.667, 0.644 |
 | 10³, 10¹¹ | 0.00025 | seeds | 0 | −14.299, −14.281 | −13.58, −13.57 | 0.57, 0.50 | 0.093, 0.072 / 0.653, 0.661 |
 
@@ -4942,14 +4945,18 @@ of the nodes whose nearest fine node's stencil is unseeded (`far_read`; at
 
 (Every count at both s is in `heat2d_ring_results.json`; the s = 10¹¹ errors
 are 0.67–2.26× the s = 10³ ones at every count, the largest at 40,000 nodes and
-δ = 0.00025, where both sit at the fine runs' floor.)
+δ = 0.00025, where both are within a factor two of the fine runs' floor.)
 
 - *The seeds are fourth order through a sub-grid smooth resistive layer.* Error
   fits over 2500–40,000 (s = 10³, 10¹¹): 4.74 and 4.87 at δ = 0.0025, 4.16 and
-  3.75 at 0.00025, 3.45 and 3.30 at 0.001 (the outlier below). The last counts sit at the fine
-  run's own floor: the fine runs with the full and the level-0 warp, which are
-  on the same 160,000 nodes, differ by 1.3–1.8e-6 away from the ring at δ ≤ 0.001
-  (3e-10 at 0.0025), so 1.3–3.8e-6 at 40,000 is where this line can go.
+  3.75 at 0.00025, 3.45 and 3.30 at 0.001 (the outlier below). The last counts
+  are at or near the fine runs' own floor: the fine runs with the full and the
+  level-0 warp, on the same 160,000 nodes, differ by 1.5–2.2e-6 on the nodes the
+  far read uses at δ ≤ 0.001 (1.8e-6 and 1.5e-6 at δ = 0.001, 1.9e-6 and 2.2e-6
+  at 0.00025, for s = 10³ and 10¹¹; 3e-10 at 0.0025). At 40,000 nodes s = 10³
+  sits on it (1.9e-6 and 1.7e-6), s = 10¹¹ a little above it (3.0e-6 at
+  δ = 0.001, 3.8e-6 at 0.00025), and δ = 0.0025 below it (1.3e-6, 1.5e-6, where
+  the fine runs agree to 3e-10).
 - *The probe agrees, reference-free*: the seeds' rows converge at 2–4 per halving
   at every (s, δ) (fits 2.46–3.48), slowest at δ = 0.0025 between 10,000 and
   40,000 (1.6, 2.1),
@@ -4969,7 +4976,7 @@ are 0.67–2.26× the s = 10³ ones at every count, the largest at 40,000 nodes 
   the ring's resistive tail (α_e 0.27–0.41 against 1, 3.75δ from its middle on
   this count) have warped and plain weights 100 % apart (median 2 %); plain
   Gaussians everywhere give 8.1e-6 there, and plain on the 50 most different
-  rows 1.1e-5. Elsewhere at δ > 0 the warp beats plain by 1.2–1.8× (δ = 0.0025:
+  rows 1.1e-5. Elsewhere at δ > 0 the warp beats plain by 1.0–1.8× (δ = 0.0025:
   2.07e-5 against 2.31e-5 at 10,000, 6.85e-6 against 1.22e-5 at 20,000;
   δ = 0.00025: 1.67e-6 against 2.45e-6 at 40,000; δ = 0.001 at 40,000: 1.85e-6
   against 1.89e-6). E4.6's warp turned at `h ≈ 2δ` at 5 : 1; at 1500 : 1 the

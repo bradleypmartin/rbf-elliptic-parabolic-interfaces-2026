@@ -45,7 +45,7 @@ Figures ``heat2d_ring_convergence.png``, ``heat2d_ring_conditioning.png`` and
 by part, s, δ, count and line, so an extended sweep reruns only what is new, and
 the tables are written to ``heat2d_ring_results.json`` (and ``--data-dir``).
 
-    uv run python scripts/heat2d_ring.py                 # ~3 min cold; seconds cached
+    uv run python scripts/heat2d_ring.py                 # ~2 min cold; seconds cached
     uv run python scripts/heat2d_ring.py --s 1e3 1e8 1e9 1e10 1e11 \
         --counts 1250 2500 5000 10000 20000 40000 80000 --reference-n 160000 \
         --conditioning-s 1e3 1e4 1e5 1e6 1e7 1e8 1e9 1e10 1e11 \
