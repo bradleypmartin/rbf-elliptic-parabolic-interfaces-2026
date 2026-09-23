@@ -43,6 +43,7 @@ from heat_interfaces.heat2d.interface import stencil_weights
 from heat_interfaces.heat2d.neighbors import knn
 from heat_interfaces.heat2d.operators import interface_crossings
 from heat_interfaces.heat2d.seeds import (
+    flux_exponents,
     saddle_system,
     seed_basis,
     weights_of,
@@ -245,7 +246,7 @@ def test_the_march_from_the_outer_circle_is_the_absolute_one_at_case_3():
     for idx in rows:
         xy = nodes.xy[idx]
         a = seed_basis(xy, band, tangential=True).block
-        b = seed_basis(xy, replace(band, gap=None), tangential=True).block
+        b = seed_basis(xy, replace(band, gap=None), tangential=True, flux=True).block
         np.testing.assert_allclose(a, b, rtol=0, atol=1e-11 * np.abs(b).max())
 
 
@@ -423,3 +424,87 @@ def test_radial_elements_cut_both_circles_within_reach():
     assert edges[-1] == pytest.approx(0.35 + RING_REACH * 2.5e-4)
     for centre in (0.349, 0.35):
         assert np.abs(edges - centre).min() < 1e-12
+
+
+# --- the flux seeds (§3.11) ---------------------------------------------------------
+
+
+def test_the_flux_seeds_are_the_degree_five_seeds_that_carry_a_flux():
+    exponents = flux_exponents(4)
+    assert len(exponents) == 20
+    assert exponents[:15] == [(a, b) for a, b in exponents if a + b <= 4]
+    assert exponents[15:] == [(4, 1), (3, 2), (2, 3), (1, 4), (0, 5)]
+
+
+def test_the_flux_seeds_are_on_by_default_on_a_ring_only():
+    nodes, rows = ring_stencils(1e3, count=2)
+    xy = nodes.xy[rows[0]]
+    band = case3().material
+    assert seed_basis(xy, band, tangential=True).block.shape == (30, 20)
+    assert seed_basis(xy, band, tangential=True, flux=False).block.shape == (30, 15)
+    no_gap = replace(band, gap=None)
+    assert seed_basis(xy, no_gap, tangential=True).block.shape == (30, 15)
+    with pytest.raises(NotImplementedError, match="tangential"):
+        seed_basis(xy, band, flux=True)
+    # The block's first 15 columns are the degree-5 chain's seeds of degree 4,
+    # and the moment conditions are 2 α_e on the two quadratics alone.
+    sb = seed_basis(xy, band, tangential=True)
+    full = seed_basis(xy, band, degree=5, tangential=True, flux=False)
+    np.testing.assert_array_equal(sb.block[:, :15], full.block[:, :15])
+    want = np.zeros(20)
+    want[[3, 5]] = 2.0 * sb.alpha_e
+    np.testing.assert_array_equal(sb.rhs, want)
+
+
+def test_the_flux_seeds_fit_the_mode_across_the_ring_one_order_better():
+    # §3.11: on the rows with most of their nodes across the ring the far side
+    # carries R·F(σ), the flux at the ring times its contact resistance, with
+    # no factor of the distance; the degree-4 seeds fit the mode there at
+    # O(h⁴) and with the flux seeds at O(h⁵) (per halving of h: 4 against 5.7
+    # per doubling of the count).
+    domain = case3()
+    band = replace(domain.material, inside=Constant2D(1.0 / 1500.0))
+    mode = ring_exact(gap=True)
+    fits = {}
+    for n in (10000, 20000):
+        nodes = build_node_set(domain, n, seed=0, iterations=20)
+        index, _ = knn(nodes.xy, 30)
+        rows = index[interface_crossings(nodes, band, index)]
+        worst = {15: [], 20: []}
+        for idx in rows[::6]:
+            xy = nodes.xy[idx]
+            r = np.hypot(xy[:, 0] - 0.5, xy[:, 1] - 0.5)
+            far = (r > 0.3495) != (r[0] > 0.3495)
+            if far.sum() < 10:
+                continue
+            u = mode(xy[:, 0], xy[:, 1])
+            for q, flux in ((15, False), (20, True)):
+                block = seed_basis(xy, band, tangential=True, flux=flux).block
+                c, *_ = np.linalg.lstsq(block, u, rcond=None)
+                worst[q].append(np.sqrt(np.mean((u - block @ c)[far] ** 2)))
+        fits[n] = {q: np.sqrt(np.mean(np.square(v))) for q, v in worst.items()}
+    assert fits[10000][15] / fits[20000][15] < 4.6
+    assert fits[10000][20] / fits[20000][20] > 5.0
+    assert fits[20000][20] < 0.1 * fits[20000][15]
+
+
+def test_on_a_ring_the_gaussians_are_shaped_on_the_warped_spacing():
+    # §3.11: with the anchor inside the smooth ring the warp compresses its
+    # neighbours by α_e/α, so ε comes from the nearest node in (ξ, φ₀₁); off a
+    # ring, and plain, it is E2.2's physical rule.
+    domain = case3()
+    band = SmoothBand(domain.material, 2.5e-3, "resistance")
+    nodes = build_node_set(domain, 5000, seed=0, iterations=20)
+    index, _ = knn(nodes.xy, 30)
+    r = np.hypot(nodes.x - 0.5, nodes.y - 0.5)
+    inside = np.argmin(np.abs(r - 0.3495))
+    sb = seed_basis(nodes.xy[index[inside]], band, tangential=True)
+    assert sb.alpha_e < 0.5
+    xi, eta, eps = seeds._gaussian_coordinates(sb, 0.4, True)
+    d = np.hypot(xi[1:] - xi[0], eta[1:] - eta[0])
+    assert eps == pytest.approx(0.4 / d.min())
+    xy = nodes.xy[index[inside]]
+    physical = np.hypot(xy[1:, 0] - xy[0, 0], xy[1:, 1] - xy[0, 1]).min()
+    _, _, plain = seeds._gaussian_coordinates(sb, 0.4, False)
+    assert plain == pytest.approx(0.4 * sb.scale / physical)
+    assert eps > 2.0 * plain

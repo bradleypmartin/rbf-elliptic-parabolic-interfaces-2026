@@ -925,6 +925,24 @@ def nearest_interface(medium: Band | SmoothBand, x: float, y: float) -> int:
     return int(np.argmin(d))
 
 
+def flux_exponents(degree: int = SEED_DEGREE) -> list[tuple[int, int]]:
+    """The seeds of degree ≤ ``degree`` and those of ``degree + 1`` with a flux (b ≥ 1).
+
+    §3.11: across a thin resistive layer, a contact resistance of O(1), the
+    far side's values carry the flux at the layer with no factor of its
+    distance, so the stencil needs the flux one degree above its own: the 15
+    seeds of degree 4 and ``ξ⁴η, ξ³η², ξ²η³, ξη⁴, η⁵``, 20 on the 30 nodes.
+    """
+    exponents = [tuple(int(v) for v in e) for e in polynomial_exponents(degree + 1)]
+    return [(a, b) for a, b in exponents if a + b <= degree or b >= 1]
+
+
+@cache
+def _flux_columns(degree: int) -> np.ndarray:
+    exponents = [tuple(int(v) for v in e) for e in polynomial_exponents(degree + 1)]
+    return np.array([exponents.index(e) for e in flux_exponents(degree)])
+
+
 def seed_basis(
     xy: np.ndarray,
     medium: Band | SmoothBand,
@@ -932,6 +950,7 @@ def seed_basis(
     rtol: float = SEED_RTOL,
     atol: float = SEED_ATOL,
     tangential: bool = False,
+    flux: bool | None = None,
 ) -> SeedBasis | TangentialBasis:
     """The ``SeedBasis`` of the nodes ``xy``, anchored at ``xy[0]``.
 
@@ -939,10 +958,18 @@ def seed_basis(
     scale. ``α_e`` is the medium's own value at the anchor, the owner's at a
     jump as in E2.3 and the 1-D march. A jump ``Band`` is marched as its
     ``SmoothBand`` at δ = 0. ``tangential=True`` is §3.10's
-    ``TangentialBasis`` on the same normal line.
+    ``TangentialBasis`` on the same normal line. ``flux=True`` adds the
+    ``degree + 1`` seeds that carry a flux (``flux_exponents``, §3.11): what a
+    thin resistive layer needs, and the default on a band with a ``gap``
+    (EABE eq. 40's ring, E4.8); the tangential chain's only.
     """
     xy = np.asarray(xy, dtype=float)
-    q = polynomial_count(degree)
+    band = medium.band if isinstance(medium, SmoothBand) else medium
+    if flux is None:
+        flux = tangential and band.gap is not None
+    if flux and not tangential:
+        raise NotImplementedError("the flux seeds are the tangential chain's (§3.11)")
+    q = len(flux_exponents(degree)) if flux else polynomial_count(degree)
     if xy.ndim != 2 or xy.shape[1] != 2 or len(xy) < q:
         raise ValueError(f"xy must be (k, 2) with k at least the {q} seeds")
     if not isinstance(medium, SmoothBand):
@@ -955,7 +982,9 @@ def seed_basis(
     j = nearest_interface(medium, x0, y0)
     profile = medium.normal_profile(j, x0, y0, scale)
     if tangential:
-        return _tangential_basis(xy, medium, j, profile, scale, degree, rtol, atol)
+        return _tangential_basis(
+            xy, medium, j, profile, scale, degree, rtol, atol, flux
+        )
     frame = Frame(x0, y0, atan2(profile.ny, profile.nx) - pi / 2, scale)
     xi, eta = frame.local(x, y)
     alpha_e = float(medium.alpha(x[:1], y[:1])[0])
@@ -998,8 +1027,15 @@ def _tangential_basis(
     degree: int,
     rtol: float,
     atol: float,
+    flux: bool = False,
 ) -> TangentialBasis:
-    """``seed_basis(tangential=True)`` past the checks the two bases share."""
+    """``seed_basis(tangential=True)`` past the checks the two bases share.
+
+    With ``flux`` the chain of ``degree + 1`` is marched and the block keeps
+    the columns of ``flux_exponents(degree)``, ``polynomial_exponents``'
+    order, so the first ``polynomial_count(degree)`` are the seeds of degree
+    ``degree`` and ``_column`` finds them as without it.
+    """
     x, y = xy[:, 0], xy[:, 1]
     curve, other = medium.interfaces[j], medium.interfaces[1 - j]
     if medium.delta == 0.0 and not _coordinate_lines(curve, other):
@@ -1014,8 +1050,10 @@ def _tangential_basis(
     # One far edge for the march and the anchor's coefficients: its
     # interpolant is a vectorized Newton on 187 points when it is not saturated.
     far = _other_edge(medium, coords, eta) if medium.delta > 0.0 else None
-    profiles = _tangential_march(coords, profile, eta, far, alpha_e, degree, rtol, atol)
-    q = polynomial_count(degree)
+    march = degree + 1 if flux else degree
+    profiles = _tangential_march(coords, profile, eta, far, alpha_e, march, rtol, atol)
+    columns = _flux_columns(degree) if flux else slice(None)
+    q = len(flux_exponents(degree)) if flux else polynomial_count(degree)
     rhs = np.zeros(q)
     rhs[_column(degree, 2, 0)] = rhs[_column(degree, 0, 2)] = 2.0 * alpha_e
     # The Gaussians' first-order coefficients at the anchor: ∂_ξ(α/m̂) from the
@@ -1045,7 +1083,7 @@ def _tangential_basis(
         xi,
         eta,
         profiles,
-        profiles.values(xi),
+        profiles.values(xi)[:, columns],
         rhs,
         gradient,
         anchor_flux,
@@ -1091,6 +1129,7 @@ def seed_weights(
     rtol: float = SEED_RTOL,
     atol: float = SEED_ATOL,
     tangential: bool = False,
+    flux: bool | None = None,
 ) -> np.ndarray:
     """Weights of ``div(alpha grad u)`` at ``xy[0]`` from ``u`` at the nodes ``xy``.
 
@@ -1122,7 +1161,7 @@ def seed_weights(
     ``α_e Δ + A_1(0) ∂_ξ`` for their right-hand side (``+ B_η(0) ∂_η``
     plain).
     """
-    sb = seed_basis(xy, medium, degree, rtol, atol, tangential)
+    sb = seed_basis(xy, medium, degree, rtol, atol, tangential, flux)
     return weights_of(sb, shape, warp)
 
 
@@ -1169,8 +1208,22 @@ def weights_of(
 def _gaussian_coordinates(
     sb: SeedBasis | TangentialBasis, shape: float, warp: bool
 ) -> tuple[np.ndarray, np.ndarray, float]:
-    """The Gaussian block's coordinates (``seed_coordinates``) and its ``ε``."""
+    """The Gaussian block's coordinates (``seed_coordinates``) and its ``ε``.
+
+    ``ε = shape / d``, ``d`` the nearest node's distance: the physical one as
+    in E2.2 (§3.4, §3.10), except warped on a ring with a ``gap`` (E4.8,
+    §3.11), where it is the distance in ``(ξ, φ₀₁)``. With the anchor inside
+    the smooth ring, where ``α_e`` is a twentieth of the pieces', ``φ₀₁ = ∫
+    α_e/α`` compresses its neighbours twentyfold in η̃, and Gaussians shaped
+    on the physical spacing were too flat there: the probe on the rows
+    within 5δ of the ring at 40,000 nodes and δ = 0.001 was 2.1e-4, and
+    1.8e-5 with ``ε`` from the warped spacing, every other row unchanged
+    (2026-09-23).
+    """
     xi, eta = seed_coordinates(sb, warp)
+    if warp and sb.medium.gap is not None:
+        d = np.hypot(xi[1:] - xi[0], eta[1:] - eta[0])
+        return xi, eta, shape / float(d[d > 0.0].min())
     x, y = sb.xy[:, 0], sb.xy[:, 1]
     r = np.hypot(periodic_dx(x - x[0]), y - y[0])
     eps = shape * sb.scale / float(np.where(r > 0.0, r, np.inf).min())

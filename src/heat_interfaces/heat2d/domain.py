@@ -110,6 +110,9 @@ EABE eq. 40's stored width is ``1/s`` to 8.3e-8 at ``s = 10¹¹`` (port notes
 §2.9); a gap further off than this belongs to another pair of circles.
 """
 
+LAYER_ROUNDING = 1e-12
+"""How negative ``d₁ − d₂`` may be, relative, before ``SmoothBand`` refuses it."""
+
 COMPOSITIONS = ("fold", "resistance")
 """How ``SmoothBand`` composes its two edges (stiff note §3.6, E4.8's decision).
 
@@ -717,10 +720,21 @@ class SmoothBand:
         return a, ax, ay
 
     def _layer_width(self, d1, d2):
-        """``(d₁ − d₂)/δ``, the layer's width in edge widths: the gap's when known."""
+        """``(d₁ − d₂)/δ``, the layer's width in edge widths: the gap's when known.
+
+        The composition needs the lower curve below the upper at every point
+        (``d₁ ≥ d₂``); a width negative beyond rounding is refused, not
+        clamped, since clamping would silently drop the layer there.
+        """
         if self.gap is not None:
             return self.gap / self.delta
-        return np.maximum(d1 - d2, 0.0) / self.delta
+        width = np.asarray(d1 - d2, dtype=float)
+        if np.any(width < -LAYER_ROUNDING * np.maximum(1.0, np.abs(d1))):
+            raise ValueError(
+                "the resistance composition needs d₁ ≥ d₂: the lower curve "
+                "crosses above the upper one"
+            )
+        return np.maximum(width, 0.0) / self.delta
 
     def _resistance(
         self,
@@ -772,7 +786,7 @@ class SmoothBand:
         if d1 is None:
             d1 = d2 + gap if gap is not None else self.lower.signed_distance_at(x, y)
         delta = self.delta
-        width = gap / delta if gap is not None else max(d1 - d2, 0.0) / delta
+        width = float(self._layer_width(d1, d2))
         share = layer_share_at(d1 / delta, d2 / delta, width)
         r_out = 1.0 / _piece_at(self.outside, x, y)
         r_in = 1.0 / _piece_at(self.inside, x, y)

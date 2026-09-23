@@ -65,6 +65,7 @@ import json
 import sys
 import time
 from collections.abc import Sequence
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 
@@ -135,13 +136,24 @@ RING_DELTAS = (0.0025, 0.001, 0.00025)
 all below the spacing of every count to 160,000 (h = 0.0026 there)."""
 
 LABELS = ("naive", "direct", "construction", "seeds")
-"""Part 4's operators; part 1 runs ``construction`` (E2.3) and ``seeds``."""
+"""Part 4's operators; at δ = 0 it adds ``seeds15``, the seeds without the flux
+seeds (§3.11), as part 1 does beside ``construction`` (E2.3) and ``seeds``."""
+
+FIG19_LABELS = ("construction", "seeds", "seeds15")
+
+
+def probe_labels(delta: float) -> tuple[str, ...]:
+    """Part 4's probe lines at δ: the four, and the seeds without the flux seeds
+    at δ = 0."""
+    return (*LABELS, "seeds15") if delta == 0.0 else LABELS
+
 
 NAMES = {
     "naive": "naive",
     "direct": "direct",
     "construction": "E2.3",
     "seeds": "seeds",
+    "seeds15": "seeds (15)",
 }
 
 COLOURS = {
@@ -149,16 +161,20 @@ COLOURS = {
     "direct": REFERENCE,
     "construction": CONSTRUCTION,
     "seeds": AWARE,
+    "seeds15": "#7fb3d5",
 }
 
 CACHE = "heat2d_ring.json"
 CACHE_META = {
     "study": "E4.8 EABE eq. 40 with seeds (tangential, warped) and smooth edges",
-    "version": 1,
+    "version": 2,
     "composition": COMPOSITION,
+    "seeds": "degree 4 and the degree-5 flux seeds (20); seeds15 without them",
 }
 """Bump ``version`` after any change to the chains, their series or sampling, the
-ring's gap or the composition, as the other stiff caches say."""
+ring's gap or the composition, as the other stiff caches say. Version 2 is the
+flux seeds (§3.11) and exact keys; version 1's lines, built without the flux
+seeds, were carried over as ``seeds15`` and its Fig. 20 rows rebuilt."""
 
 RESULTS = "heat2d_ring_results.json"
 
@@ -226,16 +242,43 @@ def build(label: str, nodes: NodeSet, domain: Domain) -> tuple[sp.csr_array, dic
         op = direct_operator(nodes, material, plain_stencils(nodes, domain))
     elif label == "construction":
         op = interface_aware_operator(nodes, material, aware_stencils(nodes, domain))
-    elif label in ("seeds", "seeds-plain"):
+    elif label in ("seeds", "seeds-plain", "seeds15"):
         stencils = reach_stencils(nodes, domain)
         info["rows"] = seeded_count(nodes, material, stencils)
-        op = seed_operator(
-            nodes, material, stencils, warp=label == "seeds", tangential=True
-        )
+        with refused(nodes.n, material):
+            op = seed_operator(
+                nodes,
+                material,
+                stencils,
+                warp=label != "seeds-plain",
+                tangential=True,
+                flux=label != "seeds15",
+            )
     else:
         raise ValueError(f"unknown operator {label!r}")
     info["seconds"] = time.perf_counter() - t0
     return op, info
+
+
+@contextmanager
+def refused(n: int, material):
+    """``FOOT_CURVATURE``'s refusal, named with the ring and the count it came from.
+
+    At δ > 0 the reach rule seeds rows 20δ and a stencil radius from the ring,
+    whose normal lines reach nearer the circle's centre; the coarsest count the
+    seeds take grows with δ (2500 at δ = 0.001, 5000 at δ = 0.0025).
+    """
+    try:
+        yield
+    except ValueError as err:
+        if "FOOT_CURVATURE" not in str(err):
+            raise
+        s = 1.0 / material.gap if material.gap else float("nan")
+        delta = getattr(material, "delta", 0.0)
+        raise ValueError(
+            f"the seeds refuse the ring at s = {s:g}, δ = {delta:g} on {n} nodes "
+            f"(FOOT_CURVATURE): take a finer count. {err}"
+        ) from err
 
 
 def seeded_count(nodes: NodeSet, material, stencils: Stencils) -> int:
@@ -278,7 +321,8 @@ def save_cache(outputs: Path, cache: dict[str, dict]) -> None:
 
 
 def key(*parts: object) -> str:
-    return "|".join(f"{p:g}" if isinstance(p, float) else str(p) for p in parts)
+    """The cache key: floats by ``repr``, so no two values share one."""
+    return "|".join(repr(p) if isinstance(p, float) else str(p) for p in parts)
 
 
 # --- reading a fine solution ---------------------------------------------------------
@@ -357,7 +401,7 @@ def convergence(
     for n in counts:
         entries = {}
         todo = []
-        for label in ("construction", "seeds"):
+        for label in FIG19_LABELS:
             k = key("fig19", s, 0.0, n, label, reference_n, seed, iterations)
             if k in cache:
                 entries[label] = cache[k]
@@ -405,7 +449,8 @@ def conditioning(
 
     The matched profile is formed from the gap for the seeds and, at δ = 0,
     from the stored radii for the seeds without the gap and for E2.3, so each
-    set of weights is measured against the geometry it sees.
+    set of weights is measured against the geometry it sees. ``seeds15`` is
+    the seeds without the flux seeds (§3.11), the ablation.
     """
     domain = ring_domain(s, delta, constant=True)
     material = domain.material
@@ -424,14 +469,19 @@ def conditioning(
     t0 = time.perf_counter()
     for idx in rows:
         xy = nodes.xy[idx]
-        sb = seed_basis(xy, material, tangential=True)
+        with refused(nodes.n, material):
+            sb = seed_basis(xy, material, tangential=True, flux=True)
+            sb15 = seed_basis(xy, material, tangential=True, flux=False)
         add("seeds", _residual(weights_of(sb), u[idx]))
         raw, scaled = block_condition(sb.block)
         add("block-raw", raw)
         add("block-scaled", scaled)
         add("system", float(np.linalg.cond(saddle_system(sb))))
+        add("seeds15", _residual(weights_of(sb15), u[idx]))
+        add("block15-raw", block_condition(sb15.block)[0])
+        add("system15", float(np.linalg.cond(saddle_system(sb15))))
         if delta == 0.0:
-            plain = seed_basis(xy, stored, tangential=True)
+            plain = seed_basis(xy, stored, tangential=True, flux=True)
             add("stored", _residual(weights_of(plain), u_stored[idx]))
             add("e23", _residual(stencil_weights(xy, stored, 4), u_stored[idx]))
             st = interface_stencil(xy, stored, 4)
@@ -451,7 +501,7 @@ def conditioning(
     }
     for name, values in out.items():
         v = np.array(values)
-        if name in ("seeds", "stored", "e23"):
+        if name in ("seeds", "seeds15", "stored", "e23"):
             row[f"{name}-worst"], row[f"{name}-median"] = v.max(), float(np.median(v))
         else:
             row[f"{name}-mean"], row[f"{name}-max"] = v.mean(), v.max()
@@ -533,7 +583,7 @@ def smooth_ring(
         row: dict = {"s": s, "delta": delta, "n": n}
         todo = [
             lab
-            for lab in LABELS
+            for lab in probe_labels(delta)
             if key("probe", s, delta, n, lab, seed, iterations) not in cache
         ]
         if todo:
@@ -555,7 +605,7 @@ def smooth_ring(
                     **info,
                 }
             save_cache(outputs, cache)
-        for label in LABELS:
+        for label in probe_labels(delta):
             row[f"probe-{label}"] = cache[
                 key("probe", s, delta, n, label, seed, iterations)
             ]
@@ -619,21 +669,25 @@ def print_convergence(results: dict[float, list[dict]]) -> None:
     for s, rows in results.items():
         print(
             f"\ns = {tag(s)}\n     n       h |    E2.3 full  order     far |"
-            "   seeds full  order     far | seeds/E2.3 | far share  rows   ms/row"
+            "   seeds full  order     far | seeds/E2.3 | seeds (15)  order  /E2.3"
+            " | far share  rows   ms/row"
         )
         for i, r in enumerate(rows):
-            c, d = r["construction"], r["seeds"]
+            c, d, f = r["construction"], r["seeds"], r["seeds15"]
             rc = _rate(rows[i - 1]["construction"], c, "full") if i else float("nan")
             rs = _rate(rows[i - 1]["seeds"], d, "full") if i else float("nan")
+            rf = _rate(rows[i - 1]["seeds15"], f, "full") if i else float("nan")
             print(
                 f"{int(c['n']):6d}  {c['h']:.4f} |  {c['full']:10.3e}  {_order(rc)}"
                 f"  {c['far']:.2e} |  {d['full']:10.3e}  {_order(rs)}  {d['far']:.2e} |"
-                f"   {d['full'] / c['full']:7.2f}  |    {d['far-share']:.2f}"
+                f"   {d['full'] / c['full']:7.2f}  |  {f['full']:9.3e}  {_order(rf)}"
+                f"  {f['full'] / c['full']:5.2f} |    {d['far-share']:.2f}"
                 f"  {int(d['rows']):5d}  {1e3 * d['seconds'] / max(d['rows'], 1):6.1f}"
             )
-        c = [r["construction"] for r in rows]
-        d = [r["seeds"] for r in rows]
-        fits = f"E2.3 {_fit(c, 'full'):.2f}, seeds {_fit(d, 'full'):.2f}"
+        fits = ", ".join(
+            f"{NAMES[lab]} {_fit([r[lab] for r in rows], 'full'):.2f}"
+            for lab in FIG19_LABELS
+        )
         print(f"fit over the counts: {fits}")
     first = next(iter(results))
     print(
@@ -655,15 +709,16 @@ def print_conditioning(rows: list[dict]) -> None:
     print(
         f"\nFig. 20's twin at {int(r0['n'])} nodes, the ring at its constant part: the"
         " worst and median relative residual of the weights on the matched radial"
-        " profile over the seeded rows (seeds with the gap; at δ = 0 also without it,"
-        " the stored radii, and E2.3); mean and largest 2-norm condition numbers of"
-        " the seed block raw and column-scaled, of the seed system, and of E2.3's"
-        " polynomial block and system"
+        " profile over the seeded rows (the seeds with the gap; without the flux"
+        " seeds, (15); at δ = 0 also on the stored radii and E2.3); mean 2-norm"
+        " condition numbers of the seed block raw and column-scaled and of the seed"
+        " system (with the 15 seeds' beside them), and of E2.3's polynomial block"
+        " and system"
     )
     print(
-        "     s        δ  rows |   seeds worst   median |  stored worst   median |"
-        "    E2.3 worst   median | block raw  scaled   system |  E2.3 P   system"
-        " | ms/row"
+        "     s        δ  rows |   seeds worst   median |    (15) worst |"
+        "  stored worst   median |    E2.3 worst   median |"
+        " block raw  scaled   system |  (15) raw  system |  E2.3 P   system | ms/row"
     )
     for r in rows:
         stored = (
@@ -683,9 +738,11 @@ def print_conditioning(rows: list[dict]) -> None:
         )
         print(
             f"  {tag(r['s']):>4s}  {r['delta']:7g}  {int(r['rows']):4d} |"
-            f"  {r['seeds-worst']:12.2e} {r['seeds-median']:8.1e} |{stored} |{e23} |"
+            f"  {r['seeds-worst']:12.2e} {r['seeds-median']:8.1e} |"
+            f"  {r['seeds15-worst']:12.2e} |{stored} |{e23} |"
             f"  {r['block-raw-mean']:7.1e} {r['block-scaled-mean']:7.1e}"
-            f"  {r['system-mean']:7.1e} |{blocks} |"
+            f"  {r['system-mean']:7.1e} |  {r['block15-raw-mean']:7.1e}"
+            f"  {r['system15-mean']:7.1e} |{blocks} |"
             f"  {1e3 * r['seconds'] / max(r['rows'], 1):5.1f}"
         )
 
@@ -719,35 +776,39 @@ def print_smooth(results: dict[tuple[float, float], list[dict]]) -> None:
     )
     for (s, delta), rows in results.items():
         print(f"\ns = {tag(s)}, δ = {delta:g}")
+        labels = probe_labels(delta)
         head = "     n       h  rows |" + "".join(
-            f"  {NAMES[lab]:>9s}  order" for lab in LABELS
+            f"  {NAMES[lab]:>10s}  order" for lab in labels
         )
         print("probe: " + head)
         for i, r in enumerate(rows):
             cells = []
-            for lab in LABELS:
+            for lab in labels:
                 e = r[f"probe-{lab}"]
                 rate = (
                     _rate(rows[i - 1][f"probe-{lab}"], e, "seeded")
                     if i
                     else float("nan")
                 )
-                cells.append(f"  {e['seeded']:9.2e}  {_order(rate)}")
+                cells.append(f"  {e['seeded']:10.2e}  {_order(rate)}")
             e = r["probe-seeds"]
             print(
                 f"       {int(e['n']):6d}  {e['h']:.4f} {int(e['seeded-rows']):5d} |"
                 + "".join(cells)
             )
-        entries = {lab: [r[f"probe-{lab}"] for r in rows] for lab in LABELS}
+        entries = {lab: [r[f"probe-{lab}"] for r in rows] for lab in labels}
         print(
             "       fit: "
             + ", ".join(
-                f"{NAMES[lab]} {_fit(entries[lab], 'seeded'):.2f}" for lab in LABELS
+                f"{NAMES[lab]} {_fit(entries[lab], 'seeded'):.2f}" for lab in labels
             )
         )
         if "error-seeds" not in rows[0]:
             continue
-        print("error: " + head.replace(" rows", "  far"))
+        head = "     n       h   far |" + "".join(
+            f"  {NAMES[lab]:>10s}  order" for lab in LABELS
+        )
+        print("error: " + head)
         for i, r in enumerate(rows):
             cells = []
             for lab in LABELS:
@@ -755,7 +816,7 @@ def print_smooth(results: dict[tuple[float, float], list[dict]]) -> None:
                 rate = (
                     _rate(rows[i - 1][f"error-{lab}"], e, "far") if i else float("nan")
                 )
-                cells.append(f"  {e['far']:9.2e}  {_order(rate)}")
+                cells.append(f"  {e['far']:10.2e}  {_order(rate)}")
             e = r["error-seeds"]
             print(
                 f"       {int(e['n']):6d}  {e['h']:.4f}  {e['far-share']:.2f} |"
@@ -804,12 +865,20 @@ def figure_convergence(results: dict[float, list[dict]]):
             markersize=6,
             label=power(s),
         )
+        ax.loglog(
+            n,
+            [r["seeds15"]["full"] for r in rows],
+            ":",
+            color=colours[s],
+            linewidth=0.8,
+        )
     first = results[next(iter(results))]
     n = np.array([r["seeds"]["n"] for r in first], dtype=float)
     e0 = first[0]["seeds"]["full"]
     ax.loglog(n, e0 * (n / n[0]) ** -2.0, "k:", linewidth=0.7, label="4th order")
     ax.plot([], [], "k-", label="seeds (tangential, warped)")
     ax.plot([], [], "k--", markerfacecolor="none", label="E2.3 (E2.9's curved line)")
+    ax.plot([], [], "k:", linewidth=0.8, label="seeds without the flux seeds (15)")
     ax.set_xlabel("number of nodes N")
     ax.set_ylabel("RMS error in u against the reference at the same s")
     ax.set_title("eq. 40 at δ = 0 with seeds (EABE Fig. 19 twin)")
@@ -966,7 +1035,8 @@ def main(argv: Sequence[str] | None = None) -> dict:
     parser.add_argument("--data-dir", type=Path, default=None)
     args = parser.parse_args(argv)
     fine_s = args.smooth_s if args.fine_s is None else args.fine_s
-    if any(n < MIN_COUNT for n in args.counts + args.probe_counts):
+    single = [n for n in (args.conditioning_n, args.spectrum_n) if n]
+    if any(n < MIN_COUNT for n in args.counts + args.probe_counts + single):
         parser.error(f"counts must be {MIN_COUNT} nodes or more (FOOT_CURVATURE)")
     if args.counts and args.reference_n <= max(args.counts):
         parser.error("the reference must have more nodes than every count")

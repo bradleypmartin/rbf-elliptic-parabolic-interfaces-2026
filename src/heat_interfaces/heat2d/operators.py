@@ -318,6 +318,7 @@ def seed_operator(
     rtol: float = SEED_RTOL,
     atol: float = SEED_ATOL,
     tangential: bool = False,
+    flux: bool | None = None,
 ) -> sp.csr_array:
     """The seed operator (E4.5, §3.4): direct rows, seed rows where an edge is seen.
 
@@ -332,7 +333,8 @@ def seed_operator(
     rounding (H2), so the operator is ``interface_aware_operator``'s.
     ``tangential=True`` marches §3.10's coupled chain in the foot curve's
     coordinates instead (E4.11, #81), the seeds of a curved or tangentially
-    varying edge.
+    varying edge; ``flux`` adds the degree-5 flux seeds (``seeds.flux_exponents``,
+    E4.8), by default on a band with a ``gap``.
     """
     op = direct_operator(nodes, material, stencils, shape)
     if not hasattr(material, "region_index"):
@@ -352,6 +354,7 @@ def seed_operator(
                 rtol,
                 atol,
                 tangential,
+                flux,
             )
             op[row, :] = 0.0
             op[row, idx] = w

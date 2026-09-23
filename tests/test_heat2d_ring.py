@@ -105,6 +105,8 @@ def test_main_runs_the_four_parts_and_reuses_its_cache(tmp_path, capsys):
         ["--counts", "--conditioning-s", "3"],
         ["--counts", "--deltas", "0"],
         ["--counts", "--probe-counts", "2500", "--fine-n", "2500"],
+        ["--counts", "--conditioning-n", "900"],
+        ["--counts", "--spectrum-n", "900"],
     ],
 )
 def test_main_refuses_what_it_cannot_run(tmp_path, argv):
