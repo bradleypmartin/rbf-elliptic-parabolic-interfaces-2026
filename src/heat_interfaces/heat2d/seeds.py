@@ -58,7 +58,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import cache
-from math import atan2, copysign, exp, factorial, inf, pi
+from math import acos, atan2, copysign, exp, factorial, inf, pi
 
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -507,39 +507,72 @@ def foot_coordinates(
     return replace(coords, metric=metric), xi, (d - d_e) / scale
 
 
+FAR_POINTS = 17
+"""Chebyshev points per sample line for the other curve's distance (§3.10).
+
+Along a straight sample line the signed distance to a smooth curve is analytic
+out to the curve's focal set, at least ``1/κ_max − 0.2 ≈ 1`` from case 2's
+lines, against a march of at most ``2.2 h_s ≤ 0.2``: 17 points put the
+interpolant at rounding, where a float Newton per sample and per rate call
+cost half a smooth row (65 ms at δ = 0.01 on 2500 nodes, 2026-09-22)."""
+
+
 def _other_edge(
     medium: SmoothBand, coords: FootCoordinates, eta: np.ndarray
-) -> float | None:
-    """``±inf`` if the other curve's edge is saturated on every sample, else ``None``.
+) -> float | Callable[[float], np.ndarray]:
+    """The other curve's signed distance at the samples, as the series need it.
 
-    The samples on the march's lines lie within ``reach`` of the anchor (the
-    largest distance to the lines' ends; each line is straight in η), and a
-    signed distance moves by at most the distance moved, so beyond
-    ``TANH_REACH δ + reach`` the other edge's blend is its piece to ``e^{−40}``
-    times the contrast at every sample (§3.10).
+    ``±inf`` if its edge is saturated on every sample: the samples on the
+    march's lines lie within ``reach`` of the anchor (the largest distance to
+    the lines' ends; each line is straight in η), and a signed distance moves
+    by at most the distance moved, so beyond ``TANH_REACH δ + reach`` the other
+    edge's blend is its piece to ``e^{−40}`` times the contrast at every
+    sample. Otherwise ``η ↦`` the distance at the 11 samples, interpolated on
+    ``FAR_POINTS`` Chebyshev points of each line over the march's range (§3.10).
     """
     other = medium.interfaces[1 - coords.interface]
     ax, ay = coords.points(0.0)
     ax, ay = float(ax[SAMPLE_HALF]), float(ay[SAMPLE_HALF])
+    lo, hi = min(0.0, float(eta.min())), max(0.0, float(eta.max()))
     reach = 0.0
-    for t in (min(0.0, float(eta.min())), max(0.0, float(eta.max()))):
+    for t in (lo, hi):
         px, py = coords.points(t)
         reach = max(reach, float(np.hypot(periodic_dx(px - ax), py - ay).max()))
     d0 = other.signed_distance_at(ax, ay)
     if abs(d0) - reach >= TANH_REACH * medium.delta:
         return copysign(inf, d0)
-    return None
+    theta = np.pi * (np.arange(FAR_POINTS) + 0.5) / FAR_POINTS
+    t = 0.5 * (lo + hi) + 0.5 * (hi - lo) * np.cos(theta)
+    d = coords.d_e + coords.scale * t
+    x = coords.px[None, :] + d[:, None] * coords.nx[None, :]
+    y = coords.py[None, :] + d[:, None] * coords.ny[None, :]
+    samples = other.signed_distance(x.ravel(), y.ravel()).reshape(x.shape)
+    k = np.arange(FAR_POINTS)
+    series = (2.0 / FAR_POINTS) * np.cos(np.outer(k, theta)) @ samples
+    series[0] *= 0.5
+    transposed = np.ascontiguousarray(series.T)
+
+    def far(eta: float) -> np.ndarray:
+        # T_k(t) = cos(k arccos t) in one call: NumPy's ``chebval`` loops over
+        # the degrees, a quarter of a smooth row's rate evaluation.
+        t = min(1.0, max(-1.0, (2.0 * eta - lo - hi) / (hi - lo)))
+        return transposed @ np.cos(k * acos(t))
+
+    return far
 
 
 def _alpha_series(
-    coords: FootCoordinates, piece: Piece2D | SmoothBand, saturated: float | None
+    coords: FootCoordinates,
+    piece: Piece2D | SmoothBand,
+    far: float | Callable[[float], np.ndarray] | None,
 ) -> Callable[[float], np.ndarray]:
     """``η ↦`` alpha's series in ξ on the coordinate line ``η`` (§3.10).
 
     A constant piece is its own series. The smooth band's foot edge is a
-    function of ``d`` alone, exact; its other edge is the saturated value
-    ``saturated`` when ``_other_edge`` found one, and a float foot-point
-    Newton per sample otherwise. With the other edge saturated the blend is
+    function of ``d`` alone, exact; its other edge is ``far``, from
+    ``_other_edge``: a saturated value, or the distance at the samples
+    interpolated along each line (``None`` at δ = 0, where the pieces are
+    sampled directly). With the other edge saturated the blend is
     linear in the two pieces with one weight per line, so their series are
     blended instead of their samples (``_blend``'s steps, to rounding), which
     is most of what a smooth row costs. Any other piece is sampled as it
@@ -552,8 +585,8 @@ def _alpha_series(
         return lambda eta: constant
     if isinstance(piece, SmoothBand):
         j = coords.interface
-        other = piece.interfaces[1 - j]
-        if saturated is not None:
+        if not callable(far):
+            saturated = float(far)
             inside = _alpha_series(coords, piece.inside, None)
             outside = _alpha_series(coords, piece.outside, None)
 
@@ -568,18 +601,9 @@ def _alpha_series(
 
         def blended(eta: float) -> np.ndarray:
             x, y = coords.points(eta)
-            d = coords.d_e + coords.scale * eta
-            if saturated is None:
-                far = np.array(
-                    [
-                        other.signed_distance_at(float(u), float(v))
-                        for u, v in zip(x, y, strict=True)
-                    ]
-                )
-            else:
-                far = saturated
+            d, distance = coords.d_e + coords.scale * eta, far(eta)
             return coords.series(
-                piece.alpha_given(x, y, (d, far) if j == 0 else (far, d))
+                piece.alpha_given(x, y, (d, distance) if j == 0 else (distance, d))
             )
 
         return blended
@@ -630,10 +654,10 @@ def tangential_profiles(
     if eta.ndim != 1:
         raise ValueError("eta must be a 1-D array of points on the line")
     ch = coupled_chain(degree)
-    saturated = _other_edge(medium, coords, eta) if medium.delta > 0.0 else None
+    far = _other_edge(medium, coords, eta) if medium.delta > 0.0 else None
 
     def rate_of(segment: int) -> Callable[[float, np.ndarray], np.ndarray]:
-        alpha = _alpha_series(coords, profile.pieces[segment], saturated)
+        alpha = _alpha_series(coords, profile.pieces[segment], far)
         return ch.rate(alpha_e, _coefficients(coords, alpha))
 
     out = _march(ch.initial(alpha_e), eta, profile, rate_of, rtol, atol)
@@ -837,9 +861,9 @@ def _tangential_basis(
     # medium's gradient and the metric (m̂ = G − d K is 1 there).
     ch = profiles.chain
     segment = int(profile.segment(np.zeros(1))[0])
-    saturated = _other_edge(medium, coords, eta) if medium.delta > 0.0 else None
+    far = _other_edge(medium, coords, eta) if medium.delta > 0.0 else None
     coefficients = _coefficients(
-        coords, _alpha_series(coords, profile.pieces[segment], saturated)
+        coords, _alpha_series(coords, profile.pieces[segment], far)
     )
     _, a, _ = coefficients(0.0)
     gx, gy = (float(g[0]) for g in medium.gradient(x[:1], y[:1]))

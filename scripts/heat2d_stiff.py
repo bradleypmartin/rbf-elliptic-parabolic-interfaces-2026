@@ -114,8 +114,9 @@ are the same rows on flat lines), and the figure is
 ``heat2d_stiff_tangential_<tag>.png``, route (a)'s left as it was.
 ``--mode tangential`` prints the chain's own tables: H14, the crossing rows'
 truncation on ``RingMode`` through two concentric circles (E2.3, route (a),
-tangential, from 2500 nodes), and H15's distance between the tangential span
-and E2.3's translated basis on case 2 at δ = 0.
+tangential, from 2500 nodes), H15's distance between the tangential span and
+E2.3's translated basis on case 2 at δ = 0, and H6's twin on case 2, the seed
+operators' interior spectra at 1600 nodes per δ.
 
     uv run python scripts/heat2d_stiff.py              # 2.5 min cold, 21 s cached
     uv run python scripts/heat2d_stiff.py --mode naive \
@@ -143,7 +144,7 @@ and E2.3's translated basis on case 2 at δ = 0.
         tangential tangential-plain \
         --counts 1250 2500 5000 10000 20000 40000               # E4.11 on case 2
     uv run python scripts/heat2d_stiff.py --mode tangential \
-        --counts 1250 2500 5000 10000 20000 40000               # H14, H15's span
+        --counts 1250 2500 5000 10000 20000 40000               # H14, H15, spectra
 """
 
 from __future__ import annotations
@@ -2487,6 +2488,57 @@ def span_rows(counts: Sequence[int], seed: int, iterations: int) -> list[dict]:
     return rows
 
 
+TANGENTIAL_SPECTRUM_N = 1600
+"""The node set of the tangential spectra (H6's twin on case 2): dense eigenvalues
+of the interior operator in about a second each."""
+
+
+def spectrum_rows(seed: int, iterations: int) -> list[dict]:
+    """The interior spectra of the seed operators on case 2, per δ (H6's twin).
+
+    Route (a) and the tangential chain, warped and plain (one march per row for
+    both warps, ``seed_operators``), and E2.3's curved rows at δ = 0: the
+    rightmost eigenvalue, the leftmost and the largest imaginary part in units of
+    ``h⁻²``, and how many sit right of the axis. The parabolic sweep marches BD4
+    on these operators; a positive eigenvalue would be its growing mode.
+    """
+    domain = case2()
+    nodes = build_node_set(
+        domain, TANGENTIAL_SPECTRUM_N, seed=seed, iterations=iterations
+    )
+    h2 = nodes.h**2
+    rows = []
+    for delta in CURVED_DELTAS:
+        medium = SmoothBand(domain.material, delta)
+        stencils = build_stencils(
+            nodes,
+            replace(domain, material=medium),
+            interface=BOUNDARY,
+            reach=TANH_REACH,
+        )
+        ops = {"seeds": seed_operators(nodes, medium, stencils, (True,))[0][True]}
+        both, _ = seed_operators(
+            nodes, medium, stencils, (True, False), tangential=True
+        )
+        ops["tangential"], ops["tangential-plain"] = both[True], both[False]
+        if delta == 0.0:
+            crossing = build_stencils(nodes, domain, interface=BOUNDARY)
+            ops["construction"] = interface_aware_operator(nodes, medium, crossing)
+        for label, op in ops.items():
+            lam = interior_eigenvalues(op, nodes)
+            rows.append(
+                {
+                    "delta": delta,
+                    "operator": label,
+                    "max_re": float(lam.real.max()),
+                    "min_re_h2": float(h2 * lam.real.min()),
+                    "max_im_h2": float(h2 * np.abs(lam.imag).max()),
+                    "positive": int((lam.real > 0.0).sum()),
+                }
+            )
+    return rows
+
+
 def print_tangential(tables: dict) -> None:
     rows = tables["circles"]
     print(
@@ -2519,6 +2571,16 @@ def print_tangential(tables: dict) -> None:
     median = _with_rates(rows, "median")
     for i, r in enumerate(rows):
         print(f"  {r['n']:6d} {r['stencils']:9d} |  {median[i]:<20} {r['max']:.2e}")
+    print(
+        f"\nH6 on case 2, {TANGENTIAL_SPECTRUM_N} nodes: the interior spectrum of each"
+        " seed operator per δ (h² scales the extremes)"
+    )
+    print("       δ  operator          |   max Re   h² min Re   h² max |Im|   Re > 0")
+    for r in tables["spectra"]:
+        print(
+            f"  {r['delta']:6.4f}  {r['operator']:<17} | {r['max_re']:8.3f}"
+            f" {r['min_re_h2']:11.2f} {r['max_im_h2']:13.3f} {r['positive']:8d}"
+        )
 
 
 def run_tangential(args) -> dict:
@@ -2527,6 +2589,7 @@ def run_tangential(args) -> dict:
     tables = {
         "circles": circle_probe_rows(args.counts, args.seed, args.iterations),
         "span": span_rows(args.counts, args.seed, args.iterations),
+        "spectra": spectrum_rows(args.seed, args.iterations),
     }
     print_tangential(tables)
     print(f"\ntangential tables {time.perf_counter() - t0:.1f} s")

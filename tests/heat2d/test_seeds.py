@@ -735,6 +735,23 @@ def test_on_concentric_circles_the_coupling_vanishes():
     np.testing.assert_allclose((g[0], k[0]), (0.35, -1.0) / (0.35 + d_e), rtol=1e-13)
 
 
+def newton_far_edge(medium, coords):
+    """The other curve's distance at the samples by a float Newton each: the
+    reference the saturated shortcut and the interpolant are held to."""
+    other = medium.interfaces[1 - coords.interface]
+
+    def far(eta):
+        x, y = coords.points(eta)
+        return np.array(
+            [
+                other.signed_distance_at(float(u), float(v))
+                for u, v in zip(x, y, strict=True)
+            ]
+        )
+
+    return far
+
+
 def test_the_saturated_far_edge_is_the_full_blend(curved_nodes, monkeypatch):
     # §3.10's shortcut: where the other curve is beyond 20 δ of every sample
     # the blend is linear in the two pieces and their series are blended; it
@@ -744,16 +761,37 @@ def test_the_saturated_far_edge_is_the_full_blend(curved_nodes, monkeypatch):
     medium = SmoothBand(case2().material, 0.0025)
     xy = stencil(curved_nodes, 0.6 + 0.02 * np.sin(2 * np.pi * 0.4) + 0.012, x=0.4)
     fast = seed_basis(xy, medium, tangential=True)
-    assert (
-        seeds._other_edge(medium, fast.coordinates, fast.eta) == -np.inf
-    )  # below the upper curve
-    monkeypatch.setattr(seeds, "_other_edge", lambda *args: None)
+    assert seeds._other_edge(medium, fast.coordinates, fast.eta) == -np.inf
+    monkeypatch.setattr(
+        seeds, "_other_edge", lambda m, coords, eta: newton_far_edge(m, coords)
+    )
     full = seed_basis(xy, medium, tangential=True)
     scale = np.abs(full.block).max()
     assert np.abs(fast.block - full.block).max() < 1e-12 * scale
-    near = SmoothBand(case2().material, 0.04)
-    monkeypatch.undo()
-    assert seeds._other_edge(near, fast.coordinates, fast.eta) is None
+
+
+def test_the_far_edge_within_reach_is_interpolated_to_rounding(
+    curved_nodes, monkeypatch
+):
+    # Where the other curve's edge reaches the samples (a band row at δ = 0.01)
+    # its distance is a Chebyshev interpolant along each line (FAR_POINTS),
+    # the float Newton's to rounding, and so are the seeds built on it.
+    from heat_interfaces.heat2d import seeds
+
+    medium = SmoothBand(case2().material, 0.01)
+    xy = stencil(curved_nodes, 0.7, x=0.3)
+    fast = seed_basis(xy, medium, tangential=True)
+    far = seeds._other_edge(medium, fast.coordinates, fast.eta)
+    assert callable(far)
+    newton = newton_far_edge(medium, fast.coordinates)
+    for t in np.linspace(fast.eta.min(), fast.eta.max(), 37):
+        assert np.abs(far(t) - newton(t)).max() < 1e-15
+    monkeypatch.setattr(
+        seeds, "_other_edge", lambda m, coords, eta: newton_far_edge(m, coords)
+    )
+    full = seed_basis(xy, medium, tangential=True)
+    scale = np.abs(full.block).max()
+    assert np.abs(fast.block - full.block).max() < 1e-12 * scale
 
 
 def test_a_tangential_row_is_consistent_where_route_a_is_not(curved_nodes):

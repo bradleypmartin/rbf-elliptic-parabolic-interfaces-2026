@@ -500,9 +500,15 @@ def test_the_tangential_line_on_the_curved_sweep(tmp_path, capsys):
     assert again["sweep"] == tables["sweep"]
 
 
-def test_the_tangential_tables(capsys):
+def test_the_tangential_tables(capsys, monkeypatch):
     # E4.11's own tables: H14 on the concentric circles (from 2500 nodes, the
-    # focal-distance guard) and H15's span distance on case 2.
+    # focal-distance guard), H15's span distance on case 2, and H6's twin on
+    # case 2 (here on 900 nodes at two widths; the documented run is 1600 at
+    # the four).
+    import heat2d_stiff
+
+    monkeypatch.setattr(heat2d_stiff, "TANGENTIAL_SPECTRUM_N", 900)
+    monkeypatch.setattr(heat2d_stiff, "CURVED_DELTAS", (0.0, 0.0025))
     tables = main(["--mode", "tangential", "--counts", "1250", "2500"])["tangential"]
     out = capsys.readouterr().out
     assert "H14, the concentric circles" in out and "H15, case 2" in out
@@ -512,6 +518,15 @@ def test_the_tangential_tables(capsys):
     assert circle["tangential"] < 0.3 * circle["construction"] < circle["seeds"]
     assert [r["n"] for r in tables["span"]] == [1250, 2500]
     assert tables["span"][1]["median"] < 0.8 * tables["span"][0]["median"]
+    # H6's twin: no seed operator on case 2 has an eigenvalue right of the axis,
+    # and the warped rows' spectrum is E2.3's at δ = 0 (max Re −7.18, 2026-09-22).
+    spectra = tables["spectra"]
+    assert all(r["positive"] == 0 for r in spectra)
+    at_zero = {r["operator"]: r for r in spectra if r["delta"] == 0.0}
+    for label in ("seeds", "tangential"):
+        assert at_zero[label]["max_re"] == pytest.approx(
+            at_zero["construction"]["max_re"], abs=0.01
+        )
 
 
 def test_the_curved_reference_table(tmp_path, capsys):
