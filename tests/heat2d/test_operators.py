@@ -604,6 +604,21 @@ def test_seed_operator_replaces_exactly_the_rows_that_see_the_edge():
     assert np.all(np.diff(op.indptr)[group.rows] == BOUNDARY.size)
 
 
+def test_the_tangential_seed_operator_is_the_seed_operator_on_flat_lines():
+    # §3.10's flat limit at the operator level (E4.11): on case 1 nothing
+    # varies along the lines, so the tangential rows are the flat seed rows to
+    # the march tolerance, on the same rows, at a jump and through an edge.
+    nodes, _ = node_set(1250)
+    for delta in (0.0, nodes.h / 8):
+        medium = SmoothBand(DOMAIN.material, delta)
+        domain = replace(DOMAIN, material=medium)
+        st = build_stencils(nodes, domain, interface=BOUNDARY, reach=TANH_REACH)
+        flat = seed_operator(nodes, medium, st)
+        tangential = seed_operator(nodes, medium, st, tangential=True)
+        assert tangential.nnz == flat.nnz
+        assert abs(tangential - flat).max() < 1e-10 * abs(flat).max()
+
+
 def test_build_operator_dispatches_by_name():
     nodes, st = aware_set(1250)
     band = DOMAIN.material

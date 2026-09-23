@@ -317,6 +317,7 @@ def seed_operator(
     shape: float = GA_SHAPE,
     rtol: float = SEED_RTOL,
     atol: float = SEED_ATOL,
+    tangential: bool = False,
 ) -> sp.csr_array:
     """The seed operator (E4.5, §3.4): direct rows, seed rows where an edge is seen.
 
@@ -329,6 +330,9 @@ def seed_operator(
     every row the rule will seed. ``warp=False`` is the plain-Gaussian
     ablation (H7). At δ = 0 on a jump ``Band`` the rows are E2.3's to
     rounding (H2), so the operator is ``interface_aware_operator``'s.
+    ``tangential=True`` marches §3.10's coupled chain in the foot curve's
+    coordinates instead (E4.11, #81), the seeds of a curved or tangentially
+    varying edge.
     """
     op = direct_operator(nodes, material, stencils, shape)
     if not hasattr(material, "region_index"):
@@ -340,7 +344,14 @@ def seed_operator(
         seen = seeded_rows(nodes, material, g.index, reach)
         for row, idx in zip(g.rows[seen], g.index[seen], strict=True):
             w = seed_weights(
-                nodes.xy[idx], material, g.spec.degree, shape, warp, rtol, atol
+                nodes.xy[idx],
+                material,
+                g.spec.degree,
+                shape,
+                warp,
+                rtol,
+                atol,
+                tangential,
             )
             op[row, :] = 0.0
             op[row, idx] = w

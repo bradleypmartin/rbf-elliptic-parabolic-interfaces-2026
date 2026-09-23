@@ -12,7 +12,8 @@ flat band and its references (E4.2, #33, §4.1), the naive baseline
 through it (E4.3, #34, §4.2), the scalar seeds on one stencil (E4.4,
 #35, §4.3) and in the matrix (E4.5, #36, §4.4), the flat δ sweep
 (E4.6, #37, §4.5) and the curved feature (E4.7, #38, §4.6), on to E4.10
-(#41). The port
+(#41); §3.10 designs the tangential chain that E4.7 asked for (E4.11,
+#81), and §4.7 holds its results. The port
 of the 2016 methods this builds on is in
 `docs/port-notes.md`.
 
@@ -1976,7 +1977,8 @@ perturbation of the space, not this one: a tangential variation of α
 across an unresolved edge changes the flux ratio the seeds impose from
 node to node, a kinked correction outside the seed span, so it too is an
 `O(1)` truncation error. §4.6 splits and measures the two; E4.11 (plan
-R7) builds the tangential chain the last paragraph below names.
+R7) builds the tangential chain the last paragraph below names (§3.10;
+§4.7: fourth order again).
 
 **If route (a) is not enough.** The first step is not route (b) but the
 companion's route (a′): keep the marches, evaluate each seed at the
@@ -2083,7 +2085,7 @@ radial quadratic on the ring.
 | H6 | **Spectra** (P9's twin): the seed operator's eigenvalues at 4900 nodes on case 1 sit where the warped aware operator's do (max Re −7.27, `h² min Re` −13.2, `h² max |Im|` ≤ 0.4, every eigenvalue within ±700 of the origin real), at every δ; the slowest mode is the physical −7.27 and BD4's largest root modulus 0.897 at `dt = h`; no positive eigenvalue with the warp on. With plain Gaussians the crossing rows' complex loop of port notes §2.5 (`h² max |Im|` 1.49) returns and on the ring positive eigenvalues may (E2.9: 50–87 at s = 10¹¹ on 1250–4000 nodes). | `interior_eigenvalues` per operator and δ, the Fig. 5-6 twin with a seeds panel | E4.5 |
 | H7 | **The warp is worth on seeds what it is worth on polynomials** (the E2.4 breadcrumb): seeds with the `φ₀₁`-warp against seeds with plain Gaussians on case 1, 2.3–6.9× at 1250–20,000 nodes at δ = 0 (E2.4's numbers, since H2 makes the two operators equal there) and a comparable factor at δ > 0; the chain-rule right-hand side equals `α_e Δ_{ξη̃} G + α_ξ G_ξ` at the anchor to rounding; at δ = 0 the warp coordinate equals `Warp.apply` bit for bit. | the Fig. 11 twin with two seed lines; a unit test on the cancellation | E4.5, E4.6 |
 | H8 | **The rule needs no δ**: seeded rows are those that see the edge (reach 20δ), the seed operator needs no threshold to be switched off, and the resolved-edge penalty at δ = 0.04 (every row seeded) is ≤ 1.2× the direct operator's error (P4: the seed weights tend to the standard ones as δ/h grows; §1.4's different-space remark bounds the rest). | the δ = 0.04 column of the flat sweep, seeded vs direct | E4.6 |
-| H9 | **Route (a) reproduces the flat numbers** at δ ≥ 0.005 for n ≥ 5000 and shows its geometric floor `κ r²/2` (§3.5's table) at δ = 0.0025 on the coarse sets as a factor ≤ 1.5 above the flat line; the seed rows' residual on the true curved solution (E4.7's probe) converges at the bulk rows' rate; the tangential-α term of case 2's inside piece changes the constant, not the order. Route (a′) is built only if the probe's residual stalls. *Fails (§4.6): the probe stalls on both terms; E4.11.* | the curved sweep against the flat one at equal δ; the residual probe | E4.7 |
+| H9 | **Route (a) reproduces the flat numbers** at δ ≥ 0.005 for n ≥ 5000 and shows its geometric floor `κ r²/2` (§3.5's table) at δ = 0.0025 on the coarse sets as a factor ≤ 1.5 above the flat line; the seed rows' residual on the true curved solution (E4.7's probe) converges at the bulk rows' rate; the tangential-α term of case 2's inside piece changes the constant, not the order. Route (a′) is built only if the probe's residual stalls. *Fails (§4.6): the probe stalls on both terms; E4.11. Answered by E4.11 (§3.10, §4.7): the tangential chain reproduces the flat numbers within 1.4–3.9× from 5000 nodes at every δ, and its probe converges at 2.7–3.6.* | the curved sweep against the flat one at equal δ; the residual probe | E4.7 |
 | H10 | **The 2-D knee** (P2's twin, measured first): naive `Dx A Dx + Dy A Dy` on scattered nodes is first order while `h ≳ δ` and fourth order once `h ≲ δ`, elliptic and parabolic; the δ = 0 construction sits on an O(δ) floor (the two references' difference, exact from the separable solves) for `h ≳ 2δ` and grows once the grid resolves the edge (§2.2); what separates resolved from unresolved most sharply is the flux jump across the edge read from the discrete solution. Watch the naive operator's coarse-set growing mode (+847 at 900 nodes, +17.7 at 1250) before quoting a parabolic naive number. | the naive and construction lines of the flat sweep | E4.3, E4.6 |
 | H11 | **The ring**: the seed march through both edges reproduces E2.9's s = 10³ line at δ = 0 (the Fig. 19 twin) and the matched radial residual stays at or below port notes §2.9's worst-stencil line at every s (the fit `1.5e-18 s`, not the single s = 10¹¹ point 1.4e-7), with no `O(s κ² scale)` term; the raw seed block conditions like `s w/h_s` (one column) and O(1) column-scaled; the march floor of §3.3 is the first limit to appear, at the largest s and smallest δ, and the stored width's 8e-8 the second. | `matched_residual` per (s, δ); Fig. 20's twin with a seeds line | E4.8 |
 | H12 | **The comparators** (P10's twin): the disc harmonic and arithmetic means and the widened edge cap the naive operator at second order once `h ≲ δ/4` and are first order while the edge is unresolved; T0 is the worst, sitting on the widened floor; there is no conservative scheme on scattered nodes, so T1-FV has no twin and the strongest low-order comparator is the two-cell disc harmonic mean; the seeds are 3–4 orders below every treatment at δ ≤ h/4 on the parabolic problem. The ranking is quoted in the RMS norm with the max norm beside it. | the comparator tables per δ, elliptic and parabolic | E4.9 |
@@ -2212,6 +2214,315 @@ for routes (b) and (c) of §3.5, the multiscale FEM of Hou & Wu and the
 harmonic coordinates of Owhadi & Zhang named in plan R1; those two
 enter `paper/references.bib` only through E5.2's verification, and
 nothing in §3 claims novelty over them.
+
+### 3.10 The tangential chain: seeds in the curve's own coordinates (E4.11, #81)
+
+Written after E4.7 found route (a) `O(1)`-inconsistent wherever α varies
+along an unresolved edge (§4.6, plan R7), and before any package code, as
+§3.1–3.8 were. The numbers below are a scratch prototype's (2026-09-22,
+about 300 lines, not committed), which marched the first level cutoff's 110
+states; E4.11's code reproduced them and §4.7 holds the results. *One
+decision here was revised by the implementation, the level cutoff: the
+first cutoff, `j ≤ 4 − b`, left a contrast-sized constant on the η-seeds,
+and every seed now keeps level 4 ("Why every seed keeps level 4" below).*
+
+**What §4.6 asks for.** Route (a)'s two failures are one failure. In the
+tangent frame at the foot point α is not a function of the normal
+coordinate alone, because the edge bends away from the tangent line or
+because the pieces change along it, and the frozen profile of §3.2 puts the
+foot point's kink and flux ratio at every ξ. The cure is a coordinate
+system in which the edge *is* a coordinate line, with a chain that carries
+α's variation along it.
+
+**The coordinates.** Write every point near the foot curve `γ(σ)` (its own
+parameter: x on a graph, the turn on a circle) as
+
+    x = γ(σ) + d n(σ),
+
+`n` the unit normal into `level > 0` and κ the signed curvature (`Curve`'s
+conventions: positive bends towards `+n`). These are the curve's normal
+coordinates, one-to-one inside the focal distance, which `FOOT_CURVATURE`
+already guarantees for route (a)'s line (§4.6). The metric is diagonal,
+`|∂x/∂σ| = m = |γ′| (1 − κ d)` and `|∂x/∂d| = 1`, so
+
+    L u = ∇·(α ∇u) = (1/m) [ ∂_σ ((α/m) ∂_σ u) + ∂_d (α m ∂_d u) ],
+
+the divergence form with no cross term. In stencil units about the anchor
+`(σ₀, d_e)`,
+
+    ξ = μ_e (σ − σ₀) / h_s,    η = (d − d_e) / h_s,    m̂ = m / μ_e,    μ_e = m(σ₀, d_e),
+
+`L` keeps its form with `m̂` for `m` and `h_s⁻²` outside, and `m̂ = 1` at the
+anchor, so ξ is the arclength of the anchor's parallel curve in stencil
+radii and `L ξ² = 2 α_e` there. The line `ξ = 0` is route (a)'s normal line
+with route (a)'s η: its `NormalProfile`, stops and pieces are unchanged.
+What is new is that the foot curve is `η = −d_e / h_s` *at every ξ*, so a
+jump condition holds on a coordinate line.
+
+**The ansatz, with the levels coupled.** Keep §3.2's seed of `ξᵃ ηᵇ` as a
+polynomial in ξ with profiles in η, now with every level,
+
+    φ_ab = Σ_{j=0}^{4} g_j(η) ξʲ,
+
+and expand the three coefficients along the coordinate lines:
+`α/m̂ = Σ_k A_k(η) ξᵏ`, `α m̂ = Σ_k B_k(η) ξᵏ` and `m̂ = Σ_k M_k(η) ξᵏ`, with
+`k ≤ 4`. The chain of §3.2 is kept verbatim,
+`L φ_ab = α_e [a (a − 1) φ_{a−2,b} + b (b − 1) φ_{a,b−2}]`, that is
+`m̂ L φ = m̂ α_e S φ`. Collecting `ξⁱ` with the level flux
+
+    ψ_i = Σ_k B_k g′_{i−k}    (the ξⁱ coefficient of the normal flux α m̂ ∂_η φ)
+
+gives each level as a first-order pair,
+
+    g′_i = [ψ_i − Σ_{k≥1} B_k g′_{i−k}] / B_0,
+    ψ′_i = α_e Σ_k M_k (S g)_{i−k} − Σ_k A_k (i + 2 − k)(i + 1) g_{i+2−k},
+
+a missing level being zero. The first line is triangular (multiplication by
+the series `1/B`), so the march never differentiates α. `g_i` and `ψ_i` are
+continuous through a jump on the coordinate line level by level, so §3.3's
+one-sided pieces carry over unchanged. On a flat line with α a function of
+η alone (`A_k = B_k = M_k = 0` for `k ≥ 1`, `m̂ ≡ 1`) the pair is §3.2's and
+the levels of the other parity stay zero: the chain is §3.2's, with 44 of
+its 150 states live. The anchor data are §3.2's: `g_a(0) = [b = 0]`,
+`ψ_a(0) = α_e [b = 1]` (`B_0 = α_e` at the anchor), and zero for every other
+level. Two things of §3.2 do not survive, the parity trim and the shift
+identity (ξ-translation is no longer a symmetry), so H1's shift test is
+replaced by H13's residual.
+
+**Why every seed keeps level 4, and the count.** `A_k, B_k = O(h^k)` (α's
+and the metric's tangential derivatives times `h_s^k`) and
+`M_k = O(h^{k+1})` for `k ≥ 1`, so level j of seed (a, b) above its top is
+`O(h^{j−a})`. The seed's coefficient in a smooth solution is `O(h^{a+b})`,
+so that level contributes `O(h^{b+j})`, and the order count alone would
+keep it only when `b + j ≤ 4`: `Σ_b (5 − b)² = 55` levels, the first
+cutoff, which the prototype and the first implementation used. What the
+count hides is the constant. Across a jump the far side of the seed of
+`ξᵃ ηᵇ` carries the flux ratio `α_e / α_far` to the power `⌈b/2⌉`, and its
+first dropped level multiplies that by `h_s |∂_s ln α_far|` to the power
+`5 − b − a`; for φ₀₄, which kept level 0 alone, that is about
+`100 · h_s · 3` against the space's own `h⁵` term on case 2's rows above
+the upper curve at `x ≈ 0.1–0.4`, where the band's piece is 0.1 against 1
+and varies by half itself across a stencil. On the flat lines with case 2's
+piece those rows' truncation sat 4× E2.3's from 40,000 to 160,000 nodes;
+on case 2 it was E2.3's size but coherent along the curve (the RMS row
+truncation 1.5× what every level gives, the error in `0.75 ≤ y ≤ 0.85`
+4.7×). On the finer sets those rows set the error: case 2 at δ = 0 on
+40,000 nodes was 3.55e-8 (0.67× E2.3's), the flat lines with case 2's
+piece 13× the flat seeds, and on those lines at 160,000 nodes still 4.9×
+E2.3's (§4.7). Keeping every seed to level 4, whatever b, takes
+the η-seeds' tangential levels as far as the stencil's degree: case 2 at
+40,000 nodes 7.18e-9 (0.14× E2.3's), the flat lines' 1.72e-8 and 3.45e-9 at
+40,000 and 80,000 (1.4× and 1.1× E2.3's), the curvature-only geometry
+unchanged (1.01e-8 against 9.99e-9), and δ > 0 within ±40 % either way.
+Two more levels on every seed instead (85 levels) gave the same numbers to
+two digits, so it is the η-seeds' levels that matter. The count is 75
+levels, 150 states. The series stop at `k = 4`: `A_5` enters only the
+fourth level of the seeds whose first level is `O(1)`, `O(h⁶)` in u.
+
+**What each term carries.** `M_0`, the metric at the foot point, is the
+osculating circle. It puts the kink on the curve instead of on the tangent
+line, and it is the rung that was order 3.4 on concentric circles (#81's
+scratch). The ξ-dependence `M_1` (κ′) is why that rung alone is first order
+on the sine pair. `B_1 = (α m̂)_ξ` is the tangential variation of the flux
+ratio: level 1 of φ₀₁ is driven by `(B_1 g′_0)′` and its flux
+`ψ_1 = B_0 g′_1 + B_1 g′_0` is continuous, so `g′_1` kinks by exactly the
+ratio's slope along the curve. That is the term `r₁ ξ (η − η_c)₊` which
+§4.6 showed no route-(a) seed contains.
+
+**The moment right-hand side.** At the anchor only level 0 of `L φ`
+survives, and its equation is marched with every term it has: the levels
+above 4 vanish at `η = 0`, and so do their data. So the chain holds
+exactly on the whole line `ξ = 0` at every truncation, and
+
+    (L φ_ab)(x_e) = 2 α_e [(a, b) ∈ {(2, 0), (0, 2)}],
+
+with §3.4's `h_s α_ξ` entry on φ₁₀ gone. `φ₁₀ = ξ` plus lower levels driven
+by `A_1, A_2, …` satisfies `L φ₁₀ = 0`, so the tangential derivative is
+carried by the march instead of by the moment conditions. E4.11 evaluates
+`(L φ_e)(x_e)` from the anchor state and the rate and asserts it, as E4.5
+asserted the warp's cancellation.
+
+**The Gaussians.** The warp stays the constant-flux seed, `(ξ, η̃)` with
+`η̃ = φ₀₁(ξ, η)` and all its levels, read off the block. At the anchor
+φ₀₁'s ξ-derivatives vanish (its levels 1–3 start at zero with zero flux),
+and `∂_η (α m̂ ∂_η φ₀₁) = ψ′_0 = −(2 A_0 g_2 + A_1 g_1) = 0`. So
+
+    (L G)(x_e) = α_e (G_ξξ + G_η̃η̃) + A_1(0) G_ξ,
+
+§3.4's form, with `A_1(0) = ∂_ξ (α/m̂)` at the anchor in place of `h_s α_ξ`.
+The plain Gaussians in `(ξ, η)` add `B_η(0) G_η`, `B_η = ∂_η (α m̂)`, the
+term the warp cancels; ε comes from physical distances as before. In the
+prototype a warp of φ₀₁'s level 0 alone was within 11 % of the full seed on
+the case-2 probe either way (lower at 1250 and 2500 nodes, higher at 5000),
+and plain Gaussians were 3× worse at 1250. With no measured winner the full
+seed is kept, since its flux is continuous at every ξ.
+
+**The tangential series.** The coefficients `a_k(η)` of α, and of the
+metric, come from Fornberg weights at `ξ = 0` on 11 points at spacing 0.2
+along the coordinate lines at the same d. The sample points
+`γ(σ_k) + d n(σ_k)`, `σ_k = σ₀ + h_s ξ_k / μ_e`, are formed once per
+stencil and are exact, with no series for the geometry, so a rate
+evaluation costs α at 11 points. On a segment at δ = 0 every sample uses
+that segment's piece, its smooth extension, as E2.3's Taylor tables do. A
+constant piece is its own series, exactly. At δ > 0:
+
+- the foot edge's factor `s(d/δ)` is a function of η alone and is applied
+  exactly;
+- the pieces are sampled;
+- the other curve's factor is its saturated value whenever the stencil's
+  sample region lies beyond `TANH_REACH δ` of that curve, which is the
+  common case. `edge_value` rounds to the piece there, to `e^{−40}` times
+  the contrast;
+- otherwise the other curve's signed distance along each straight sample
+  line is interpolated on 17 Chebyshev points of the march's range, built
+  once per stencil (it is analytic out to the curve's focal set, about 1
+  away, against a line at most 0.2 long); the foot curve's distance is `d`
+  exactly.
+
+The metric's series is `m̂ = G(ξ) − d K(ξ)`, from `|γ′|` and `|γ′| κ` on the
+same samples, once per stencil. The series has converged: between 11 points
+at 0.2 and 15 at 0.12 the weights of 40 case-2 rows at 1250 nodes and
+δ = 0.0025 (the coarsest spacing and the narrowest edge) moved by 3.6e-10.
+Case 2's piece turns 0.55 rad per stencil radius there.
+
+**Node coordinates.** Each node's `(σ_i, d_i)` on the foot curve comes from
+`closest` and `signed_distance`, one Newton per node, with ξ periodic in σ.
+
+**Scope, and what is refused.** The foot curve must stay within
+`FOOT_CURVATURE` (unchanged). At δ = 0 the other curve may meet a stencil
+only as a coordinate line of the foot curve's frame (parallel flat lines,
+concentric circles): a jump across a line that is not `η = const` is
+outside the ansatz and is refused. Case 2's band is 0.2 thick and no 30-node
+stencil at 1250 nodes or finer crosses both curves (§4.6). At δ > 0 the
+other edge enters through the series, smoothly in ξ. Concentric circles are
+admitted into `SmoothBand.normal_profile` (the radial line, the crossings
+exact), which H14 needs; E4.8 keeps the widths-not-radii rule of §3.6.
+
+**Checked in scratch**, with the first cutoff `j ≤ 4 − b` (E2.3's crossing
+rows; RMS of `L u` on the product grid's equilibrium for the probe, the RMS
+error over all nodes otherwise; fits per halving of h over the counts
+shown; §4.7 has the implemented chain's):
+
+| geometry | line | 1250 | 2500 | 5000 | 10000 | 20000 | fit |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A (curvature) | probe, E2.3 curved | 6.45e-03 | 2.52e-03 | 8.51e-04 | 3.18e-04 | 1.02e-04 | 3.03 |
+| A | probe, route (a) | 4.54e-02 | 3.48e-02 | 3.06e-02 | 2.74e-02 | 2.54e-02 | 0.36 |
+| A | probe, tangential | 8.86e-03 | 4.00e-03 | 8.70e-04 | 3.94e-04 | 1.21e-04 | 3.18 |
+| B (tangential α) | probe, E2.3 | 8.43e-03 | 1.38e-03 | 8.33e-04 | 2.91e-04 | 1.09e-04 | 2.99 |
+| B | probe, route (a) | 4.17e-02 | 3.73e-02 | 3.48e-02 | 3.27e-02 | 3.13e-02 | 0.18 |
+| B | probe, tangential | 1.82e-02 | 4.33e-03 | 1.85e-03 | 5.60e-04 | 2.18e-04 | 3.18 |
+| case 2 | probe, E2.3 curved | 1.10e-02 | 5.64e-03 | 2.06e-03 | 6.69e-04 | 2.43e-04 | 2.85 |
+| case 2 | probe, route (a) | 6.44e-02 | 5.23e-02 | 4.53e-02 | 3.91e-02 | 3.58e-02 | 0.38 |
+| case 2 | probe, tangential | 3.38e-02 | 9.81e-03 | 1.95e-03 | 6.97e-04 | 2.70e-04 | 3.59 |
+| A | error, E2.3 curved | 2.17e-05 | 4.54e-06 | 2.55e-06 | 3.30e-07 | 7.83e-08 | 4.05 |
+| A | error, tangential | 3.22e-05 | 5.74e-06 | 1.19e-06 | 1.87e-07 | 6.82e-08 | 4.59 |
+| B | error, E2.3 | 1.77e-05 | 4.05e-06 | 8.66e-07 | 2.70e-07 | 6.09e-08 | 4.10 |
+| B | error, tangential | 1.52e-04 | 1.67e-05 | 2.20e-06 | 3.53e-07 | 1.40e-07 | 5.20 |
+| B, δ = 0.0025 | error, tangential (route (a): 4.30e-4 → 7.08e-5) | 1.61e-04 | 1.83e-05 | 2.77e-06 | 3.65e-07 | 4.52e-08 | 5.92 |
+| case 2 | error, E2.3 curved | 3.06e-05 | 1.25e-05 | 6.25e-06 | 7.03e-07 | | 3.52 |
+| case 2 | error, tangential | 2.83e-04 | 4.79e-05 | 2.05e-06 | 4.67e-07 | | 6.54 |
+
+The probe's route (a) and E2.3 rows, rerun in the same script, are §4.6's
+to the digit; the E2.3 error rows and route (a)'s δ = 0.0025 line are
+quoted from §4.6. Further checks:
+
+- *Split geometry A at δ = 0.0025*: 3.29e-5, 4.87e-6, 8.48e-7 at 1250–5000
+  nodes, against route (a)'s 7.91e-4, 4.22e-4, 2.97e-4.
+- *Case 2 at δ = 0.01*: 9.13e-5, 1.83e-5, 3.81e-6, rate 4.6.
+- *The flat limit*: on 60 crossing stencils of case 1 at 2500 nodes, the
+  tangential block is §3.2's to 1e-13 and the weights to 6e-12, at
+  δ = 0, 0.0025 and 0.01.
+- *An independent residual*: on the sine pair with `0.2 + 0.1 sin sin` on
+  both sides (smooth, so differences apply), at `h_s = 0.05`, the true
+  curvilinear operator applied by twelfth-order differences to the marched
+  seeds leaves `L φ_e − α_e (S φ)_e` at 1e-13 or below on `ξ = 0` for all
+  15 seeds. Off the line it grows like `|ξ|^{5−b}` under the first cutoff
+  (fitted slopes 5.0, 4.0, 3.0, 2.0, 1.1 for `b = 0 … 4`), except φ₁₀'s
+  4.1, which is the dropped `A_5`; with every seed to level 4, like `|ξ|⁵`
+  (4.9–5.1) for all but φ₁₀ (4.2).
+- *Concentric circles* (0.25, 0.35, constant pieces, `RingMode`): the probe
+  is 3.81e-3 and 1.04e-3 at 2500 and 5000 nodes (the osculating rung
+  3.60e-3, 1.06e-3; E2.3 1.77e-2, 5.17e-3).
+- *The distance to E2.3's span* on case 2 (the sine of the largest
+  principal angle) has median 0.24, 0.18, 0.11, 0.082 at 1250–10,000
+  nodes, first order: the two constructions tend to one space at a rate,
+  where on case 1 they were one space to rounding (H2).
+
+The tangential line is fourth order everywhere it was measured. On the
+probe it converges at E2.3's rate, 3.2–3.6 against 2.9–3.0, where route (a)
+stalled at 0.2–0.4. Through an unresolved edge it is below route (a) by
+2.7× at 1250 nodes and by 350× (A, 5000) to 1600× (B, 20,000) at the finest
+counts run. At δ = 0 it is below E2.3-curved from 5000 nodes on case 2 and A, and
+1.3–2.5× above it on B from 5000. It is *above* E2.3 at 1250 nodes, 9× on
+case 2 and B. The worst rows there sit above the upper curve at
+`x ≈ 0.1–0.35`, where the band's piece is 0.1 against 1 and varies by half
+itself across a stencil. The seed span fits the true solution 2–4× worse
+than E2.3's basis there (least squares on the 30 nodes; 2× in the median
+over all crossing rows), and neither more levels nor another warp moves
+it. So it is the space's constant at the coarsest set, not the Gaussians,
+and it is gone by 5000 nodes. §4.7 reports it rather than tuning it away.
+*Half right (§4.7): it is the space's constant, but more levels do move it.
+The one-count test above at 1250 nodes was noise; on the finer sets the
+same rows set the error, and every seed to level 4 halves the 1250-node
+point (case 2 at δ = 0: 1.25e-4) and takes the fine counts below E2.3's.*
+
+**Cost.** A tangential row took 12–17 ms at δ = 0 (550–700 rate
+evaluations, the first cutoff's 110 states) and 35–70 ms at δ > 0, with
+every sample paying the other curve's Newton; the flat rows took 1.3–4.4 ms
+(§4.5). The
+saturated shortcut above removes most of the δ > 0 cost wherever the other
+curve is beyond 20 δ, which is every case-2 row at δ ≤ 0.005.
+
+**Hypotheses H13–H17, for §4.7.**
+
+| | Hypothesis | Experiment | Ticket |
+| --- | --- | --- | --- |
+| H13 | **The chain is the curvilinear chain.** On a smooth medium the true operator applied by differences leaves `L φ_e − α_e (S φ)_e` at rounding on the normal line and `O(|ξ|⁵)` off it (φ₁₀ `O(|ξ|⁴)`, the dropped `A_5`); on case 1 the tangential seeds are §3.2's to the march tolerance, block and weights, at δ = 0 and δ > 0; `(L φ_e)(x_e)` from the anchor state is the right-hand side above. | `tests/heat2d/test_seeds.py` | E4.11 |
+| H14 | **Concentric circles are the osculating rung.** With constant pieces the coupling vanishes and the crossing rows' probe on `RingMode` converges at order ≥ 3, below E2.3-curved's. | the probe on two circles | E4.11 |
+| H15 | **The jump limit on a curved or tangentially varying edge.** At δ = 0 on case 2 and on §4.6's A and B the crossing rows' probe converges at E2.3's rate (2.9–3.0, §4.6) within a small factor of E2.3's rows; the elliptic and parabolic errors are fourth order within a small factor of E2.3-curved's; the span distance to E2.3's basis falls at first order. | the curved sweep at δ = 0; a span table | E4.11 |
+| H16 | **H9 again.** At δ ∈ {0.0025, 0.005, 0.01} on case 2 the tangential line is fourth order within a small factor of the flat seeds' at equal (n, δ) (§4.5), A and B each close, and the probe converges at every δ; what does not is named. | the curved sweep, one new label | E4.11 |
+| H17 | **Cost.** A tangential row costs a small multiple of a flat one, and the documented curved sweep stays within the hour. | timings per δ | E4.11 |
+
+**Decisions taken here, not to be re-derived.**
+
+1. The foot curve's normal coordinates in its own parameter, ξ scaled by
+   `μ_e` so that `m̂ = 1` at the anchor. The normal line is route (a)'s,
+   with its profile, stops and pieces. The Gaussians live in `(ξ, η̃)`;
+   there is no Cartesian frame.
+2. Every seed to level 4 (75 levels, 150 states; revised from `j ≤ 4 − b`,
+   above), series to `k = 4`, one linear system in the flux variables,
+   DOP853 at the 1-D tolerances, restarted at every node's η and every stop
+   (§3.3, unchanged).
+3. The chain constant is `α_e` on both sources, and the anchor data are
+   §3.2's.
+4. The right-hand side is `2 α_e` on the two quadratics and nothing else,
+   asserted from the anchor state.
+5. The Gaussians are in `(ξ, φ₀₁(ξ, η))` with right-hand side
+   `α_e Δ + A_1(0) ∂_ξ`; the plain ablation is in `(ξ, η)` and adds
+   `B_η(0) ∂_η`.
+6. The series use 11-point Fornberg weights at spacing 0.2 along the
+   coordinate lines at the same d, with the sample points formed once per
+   stencil. Constant pieces and the foot edge are exact. The other edge is
+   saturated beyond `TANH_REACH δ` of the sample region, and otherwise its
+   distance along each sample line is a 17-point Chebyshev interpolant (the
+   float Newton's to 1e-15; a Newton per sample cost half a band row).
+7. The scope is `FOOT_CURVATURE`, and at δ = 0 the other curve only as a
+   coordinate line. `normal_profile` admits concentric circles.
+8. The flat chain stays: E4.4–E4.7's lines are reproducible to the bit.
+   The tangential chain is a switch (`tangential=True` on `seed_basis`,
+   `seed_weights`, `seed_operator`) and two labels on the curved sweep
+   (`tangential`, `tangential-plain`). On case 1 it equals §3.2's to the
+   tolerance, which a test checks; case 1 gets no line of its own.
+
+**Where the pieces go.**
+
+| Piece | Module |
+| --- | --- |
+| the coupled chain, the foot coordinates and their sampler, the march, `tangential=` on `seed_basis` / `seed_weights` / `weights_of` | `heat2d/seeds.py` |
+| `Curve.speed`, concentric circles in `normal_profile` | `heat2d/domain.py` |
+| `seed_operator(tangential=)` | `heat2d/operators.py` |
+| the two lines on the curved sweep, the probe (already there), a span table | `scripts/heat2d_stiff.py` |
+| H13–H17 answered | §4.7 |
 
 ## 4. Results in 2-D (E4.2–E4.10)
 
@@ -3996,7 +4307,8 @@ not yet the method for a curved feature: that is E4.11 (#81, plan R7).
   sine pair the osculating chain alone is first order (the curvature varies
   along the curve), and with case 2's piece it does not converge: the
   ξ-expansion is the rest. At degree 4 the coupled chain is about 55 levels
-  (110 states), not 44, since the expansion couples the parities.
+  (110 states), not 44, since the expansion couples the parities (E4.11
+  settled on 75 levels, every seed to level 4, §3.10).
 - *The instruments*: the probe (the acceptance test H9 asked for, now
   measured), the two split geometries (A isolates the curvature, B the
   tangential α, each with an exact δ = 0 comparator in E2.3), the product
@@ -4039,3 +4351,278 @@ E4.6 breadcrumb asked for is a rebuild, not a cached reread: 1250–10,000
 nodes at δ ∈ {0, 0.0025, 0.04}, the construction and both seed lines, both
 problems, rebuilt from scratch with E4.7's code equal E4.6's cached errors
 and readings in all 368 values, bit for bit.
+
+### 4.7 The tangential chain: the order back where α varies along the edge (E4.11, #81)
+
+![the tangential sweep](figures/heat2d_stiff_tangential_a0.02_sine.png)
+
+§3.10's chain, built and put on E4.7's curved sweep as two more lines. `seed_basis(…,
+tangential=True)` marches the 75 levels in the foot curve's normal coordinates,
+`seed_operator(…, tangential=True)` puts the rows in the matrix on the rows the reach
+rule already seeds, and `--operators … tangential tangential-plain` adds the lines to
+`--mode seeds`, where the tangential line becomes the sweep's main one (the ratios,
+the warp, H8, the δ = 0 comparison with E2.3, the probe, the figure). E4.7's lines
+are reread from `heat2d_stiff_curved.json`, not rebuilt; the new entries are keyed
+`tangential` and `tangential-plain`. `--mode tangential` prints the chain's own
+tables: H14 on concentric circles, H15's span distance, and H6's twin on case 2.
+
+**What is built** (§3.10's decisions, as implemented).
+
+- *The chain.* `seeds.coupled_chain` (every seed to level 4, 75 levels at degree 4,
+  §3.10's revised cutoff; the shift, source and ξ-coupling matrices stacked over the
+  series' five coefficients),
+  `FootCoordinates` / `foot_coordinates` (each node's foot point and distance, one
+  Newton each; the 11 sample lines' foot points and normals formed once per
+  stencil; the metric's series; a constant sampled on the lines is its own series
+  exactly, so a flat line couples nothing), `tangential_profiles` (§3.3's march,
+  factored out of `seed_profiles` as `_march`, the flat chain's arithmetic
+  unchanged), and `TangentialBasis` behind `tangential=True` (the block, `2 α_e` on
+  the two quadratics only, the Gaussians' `A_1(0)` and `B_η(0)`, the warp's flux at
+  the anchor read from the march and the rate).
+- *The far edge.* Where the other curve is beyond `TANH_REACH δ` of every sample,
+  its blend is linear in the two pieces with one weight per line and the pieces'
+  series are blended (`_edge_series`); otherwise its signed distance along each
+  straight sample line is a 17-point Chebyshev interpolant (`FAR_POINTS`), the float
+  Newton's to 1e-15 (a test), which took a band row at δ = 0.01 from 66 to 47 ms.
+- *The medium and the curves.* `Curve.speed`; `SmoothBand.alpha_given`, the blend
+  with both distances supplied (`alpha` bit for bit); concentric circles in
+  `normal_profile` (radial line, crossings and flanks exact), read from the stored
+  radii — §3.6's widths rule stays E4.8's.
+- *Refusals.* At δ = 0, a stencil that crosses both curves where the other is not a
+  coordinate line of the foot curve's frame (`NotImplementedError`); `FOOT_CURVATURE`
+  as before, which the 0.25 circle trips at 1250 nodes (0.81), so H14 starts at
+  2500.
+
+**H13, the chain is the curvilinear chain: holds.** On case 1 every coupling is
+exactly zero (a constant sampled on the lines is its own series) and the 150 states
+march §3.2's 44, the other 106 staying zero: on two stencils at δ ∈ {0, h/8, h, 8h}
+the tangential blocks equal §3.2's to 1e-12 and the weights, both warps, to 1e-10,
+and at the operator level (1250 nodes, δ = 0 and h/8, every seeded row) the two
+operators agree to 1e-10 relative. The independent residual (the true curvilinear
+operator by twelfth-order differences on the marched seeds, the sine pair with the
+sine product on both sides, `h_s = 0.05`) is below 1e-10 on `ξ = 0` for all 15 seeds
+and grows off it like `|ξ|⁵` (fitted 4.9–5.1), the first dropped level, except
+φ₁₀'s `|ξ|⁴` (4.2), the dropped `A_5`; the moment right-hand side is `2 α_e` on the two quadratics only and the warp's
+flux at the anchor is `(α_e, 0)`, both read from the march. The coupled rate with
+constant series is §3.2's rate on its 44 states and zero on the rest (a test).
+
+**H14, the concentric circles: holds.** `--mode tangential`, the 0.25 and 0.35 circles
+with 0.2 between and 1 outside, `RingMode` exact through both; RMS of `L u` over E2.3's
+crossing rows (the circles' coupling is zero, so this is the osculating rung of #81's
+scratch, reproduced within 2 % from 5000 nodes and 6 % at 2500: the scratch's ξ was the
+foot circle's arc length, not the anchor's parallel curve's):
+
+| n | rows | E2.3 curved | route (a) | tangential | ms a tangential row (quiet) |
+| --- | --- | --- | --- | --- | --- |
+| 2500 | 1013 | 1.77e-02 | 4.86e-01 | 3.81e-03 | 10.5 |
+| 5000 | 1505 | 5.17e-03 | 3.84e-01 | 1.04e-03 | 10.2 |
+| 10000 | 2136 | 1.90e-03 | 2.94e-01 | 2.59e-04 | 10.1 |
+| 20000 | 3030 | 6.21e-04 | 2.55e-01 | 9.47e-05 | 9.8 |
+| 40000 | 4291 | 2.14e-04 | 2.39e-01 | 3.32e-05 | 9.8 |
+| fit | | 3.18 | 0.53 | 3.45 | |
+
+The tangential rows converge at 3.45, 4.6–7.3× below E2.3's; route (a)'s stall (it is
+E2.3 with the interface expansion off, §4.6). At 1250 nodes the inner circle's
+curvature 4 takes a stencil's normal line to 0.81 of its focal distance and the seeds
+refuse it (`CIRCLES_FROM`).
+
+**The split geometries: each closes alone.** `--inside constant` on the sine pair (A,
+the curvature) and `--amplitude 0 --inside sine` (B, the tangential α), δ = 0 and
+0.0025, elliptic RMS error against the product grid, with the tangential line over
+case 1's flat seeds at equal (δ, n):
+
+| n | A: E2.3 curved | A: route (a) | A: tangential | ÷ flat | A, 0.0025: route (a) | tangential | ÷ flat |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1250 | 2.17e-05 | 7.62e-04 | 3.65e-05 | 2.29 | 7.91e-04 | 3.59e-05 | 2.56 |
+| 2500 | 4.54e-06 | 4.10e-04 | 5.85e-06 | 1.54 | 4.22e-04 | 5.04e-06 | 1.60 |
+| 5000 | 2.55e-06 | 2.86e-04 | 1.21e-06 | 1.99 | 2.97e-04 | 8.77e-07 | 1.73 |
+| 10000 | 3.30e-07 | 1.95e-04 | 2.02e-07 | 1.39 | 1.94e-04 | 1.38e-07 | 1.10 |
+| 20000 | 7.83e-08 | 1.37e-04 | 6.85e-08 | 3.56 | 1.08e-04 | 3.69e-08 | 1.86 |
+| 40000 | 2.21e-08 | 9.31e-05 | 1.01e-08 | 1.92 | 2.57e-05 | 1.49e-08 | 1.87 |
+| fit | 4.05 | 1.18 | 4.66 | | 1.80 | 4.61 | |
+
+| n | B: E2.3 | B: route (a) | B: tangential | ÷ flat | B, 0.0025: route (a) | tangential | ÷ flat |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1250 | 1.77e-05 | 4.20e-04 | 6.21e-05 | 3.89 | 4.30e-04 | 5.78e-05 | 4.13 |
+| 2500 | 4.05e-06 | 3.02e-04 | 8.09e-06 | 2.13 | 3.25e-04 | 6.23e-06 | 1.98 |
+| 5000 | 8.66e-07 | 2.15e-04 | 2.01e-06 | 3.29 | 2.34e-04 | 8.02e-07 | 1.58 |
+| 10000 | 2.70e-07 | 1.52e-04 | 4.94e-07 | 3.40 | 1.50e-04 | 1.83e-07 | 1.45 |
+| 20000 | 6.09e-08 | 1.08e-04 | 8.49e-08 | 4.41 | 7.08e-05 | 8.55e-08 | 4.30 |
+| 40000 | 1.20e-08 | 7.57e-05 | 1.72e-08 | 3.26 | 8.34e-06 | 3.03e-08 | 3.79 |
+| 80000 | 3.06e-09 | 5.31e-05 | 3.45e-09 | 3.00 | | | |
+| 160000 | 6.26e-10 | 3.75e-05 | 1.31e-09 | 3.66 | | | |
+| fit | 4.21 | 1.00 | 4.49 | | 2.06 | 4.33 | |
+
+(Parabolic, `t = 0.1`, the same picture: the tangential line fits 4.74 at δ = 0 and
+4.62 at 0.0025 on A, 4.68 and 4.33 on B to 40,000, is 0.83–1.11 of its elliptic error at
+every δ and count, and 1.2–3.5× case 1's flat seeds from 10,000 nodes on.)
+
+**Case 2: H15 and H16.** `--mode seeds --amplitude 0.02` with E4.7's six lines reread
+and the two tangential lines built, 1250–40,000 nodes, the four widths, both problems,
+against the product grid. Elliptic RMS error at 40,000 nodes with each line's fit over
+1250–40,000 in brackets (§4.6's layout), and the tangential line over case 1's flat seeds
+at equal (δ, n):
+
+| δ | h/δ at 40,000 | naive | construction | route (a) | tangential | tangential, plain | ÷ flat seeds |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | jump | 6.26e-04 (1.32) | 5.29e-08 (3.89) | 3.56e-05 (1.33) | **7.18e-09 (5.72)** | 8.37e-08 (4.32) | 1.36 |
+| 0.01 | 0.53 | 5.23e-06 (3.85) | 3.54e-03 (0.05) | 1.09e-06 (3.07) | **3.01e-08 (4.24)** | 3.18e-08 (4.48) | 3.58 |
+| 0.005 | 1.05 | 5.99e-05 (2.78) | 1.50e-03 (0.09) | 8.15e-06 (2.40) | **3.00e-08 (4.36)** | 2.48e-08 (5.54) | 3.40 |
+| 0.0025 | 2.11 | 9.80e-05 (2.16) | 8.78e-04 (0.02) | 1.81e-05 (1.71) | **2.69e-08 (5.03)** | 2.21e-08 (5.25) | 3.37 |
+
+| δ | tangential ÷ flat seeds: 1250 | 2500 | 5000 | 10000 | 20000 | 40000 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 7.84 | 6.24 | 1.93 | 2.18 | 2.40 | 1.36 |
+| 0.01 | 3.32 | 2.79 | 3.18 | 3.09 | 3.27 | 3.58 |
+| 0.005 | 4.48 | 3.21 | 3.87 | 2.68 | 3.42 | 3.40 |
+| 0.0025 | 8.05 | 5.74 | 3.93 | 2.17 | 3.30 | 3.37 |
+
+(Parabolic, `t = 0.1`: 0.83–1.11 of these errors at every δ and count, fits 5.65, 4.30,
+4.50, 5.13, and 1.43–3.13× the flat seeds at 40,000.)
+
+- *H16 holds: fourth order within a small factor of the flat numbers.* From 5000
+  nodes on the tangential line is 1.4–3.9× case 1's flat seeds at every δ and count
+  (fits over 5000–40,000: 4.96, 4.23, 3.86, 4.13), where route (a) was 17–6742×
+  (§4.6); route (a) is 36–5000× it at 40,000 nodes; it is 0.001–0.006 of the direct,
+  `direct-reach` and naive operators on the resolved column (H8 below); and the
+  steep full fits come from the two coarsest counts, 2.8–8.1× the flat seeds.
+- *H15's error half holds, and better than asked.* At δ = 0 the tangential line is
+  below E2.3-curved from 5000 nodes on, 0.19, 0.45, 0.26 and 0.14× at 5000–40,000,
+  where route (a) was 19–673× above it; at 1250 and 2500 it is 4.1 and 1.9× above,
+  the coarse sets' constant (the rows above the upper curve, §3.10).
+- *The first cutoff, for the record.* The same sweep with `j ≤ 4 − b` (commits
+  82cf2f5–3251c61, run once and not merged into the cache) gave 3.55e-8, 3.09e-8,
+  2.75e-8 and 1.81e-8 at 40,000 nodes (6.7, 3.7, 3.1 and 2.3× the flat seeds) and
+  2.83e-4 at 1250 at δ = 0 (17.7×): fourth order already, with the η-seeds'
+  constant of §3.10 at δ = 0 and on the coarse sets. Every seed to level 4 divided
+  δ = 0's error at 40,000 nodes by 4.9 and the coarse counts' by 2–4, and moved
+  δ > 0's at 40,000 by 0.97× (0.01), 1.09× and 1.49× (the two narrow widths, a
+  little worse).
+- *The warp (H7 on case 2).* Plain Gaussians over warped: 1.1–11.7× at δ = 0 (5.5–11.7×
+  from 5000 on), and at δ > 0 above 1 while the edge is unresolved and 0.55–1.1 once
+  `h ≲ 2δ` (δ = 0.005 from 10,000 nodes, 0.01 from 5000, 0.0025 at 40,000), the turn
+  E4.6 and E4.7 saw. The warped line is kept.
+- *H8 on case 2* (δ = 0.01 at 20,000 and 40,000, `δ/h` = 1.34 and 1.90, 62 % of the
+  rows seeded): the tangential line is 0.001–0.002 of the direct operator and of
+  `direct-reach`, 0.005–0.006 of the naive product; route (a) was 0.05–0.21 (§4.6).
+
+**The probe (H15's first half, H16's last): the crossing rows converge at every δ.**
+RMS of `L u` over E2.3's crossing rows on the equilibrium reference, fit over
+1250–40,000:
+
+| geometry | δ | tangential | route (a) | E2.3 curved | fit: tangential / route (a) / E2.3 |
+| --- | --- | --- | --- | --- | --- |
+| case 2 | 0 | 1.51e-02 → 6.35e-05 | 6.44e-02 → 3.33e-02 | 1.10e-02 → 9.24e-05 | 3.22 / 0.38 / 2.86 |
+| case 2 | 0.01 | 1.13e-02 → 2.81e-05 | 5.68e-02 → 1.81e-03 | — | 3.58 / 1.99 / — |
+| case 2 | 0.005 | 1.23e-02 → 4.43e-05 | 6.71e-02 → 9.60e-03 | — | 3.19 / 1.09 / — |
+| case 2 | 0.0025 | 1.44e-02 → 6.50e-05 | 6.58e-02 → 2.24e-02 | — | 3.24 / 0.61 / — |
+| A | 0 | 9.48e-03 → 3.85e-05 | 4.54e-02 → 2.36e-02 | 6.45e-03 → 4.03e-05 | 3.23 / 0.36 / 2.99 |
+| A | 0.0025 | 8.92e-03 → 4.01e-05 | 4.69e-02 → 1.37e-02 | — | 3.25 / 0.64 / — |
+| B | 0 | 9.19e-03 → 3.75e-05 | 4.17e-02 → 3.03e-02 | 8.43e-03 → 3.48e-05 | 3.07 / 0.18 / 3.00 |
+| B | 0.0025 | 8.50e-03 → 7.03e-05 | 4.25e-02 → 2.14e-02 | — | 2.71 / 0.38 / — |
+
+(E2.3's rows read a smooth edge as a jump and diverge at δ > 0, as §4.6 found.) The
+tangential rows converge at 2.7–3.6, E2.3's rate or better, on every geometry and width
+where route (a)'s stall at 0.2–0.6 (1.1–2.0 once the edge is resolved), and at δ = 0
+they end within 0.7–1.1× of E2.3's rows; on B to 160,000 nodes they are 4.78e-6 against
+E2.3's 4.34e-6. One thing slows: at δ = 0.0025 the tangential probe falls at only
+1.7–2.3 between 20,000 and 40,000 nodes on all three geometries, where `h/δ` passes
+from 3 to 2.1, the resolution transition of §4.5; the errors keep falling there, at
+2.5–3.0 per halving over that step (case 2, A, B), and the transition is where the flat
+seeds' warp turned too.
+
+**B to 160,000 nodes, the constant at δ = 0.** The δ = 0 column of the flat lines with
+case 2's piece was run to 160,000 nodes (`--deltas 0 … --counts … 80000 160000`, 23 min),
+because under the first cutoff it was the one place the tangential line looked slow:
+3.53e-7, 1.40e-7, 6.63e-8, 1.89e-8, 3.08e-9 at 10,000–160,000 nodes (rates 2.7, 2.1,
+3.6, 5.3; 13–16× the flat seeds at 40,000–80,000), with the worst rows' truncation on
+the innermost straddling row above `y = 0.8` at `x ≈ 0.13–0.36` 4× E2.3's at every
+count. Every seed to level 4: 4.94e-7, 8.49e-8, 1.72e-8, 3.45e-9, 1.31e-9, fit 4.49
+over 1250–160,000 (E2.3 4.21), 2.1–4.4× the flat seeds at every count from 2500 on,
+1.1–2.1× E2.3's at 20,000–160,000, and the probe 1.1× E2.3's at 160,000.
+
+**H15's span half: holds.** The sine of the largest principal angle between the
+tangential span and E2.3's translated basis on every crossing stencil of case 2 at
+δ = 0 (`--mode tangential`):
+
+| n | 1250 | 2500 | 5000 | 10000 | 20000 | 40000 |
+| --- | --- | --- | --- | --- | --- | --- |
+| median | 2.02e-01 | 1.44e-01 | 1.11e-01 | 7.87e-02 | 5.56e-02 | 3.86e-02 |
+| max | 7.89e-01 | 6.05e-01 | 5.42e-01 | 3.92e-01 | 2.76e-01 | 1.96e-01 |
+
+First order (0.98, 0.80, 0.98, 1.01, 1.04 per halving of h): two approximations of one
+space, where on case 1 they are one space to rounding (H2).
+
+**H6 on case 2: no eigenvalue right of the axis.** The interior spectra at 1600 nodes
+(`--mode tangential`): at every δ the tangential operator's rightmost eigenvalue is
+route (a)'s and E2.3's to 0.001 (−7.176 at δ = 0, −7.283 at 0.01), `h² min Re` −12.70
+for all, `h² max |Im|` 0.15–0.21 warped against 0.24–1.06 plain, and none positive, so
+the parabolic line's BD4 at `dt = h` has nothing to amplify.
+
+**H17, cost: holds, barely.** On a quiet machine (`--mode tangential`, 400 seeded rows
+per width at 10,000 nodes of case 2, the median `seed_basis`):
+
+| δ | route (a) | tangential | ratio |
+| --- | --- | --- | --- |
+| 0 | 3.8 ms | 14.5 ms | 3.8 |
+| 0.01 | 8.8 ms | 21.8 ms | 2.5 |
+| 0.005 | 8.8 ms | 24.5 ms | 2.8 |
+| 0.0025 | 9.7 ms | 24.3 ms | 2.5 |
+
+A tangential row is 2.5–3.8× route (a)'s (whose 3.8 and 8.8–9.7 ms are §4.6's 4.1 and
+9.0–9.4 again) and 4.2–7.3× case 1's flat rows (§4.6's 2.0, 5.4, 5.2 ms): the 150 states against 44, the tangential
+series at 11 samples per rate evaluation, and the far edge's interpolant where it is not
+saturated (a band row at δ = 0.01 took 66 ms with a Newton per sample and 47 ms with the
+interpolant, under load). The documented case-2 sweep took 58 min with three other runs
+on the machine (68 min under the first cutoff), the two split geometries 13 min each, B's
+δ = 0 column to 160,000 a further 23 min, and `--mode tangential` 8 min quiet;
+everything is seconds cached.
+
+**H13–H17, answered.** The tangential chain is the curvilinear chain (H13: the flat
+limit, the residual by differences, the right-hand side); it is the osculating rung
+on concentric circles and converges there at 3.45, 4.6–7.3× below E2.3's rows (H14);
+at the jump it converges at E2.3's rate on case 2 and both split geometries, lands
+below E2.3-curved from 5000 nodes on case 2 and A and within 1.1–2.1× of it on B from
+20,000, and its span tends to E2.3's at first order (H15); through every width it is
+fourth order within 1.4–3.9× of the flat seeds from 5000 nodes on, A and B each close,
+and the probe converges at every δ (H16). What does not: the coarsest two counts,
+2.8–8.1× the flat seeds, the space's constant where case 2's band piece is 0.1 against
+1 and varies by half itself across a stencil; the probe's slowdown at δ = 0.0025 through
+`h ≈ 2–3 δ`; and H17's cost, above. H9's question — can the seeds carry a curved,
+tangentially varying edge — is answered yes, and plan R7's fallback (scoping the 2-D
+seeds to normal-only α) is not needed.
+
+**What E4.8, E4.9 and E4.10 inherit.**
+
+- *E4.8 (#39)*: `tangential=True` on the ring, since case 3 has both terms (κ = 2.86 and
+  a sine product inside the ring); concentric circles are admitted by `normal_profile`
+  from the stored radii, and §3.6's widths-from-the-outer-radius rule is still E4.8's;
+  the ring's other circle is a coordinate line, so no stencil is refused; its edge is
+  never saturated on a ring 0.001 wide, so every sample takes the Chebyshev path; the
+  1500 : 1 contrast is the regime where §3.10's η-seed levels matter most and is
+  untested.
+- *E4.9 (#40)*: the treatments' curved comparison is against the tangential line, not
+  route (a).
+- *E4.10 (#41)*: the figure `docs/figures/heat2d_stiff_tangential_a0.02_sine.png`, the
+  cache entries `tangential` / `tangential-plain` in `heat2d_stiff_curved.json` (the
+  first cutoff's are not in it), and the regeneration commands in the driver's
+  docstring. The labels do not say which level cutoff built an entry, so the curved
+  cache's version moved to 2 with the chain (the /spar review's MEDIUM): a version-1
+  file is refused whole. The local file was re-stamped from 1 to 2 rather than
+  rebuilt, after checking that it held no tangential entry before the level-4 runs
+  were merged; its E4.7 entries do not involve the chain. Bump the version again
+  after any change to either chain, the tangential series or their sampling.
+
+**Tests.** `tests/heat2d/test_seeds.py`: the coupled chain's 75 levels and its rate
+with constant series equal to §3.2's; the flat limit on case 1 (blocks to 1e-12,
+weights to 1e-10, both warps, four widths); the residual by differences on the smooth
+sine medium (1e-10 on the line, slopes ≥ 4.8 off it, φ₁₀ ≥ 3.8); the right-hand side
+and the warp's anchor flux; the circles' zero coupling and metric; the saturated
+far edge and the Chebyshev far edge against a per-sample Newton; a case-2 row set
+against route (a) and E2.3; the refusals; the cost. `tests/heat2d/test_domain.py`:
+the concentric profile at δ = 0 and δ > 0, the mixed and eccentric refusals, `speed`
+against the curve's own chord, `alpha_given` bit for bit. `tests/heat2d/test_operators.py`:
+the tangential operator equals the seed operator on case 1 to 1e-10.
+`tests/test_heat2d_stiff.py`: the labels and `flat_twin`, the curved sweep with the
+tangential lines at 900 and 1250 nodes (the probe converging where route (a)'s stalls,
+the figure its own, the cache round trip), and `--mode tangential`'s tables.

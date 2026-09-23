@@ -16,8 +16,11 @@ from scipy.linalg import subspace_angles
 from heat_interfaces.fd_weights import fornberg_weights
 from heat_interfaces.heat1d.stiff import seed_profiles as seed_profiles_1d
 from heat_interfaces.heat2d.domain import (
+    STRIP,
     Band,
+    Circle,
     Constant2D,
+    Domain,
     FlatLine,
     SineGraph,
     SineProduct,
@@ -42,10 +45,13 @@ from heat_interfaces.heat2d.seeds import (
     WARP_TOL,
     block_condition,
     chain,
+    coupled_chain,
+    foot_coordinates,
     seed_basis,
     seed_coordinates,
     seed_profiles,
     seed_weights,
+    tangential_profiles,
     weights_of,
 )
 
@@ -490,7 +496,10 @@ def test_the_basis_refuses_what_it_cannot_build(nodes):
         seed_basis(xy[:, :1], band)
     with pytest.raises(ValueError, match="coincide"):
         seed_basis(np.vstack([xy, xy[3:4]]), band)
-    with pytest.raises(NotImplementedError, match="E4.8"):
+    mixed = Band(FlatLine(0.3), Circle(0.2), Constant2D(0.2), Constant2D(1.0))
+    with pytest.raises(NotImplementedError, match="circles about one centre"):
+        seed_basis(xy, SmoothBand(mixed, 0.01))
+    with pytest.raises(ValueError, match="FOOT_CURVATURE"):
         seed_basis(xy, SmoothBand(case3().material, 0.01))
     sb = seed_basis(xy, band)
     with pytest.raises(ValueError, match="1-D"):
@@ -556,3 +565,290 @@ def test_the_seed_frame_is_e23s_on_every_crossing_stencil_of_case2(curved_nodes,
         e23 = st.regions[st.anchor].frame
         mismatched += nearest_interface(medium, *xy[0]) != e23
     assert len(index) > 400 and mismatched == 0
+
+
+# --- E4.11: the tangential chain (§3.10) ---------------------------------------------
+
+
+def test_the_coupled_chain_is_75_levels_and_the_flat_chain_without_coupling():
+    # §3.10: every seed to level 4, whatever b (the η-seeds' tangential levels
+    # carry the flux ratio's powers across a jump); with the series constant in
+    # ξ (a flat line, α of the normal alone) the rate is §3.2's on the flat
+    # chain's levels and zero on the others.
+    ch = coupled_chain(4)
+    assert ch.size == 75 and ch.series == 4
+    counts = [sum(1 for _, b, _ in ch.levels if b == k) for k in range(5)]
+    assert counts == [25, 20, 15, 10, 5]
+    flat = chain(4)
+    where = [ch.index(*level) for level in flat.levels]
+    rng = np.random.default_rng(5)
+    y_flat = rng.standard_normal(2 * flat.size)
+    y = np.zeros(2 * ch.size)
+    y[where] = y_flat[: flat.size]
+    y[[ch.size + m for m in where]] = y_flat[flat.size :]
+    alpha, alpha_e = 0.37, 0.61
+    const = np.zeros(5)
+
+    def coefficients(eta):
+        m, a, inverse = const.copy(), const.copy(), const.copy()
+        m[0], a[0], inverse[0] = 1.0, alpha, 1.0 / alpha
+        return m, a, inverse
+
+    got = ch.rate(alpha_e, coefficients)(0.0, y)
+    want = flat.rate(alpha_e, lambda eta: alpha)(0.0, y_flat)
+    np.testing.assert_allclose(got[where], want[: flat.size], rtol=1e-15)
+    np.testing.assert_allclose(
+        got[[ch.size + m for m in where]], want[flat.size :], rtol=1e-15
+    )
+    others = np.setdiff1d(np.arange(ch.size), where)
+    assert not got[others].any() and not got[ch.size + others].any()
+
+
+@pytest.mark.parametrize("ratio", (0.0, *RATIOS))
+@pytest.mark.parametrize("y", (0.5896, 0.6104))
+def test_on_case1_the_tangential_seeds_are_the_flat_seeds(nodes, ratio, y):
+    # H13's flat limit: nothing varies along a flat line on case 1, so every
+    # coupling is exactly zero and the 150 states march §3.2's 44 (the rest stay
+    # zero); what differs is DOP853's error norm over more states.
+    xy = stencil(nodes, y)
+    medium = SmoothBand(case1().material, ratio * H)
+    tb = seed_basis(xy, medium, tangential=True)
+    sb = seed_basis(xy, medium)
+    np.testing.assert_allclose(tb.xi, sb.xi, rtol=0, atol=2e-15)
+    np.testing.assert_allclose(tb.eta, sb.eta, rtol=0, atol=2e-15)
+    scale = np.abs(sb.block).max()
+    assert np.abs(tb.block - sb.block).max() < 1e-12 * scale
+    np.testing.assert_array_equal(tb.rhs, sb.rhs)
+    ch = tb.profiles.chain
+    flat = {level for level in chain(4).levels}
+    extra = [m for m, level in enumerate(ch.levels) if level not in flat]
+    assert not tb.profiles.g[extra].any()
+    assert tb.anchor_flux == (tb.alpha_e, 0.0)
+    for warp in (True, False):
+        w, w_ref = weights_of(tb, warp=warp), weights_of(sb, warp=warp)
+        assert np.abs(w - w_ref).max() < 1e-10 * np.abs(w_ref).max()
+
+
+def smooth_sine_medium():
+    # Case 2's sine pair with the sine product on both sides: α smooth
+    # everywhere, varying along the curve, so differences apply (§3.10's check).
+    piece = SineProduct(0.2, 0.1)
+    return SmoothBand(Band(SineGraph(0.6), SineGraph(0.8), piece, piece), 0.0)
+
+
+def test_the_tangential_chain_holds_on_the_normal_line_and_off_it_to_its_order():
+    # H13: the true curvilinear L (the metric and α at the physical points,
+    # twelfth-order differences in both directions, nothing shared with the
+    # march) on the marched seeds: L φ_e − α_e (S φ)_e is at rounding on ξ = 0
+    # for all 15 seeds and grows like |ξ|⁵ off it, the first level each seed
+    # drops (2026-09-22: slopes 4.9–5.1 on seeds 2…14; φ₁₀'s 4.2 is the
+    # dropped A₅).
+    medium = smooth_sine_medium()
+    curve = medium.interfaces[1]
+    x0, y0, h = 0.3, 0.82, 0.05
+    ring = np.linspace(0.0, 2.0 * np.pi, 29, endpoint=False)
+    xy = np.vstack([[x0, y0], np.c_[x0 + h * np.cos(ring), y0 + h * np.sin(ring)]])
+    coords, _, _ = foot_coordinates(curve, 1, xy[:, 0], xy[:, 1], h)
+    profile = medium.normal_profile(1, x0, y0, h)
+    xi, eta = np.linspace(-0.6, 0.6, 121), np.linspace(-0.6, 0.6, 241)
+    alpha_e = float(medium.alpha(xy[:1, 0], xy[:1, 1])[0])
+    p = tangential_profiles(coords, profile, eta, medium, alpha_e)
+    phi = p.values(xi[:, None])
+    sigma = coords.s0 + h * xi / coords.mu
+    d = coords.d_e + h * eta
+    px, py = curve.point(sigma)
+    nx, ny = curve.normal(sigma)
+    x = px[:, None] + d[None, :] * nx[:, None]
+    y = py[:, None] + d[None, :] * ny[:, None]
+    m = curve.speed(sigma)[:, None] * (1.0 - curve.curvature(sigma)[:, None] * d)
+    m = m / coords.mu
+    alpha = medium.alpha(x, y)
+    step_xi, step_eta = xi[1] - xi[0], eta[1] - eta[0]
+    on_line = np.flatnonzero(np.abs(xi) < 1e-12)
+    rows = np.abs(eta) <= 0.3
+    for k, (a, b) in enumerate(EXPONENTS):
+        f = phi[..., k]
+        lf = (
+            centred_derivative(
+                alpha / m * centred_derivative(f, step_xi, 0), step_xi, 0
+            )
+            + centred_derivative(
+                alpha * m * centred_derivative(f, step_eta, 1), step_eta, 1
+            )
+        ) / m
+        rhs = np.zeros_like(f)
+        if a >= 2:
+            rhs += a * (a - 1) * phi[..., column(a - 2, b)]
+        if b >= 2:
+            rhs += b * (b - 1) * phi[..., column(a, b - 2)]
+        residual = np.abs(lf - alpha_e * rhs)
+        assert np.nanmax(residual[on_line][:, rows]) < 1e-10, (a, b)
+        if (a, b) == (0, 0):
+            continue
+        at = [
+            np.nanmax(residual[np.abs(np.abs(xi) - t) < 1e-9][:, rows])
+            for t in (0.1, 0.2, 0.4)
+        ]
+        # Level 5 is the first dropped; φ₁₀ also misses A₅ (the series stop at 4).
+        slope = np.log(at[-1] / at[0]) / np.log(4.0)
+        assert slope > (4.0 if (a, b) == (1, 0) else 5.0) - 0.2, (a, b, slope)
+
+
+def test_the_tangential_right_hand_side_and_the_warp_at_the_anchor(curved_nodes):
+    # §3.10: the chain holds on the whole normal line, so the moment
+    # conditions are 2 α_e on the two quadratics and nothing else (the
+    # tangential derivative is in φ₁₀'s lower levels, not the right-hand
+    # side), and the warp's flux at the anchor is α_e with zero derivative.
+    xy = stencil(curved_nodes, 0.8 + 0.02 * np.sin(2 * np.pi * 0.25) - 0.012, x=0.25)
+    tb = seed_basis(xy, case2().material, tangential=True)
+    assert tb.interface == 1
+    want = np.zeros(15)
+    want[[column(2, 0), column(0, 2)]] = 2.0 * tb.alpha_e
+    np.testing.assert_array_equal(tb.rhs, want)
+    assert tb.anchor_flux == (tb.alpha_e, 0.0)
+    ch = tb.profiles.chain
+    # φ₁₀ is ξ plus levels the tangential variation drives: nonzero here.
+    lower = [ch.index(1, 0, j) for j in (0, 2, 3, 4)]
+    assert np.abs(tb.profiles.g[lower]).max() > 1e-6
+    np.testing.assert_allclose(tb.warp, tb.block[:, column(0, 1)], rtol=0, atol=0)
+
+
+def circles():
+    return Band(Circle(0.25), Circle(0.35), Constant2D(0.2), Constant2D(1.0))
+
+
+def test_on_concentric_circles_the_coupling_vanishes():
+    # H14: constant pieces and a circle's constant speed and curvature make
+    # every series constant in ξ exactly, so only the osculating metric
+    # M₀(η) = (R + d)/(R + d_e) couples, and the levels outside §3.2's stay 0.
+    band = circles()
+    nodes = build_node_set(Domain(band, band.interfaces, STRIP), 2500)
+    xy = stencil(nodes, 0.5 + 0.35 * np.sin(1.0), x=0.5 + 0.35 * np.cos(1.0))
+    tb = seed_basis(xy, band, tangential=True)
+    assert tb.interface == 1
+    ch = tb.profiles.chain
+    flat = set(chain(4).levels)
+    extra = [m for m, level in enumerate(ch.levels) if level not in flat]
+    assert not tb.profiles.g[extra].any()
+    g, k = tb.coordinates.metric
+    assert not g[1:].any() and not k[1:].any()
+    d_e = np.hypot(xy[0, 0] - 0.5, xy[0, 1] - 0.5) - 0.35
+    np.testing.assert_allclose((g[0], k[0]), (0.35, -1.0) / (0.35 + d_e), rtol=1e-13)
+
+
+def newton_far_edge(medium, coords):
+    """The other curve's distance at the samples by a float Newton each: the
+    reference the saturated shortcut and the interpolant are held to."""
+    other = medium.interfaces[1 - coords.interface]
+
+    def far(eta):
+        x, y = coords.points(eta)
+        return np.array(
+            [
+                other.signed_distance_at(float(u), float(v))
+                for u, v in zip(x, y, strict=True)
+            ]
+        )
+
+    return far
+
+
+def test_the_saturated_far_edge_is_the_full_blend(curved_nodes, monkeypatch):
+    # §3.10's shortcut: where the other curve is beyond 20 δ of every sample
+    # the blend is linear in the two pieces and their series are blended; it
+    # is the per-sample blend with every distance computed, to rounding.
+    from heat_interfaces.heat2d import seeds
+
+    medium = SmoothBand(case2().material, 0.0025)
+    xy = stencil(curved_nodes, 0.6 + 0.02 * np.sin(2 * np.pi * 0.4) + 0.012, x=0.4)
+    fast = seed_basis(xy, medium, tangential=True)
+    assert seeds._other_edge(medium, fast.coordinates, fast.eta) == -np.inf
+    monkeypatch.setattr(
+        seeds, "_other_edge", lambda m, coords, eta: newton_far_edge(m, coords)
+    )
+    full = seed_basis(xy, medium, tangential=True)
+    scale = np.abs(full.block).max()
+    assert np.abs(fast.block - full.block).max() < 1e-12 * scale
+
+
+def test_the_far_edge_within_reach_is_interpolated_to_rounding(
+    curved_nodes, monkeypatch
+):
+    # Where the other curve's edge reaches the samples (a band row at δ = 0.01)
+    # its distance is a Chebyshev interpolant along each line (FAR_POINTS),
+    # the float Newton's to rounding, and so are the seeds built on it.
+    from heat_interfaces.heat2d import seeds
+
+    medium = SmoothBand(case2().material, 0.01)
+    xy = stencil(curved_nodes, 0.7, x=0.3)
+    fast = seed_basis(xy, medium, tangential=True)
+    far = seeds._other_edge(medium, fast.coordinates, fast.eta)
+    assert callable(far)
+    newton = newton_far_edge(medium, fast.coordinates)
+    for t in np.linspace(fast.eta.min(), fast.eta.max(), 37):
+        assert np.abs(far(t) - newton(t)).max() < 1e-15
+    monkeypatch.setattr(
+        seeds, "_other_edge", lambda m, coords, eta: newton_far_edge(m, coords)
+    )
+    full = seed_basis(xy, medium, tangential=True)
+    scale = np.abs(full.block).max()
+    assert np.abs(fast.block - full.block).max() < 1e-12 * scale
+
+
+def test_a_tangential_row_is_consistent_where_route_a_is_not(curved_nodes):
+    # H15 on one set: case 2 at δ = 0, the rows applied to the product grid's
+    # equilibrium on 60 crossing stencils (L u = 0, so each value is the row's
+    # truncation error); route (a)'s frozen profile is O(1) there (§4.6) and
+    # the tangential rows are E2.3's size (2026-09-22 at 2500 nodes over all
+    # 576 rows: 9.8e-3 against route (a)'s 5.2e-2 and E2.3's 5.6e-3).
+    from heat_interfaces.heat2d.exact import ProductGridReference
+    from heat_interfaces.heat2d.operators import (
+        INTERFACE_KIND,
+        build_stencils,
+        interface_crossings,
+    )
+    from heat_interfaces.heat2d.rbf import BOUNDARY
+
+    domain = case2()
+    band = domain.material
+    ref = ProductGridReference(SmoothBand(band, 0.0), 0.0)
+    stencils = build_stencils(curved_nodes, domain, interface=BOUNDARY)
+    (group,) = [g for g in stencils.groups if g.kind == INTERFACE_KIND]
+    index = group.index[interface_crossings(curved_nodes, band, group.index)]
+    rows = {"tangential": [], "route (a)": [], "E2.3": []}
+    for idx in index[:: len(index) // 60][:60]:
+        xy = curved_nodes.xy[idx]
+        u = ref(xy[:, 0], xy[:, 1])
+        rows["tangential"].append(seed_weights(xy, band, tangential=True) @ u)
+        rows["route (a)"].append(seed_weights(xy, band) @ u)
+        rows["E2.3"].append(stencil_weights(xy, band, 4) @ u)
+    rms = {k: float(np.sqrt(np.mean(np.square(v)))) for k, v in rows.items()}
+    assert rms["tangential"] < 0.4 * rms["route (a)"], rms
+    assert rms["tangential"] < 4.0 * rms["E2.3"], rms
+
+
+def test_the_tangential_basis_refuses_a_second_curve_off_its_lines(nodes):
+    # §3.10: at δ = 0 a stencil may cross the other curve only where it is a
+    # coordinate line of the foot curve's frame (parallel lines, concentric
+    # circles); a sine beside a flat line 0.02 away is neither.
+    band = Band(FlatLine(0.6), SineGraph(0.62, 0.005), Constant2D(0.2), Constant2D(1.0))
+    xy = stencil(nodes, 0.6104)
+    assert len(set(band.region_index(xy[:, 0], xy[:, 1]).tolist())) == 3
+    with pytest.raises(NotImplementedError, match="coordinate line"):
+        seed_basis(xy, band, tangential=True)
+    seed_basis(xy, SmoothBand(band, 0.002), tangential=True)
+    seed_basis(xy, THIN, tangential=True)
+
+
+def test_a_tangential_row_takes_tens_of_milliseconds(curved_nodes):
+    # §3.10's cost: 13 ms at δ = 0 and 34 ms at δ = 0.0025 on case 2 (2500
+    # nodes, 2026-09-22), against the flat rows' 1.3–4.4 ms; a fivefold margin.
+    xy = stencil(curved_nodes, 0.6 + 0.02 * np.sin(2 * np.pi * 0.4) + 0.012, x=0.4)
+    for delta, limit in ((0.0, 0.07), (0.0025, 0.17)):
+        medium = SmoothBand(case2().material, delta)
+        times = []
+        for _ in range(3):
+            start = time.perf_counter()
+            seed_basis(xy, medium, tangential=True)
+            times.append(time.perf_counter() - start)
+        assert min(times) < limit, (delta, times)

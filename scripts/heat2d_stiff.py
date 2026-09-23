@@ -104,6 +104,21 @@ E4.7) and each line's curved error over case 1's at equal (δ, n), from
 against finer grids in both directions and, at δ = 0, E2.6's 160,000-node run
 against it. Figure: ``heat2d_stiff_seeds_<tag>.png``.
 
+``--operators … tangential tangential-plain`` (E4.11, #81; stiff note §3.10
+H13–H17, §4.7 records) adds the tangential chain to the same sweep: the seeds
+in the foot curve's own coordinates with alpha's and the metric's variation
+along it carried by coupled levels. With it the tangential line is the sweep's
+main one (the ratios, the warp, H8, the δ = 0 comparison with E2.3, the probe),
+its curved errors are read over case 1's ``seeds`` at equal (δ, n) (the two
+are the same rows on flat lines), and the figure is
+``heat2d_stiff_tangential_<tag>.png``, route (a)'s left as it was.
+``--mode tangential`` prints the chain's own tables: H14, the crossing rows'
+truncation on ``RingMode`` through two concentric circles (E2.3, route (a),
+tangential, from 2500 nodes), H15's distance between the tangential span and
+E2.3's translated basis on case 2 at δ = 0, H6's twin on case 2 (the seed
+operators' interior spectra at 1600 nodes per δ), and H17's timing (the median
+``seed_basis`` of 400 seeded rows per δ at 10,000 nodes, both chains).
+
     uv run python scripts/heat2d_stiff.py              # 2.5 min cold, 21 s cached
     uv run python scripts/heat2d_stiff.py --mode naive \
         --counts 1250 2500 5000 10000 20000 40000 80000 160000   # 58 min once
@@ -125,6 +140,21 @@ against it. Figure: ``heat2d_stiff_seeds_<tag>.png``.
     uv run python scripts/heat2d_stiff.py --mode seeds --inside sine \
         --deltas 0 0.0025 --operators naive construction seeds \
         --counts 1250 2500 5000 10000 20000 40000               # alpha along the edge
+    uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
+        --operators naive construction direct direct-reach seeds seeds-plain \
+        tangential tangential-plain \
+        --counts 1250 2500 5000 10000 20000 40000               # E4.11 on case 2
+    uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
+        --inside constant --deltas 0 0.0025 --operators naive construction seeds \
+        tangential tangential-plain --counts 1250 2500 5000 10000 20000 40000
+    uv run python scripts/heat2d_stiff.py --mode seeds --inside sine \
+        --deltas 0 0.0025 --operators naive construction seeds tangential \
+        tangential-plain --counts 1250 2500 5000 10000 20000 40000   # E4.11's A, B
+    uv run python scripts/heat2d_stiff.py --mode seeds --inside sine --deltas 0 \
+        --operators naive construction seeds tangential tangential-plain \
+        --counts 1250 2500 5000 10000 20000 40000 80000 160000  # B's δ = 0, 23 min
+    uv run python scripts/heat2d_stiff.py --mode tangential \
+        --counts 1250 2500 5000 10000 20000 40000               # H14, H15, spectra
 """
 
 from __future__ import annotations
@@ -162,12 +192,14 @@ from heat_interfaces.heat2d import (  # noqa: E402
     ROW_OFFSETS,
     STRIP,
     Band,
+    Circle,
     Constant2D,
     Domain,
     FlatLine,
     NodeSet,
     ProductGridReference,
     Reference,
+    RingMode,
     Row,
     SeedBasis,
     SineGraph,
@@ -181,6 +213,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     case1,
     case1_exact,
     case1_reference,
+    case2,
     control_exact,
     direct_operator,
     gaussian_derivative,
@@ -197,6 +230,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     rms_error,
     seed_basis,
     seed_profiles,
+    seed_weights,
     seeded_rows,
     solve_equilibrium,
     stencil_weights,
@@ -247,11 +281,12 @@ matrix as the seeds with the marched rows taken out, which is what separates
 the seed rows from their smaller stencil), and the seeds with the warp on and
 off (H7). ``naive`` and ``construction`` are E4.3's cached entries, reread."""
 
-EXTRA_LABELS = ("construction-flat",)
+EXTRA_LABELS = ("construction-flat", "tangential", "tangential-plain")
 """Lines ``--operators`` offers beyond the default six: E2.3 with its interface
 expansion off (``curvature=False``, EABE Fig. 10's "linear interface"), which is
 ``construction`` bit for bit on flat lines and the δ = 0 limit route (a) is
-measured against on a curved one (E4.7, §4.6)."""
+measured against on a curved one (E4.7, §4.6); and E4.11's tangential chain
+(§3.10), warped and plain, the seeds in the foot curve's own coordinates."""
 
 SEEDS_PLAIN = "#7fb3d5"
 """The seeds' ablation: the same blue as the seeds, lighter (``plotting``'s key,
@@ -263,6 +298,15 @@ DIRECT_REACH = "#bcbcbc"
 CONSTRUCTION_FLAT = "#c2a5cf"
 """E2.3 with the flat interface: the construction's purple, lighter."""
 
+TANGENTIAL = "#17becf"
+"""The tangential seeds (E4.11): a cyan beside the seeds' blue, which the dataviz
+validator separates from it, the naive orange and the construction's purple
+(normal-vision ΔE ≥ 20, colour-blind ΔE ≥ 18); every line keeps its marker."""
+
+TANGENTIAL_PLAIN = "#9edae5"
+"""Their plain-Gaussian ablation, lighter, as ``SEEDS_PLAIN`` is the seeds'; the
+tangential figure draws it only as the warp panel's ratio."""
+
 STYLE = {
     "naive": (NAIVE, "o"),
     "construction": (CONSTRUCTION, "s"),
@@ -271,6 +315,8 @@ STYLE = {
     "seeds": (AWARE, "^"),
     "seeds-plain": (SEEDS_PLAIN, "v"),
     "construction-flat": (CONSTRUCTION_FLAT, "x"),
+    "tangential": (TANGENTIAL, "P"),
+    "tangential-plain": (TANGENTIAL_PLAIN, "X"),
 }
 """Colour and marker per line, E4.5's driver's."""
 
@@ -330,11 +376,16 @@ CURVED_DELTAS = (0.0, 0.01, 0.005, 0.0025)
 CURVED_CACHE = "heat2d_stiff_curved.json"
 CURVED_CACHE_META = {
     "study": "E4.7 sine bands with tanh edges against the product-grid references",
-    "version": 1,
+    "version": 2,
     "reference": ["product grid", PRODUCT_N_X, REFERENCE_N_CHEB, REFERENCE_MAX_WIDTH],
     "naive_ordering": PRODUCT_ORDERING,
 }
-"""Its own file, so that nothing here can move E4.3's and E4.6's case-1 entries."""
+"""Its own file, so that nothing here can move E4.3's and E4.6's case-1 entries.
+
+Version 2 is E4.11's tangential chain with every seed to level 4 (#81): a file
+from before it may hold the first level cutoff's ``tangential`` entries under
+the same labels, and is refused whole. Bump it after any change to either
+chain, the tangential series or their sampling, as ``KNEE_CACHE_META`` says."""
 
 CASE2_REFERENCE = "heat2d_case2_reference_n160000_seed0.npz"
 """E2.6's cached 160,000-node jump-aware run, which the δ = 0 product grid checks."""
@@ -714,8 +765,10 @@ def _solve(problem, op, nodes, ref, t_end, permc_spec=None) -> tuple[np.ndarray,
     return u, t_end
 
 
-def seed_label(warp: bool = True, reach: float = TANH_REACH) -> str:
-    """The cache label of one seed line: the warp, and the reach when it is not 20 δ.
+def seed_label(
+    warp: bool = True, reach: float = TANH_REACH, tangential: bool = False
+) -> str:
+    """The cache label of one seed line: the chain, the warp, the reach if not 20 δ.
 
     Everything the seed rows depend on beyond (problem, δ, n, seed,
     iterations) rides in the label, so that ``KNEE_CACHE_META`` — and with
@@ -723,7 +776,8 @@ def seed_label(warp: bool = True, reach: float = TANH_REACH) -> str:
     (§3.8's cache trap, and §4.4's "a flag that moves the numbers and not
     the key gives the earlier run's answer back in silence").
     """
-    name = "seeds" if warp else "seeds-plain"
+    name = "tangential" if tangential else "seeds"
+    name = name if warp else f"{name}-plain"
     return name if reach == TANH_REACH else f"{name}-r{reach:g}"
 
 
@@ -734,6 +788,7 @@ def seed_operators(
     warps: Sequence[bool],
     reach: float = TANH_REACH,
     shape: float = GA_SHAPE,
+    tangential: bool = False,
 ) -> tuple[dict[bool, sp.csr_array], int]:
     """``({warp: L}, the seeded rows)``: ``seed_operator``'s loop, one march per row.
 
@@ -742,7 +797,8 @@ def seed_operators(
     row, everything the operator costs — does not depend on the warp. So the
     ablation is built here from one ``seed_basis`` per row and one
     ``weights_of`` per warp, which halves the sweep's marches. With a single
-    warp it is ``seed_operator`` exactly (a test pins that).
+    warp it is ``seed_operator`` exactly (a test pins that). ``tangential``
+    marches §3.10's chain (E4.11).
     """
     # Unlike ``seed_operator`` this takes no ``region_index`` shortcut for a
     # material without interfaces: the sweep only ever passes a ``SmoothBand``.
@@ -753,7 +809,7 @@ def seed_operators(
             continue
         seen = seeded_rows(nodes, medium, g.index, reach)
         for row, idx in zip(g.rows[seen], g.index[seen], strict=True):
-            sb = seed_basis(nodes.xy[idx], medium, g.spec.degree)
+            sb = seed_basis(nodes.xy[idx], medium, g.spec.degree, tangential=tangential)
             seeded += 1
             for warp, op in ops.items():
                 op[row, :] = 0.0
@@ -780,7 +836,11 @@ def sweep_operators(
     the build took, which the tables quote. ``domain`` is the geometry's
     (case 1 by default); only its material is replaced.
     """
-    warps = [w for w in (True, False) if seed_label(w, reach) in labels]
+    families = {
+        chain: [w for w in (True, False) if seed_label(w, reach, chain) in labels]
+        for chain in (False, True)
+    }
+    marched = {seed_label(w, reach, c) for c in (False, True) for w in (True, False)}
     built: dict[str, tuple[sp.csr_array, str | None, dict[str, float]]] = {}
     seed_group: list[Stencils] = []
 
@@ -803,7 +863,7 @@ def sweep_operators(
         )
 
     for label in labels:
-        if label in {seed_label(w, reach) for w in (True, False)}:
+        if label in marched:
             continue
         t0 = time.perf_counter()
         rows, permc = 0, None
@@ -832,14 +892,16 @@ def sweep_operators(
             known = (*SWEEP_LABELS, *EXTRA_LABELS)
             raise ValueError(f"unknown line {label!r}; one of {known}")
         built[label] = (op, permc, {"rows": rows, "seconds": time.perf_counter() - t0})
-    if warps:
+    for chain, warps in families.items():
+        if not warps:
+            continue
         t0 = time.perf_counter()
         ops, seeded = seed_operators(
-            nodes, medium, stencils_of_the_rule(), warps, reach
+            nodes, medium, stencils_of_the_rule(), warps, reach, tangential=chain
         )
         seconds = (time.perf_counter() - t0) / len(warps)
         for warp in warps:
-            built[seed_label(warp, reach)] = (
+            built[seed_label(warp, reach, chain)] = (
                 ops[warp],
                 None,
                 {"rows": seeded, "seconds": seconds},
@@ -1861,7 +1923,7 @@ def print_regression(results: dict[float, list[dict]], seeds: str, title: str) -
     """H4's δ = 0 half: the seed line against the construction's, which is E2.4's."""
     rows = results[0.0]
     print(f"\n{title}")
-    print("     n       h |  seeds          construction   |  relative distance")
+    print(f"     n       h |  {seeds:<15}construction   |  relative distance")
     for r in rows:
         built = r["construction/rms"]
         distance = abs(r[f"{seeds}/rms"] - built) / built
@@ -1888,9 +1950,12 @@ def _counts_axis(ax, n: np.ndarray) -> None:
 
 def _style(label: str) -> tuple[str, str]:
     """``STYLE``'s colour and marker for a line, its ``--seed-reach`` suffix aside."""
-    if label.startswith("seeds-plain"):
-        return STYLE["seeds-plain"]
-    return STYLE["seeds"] if label.startswith("seeds") else STYLE[label]
+    for chain in ("seeds", "tangential"):
+        if label.startswith(f"{chain}-plain"):
+            return STYLE[f"{chain}-plain"]
+        if label.startswith(chain):
+            return STYLE[chain]
+    return STYLE[label]
 
 
 def plot_seeds(
@@ -1900,6 +1965,7 @@ def plot_seeds(
     plain: str,
     path: Path,
     title: str | None = None,
+    lines: Sequence[str] | None = None,
 ) -> None:
     """Top: the lines at three widths; bottom: the seeds, the rule, and the warp.
 
@@ -1909,8 +1975,12 @@ def plot_seeds(
     the bottom row the seeds' own lines at every δ (elliptic solid, parabolic
     dashed, with an ``h⁴`` guide), the seeds over the naive and direct lines
     against ``h/δ`` (the rule: no threshold, and the resolved-edge penalty),
-    and the warp's factor against N.
+    and the warp's factor against N. ``seeds`` and ``plain`` are the main
+    line and its ablation, drawn in their own colours (the tangential chain's
+    cyan in E4.11's figure); ``lines`` (default ``labels``) are the top row's
+    and the legend's, which E4.11 thins to five so that no two blues crowd.
     """
+    lines = list(labels if lines is None else lines)
     elliptic = results["elliptic"]
     positive = [d for d in elliptic if d > 0]
     widths = sorted(positive)
@@ -1926,7 +1996,7 @@ def plot_seeds(
     for ax, delta in zip(axes[0], shown, strict=False):
         rows = elliptic[delta]
         n = np.array([r["n"] for r in rows], dtype=float)
-        for label in labels:
+        for label in lines:
             colour, marker = _style(label)
             ax.loglog(
                 n,
@@ -1952,7 +2022,7 @@ def plot_seeds(
                 [r["n"] for r in rows],
                 [r[f"{seeds}/rms"] for r in rows],
                 style,
-                color=AWARE,
+                color=_style(seeds)[0],
                 marker=marker,
                 ms=4,
                 lw=0.9 if marker else 0.7,
@@ -1996,7 +2066,7 @@ def plot_seeds(
         ax.semilogx(
             [r["n"] for r in rows],
             [r[f"{plain}/rms"] / r[f"{seeds}/rms"] for r in rows],
-            color=SEEDS_PLAIN,
+            color=_style(plain)[0],
             marker=_marker(delta, positive),
             ms=4,
             lw=0.9,
@@ -2020,7 +2090,7 @@ def plot_seeds(
             ms=5,
             label=label,
         )
-        for label in labels
+        for label in lines
     ]
     handles += [
         Line2D([], [], color=CONSTRUCTION, ls=":", label="floor: ref. δ − ref. 0"),
@@ -2075,7 +2145,11 @@ def print_probe(
     (no bulk at all where 20 δ covers the strip) prints "-".
     """
     print(f"\n{title}")
-    shown = [label for label in (seeds, "construction", "naive") if label in labels]
+    shown = [
+        label
+        for label in dict.fromkeys((seeds, "seeds", "construction", "naive"))
+        if label in labels
+    ]
     for delta, rows in results.items():
         if f"{seeds}/probe_seeded" not in rows[0]:
             continue
@@ -2114,7 +2188,10 @@ def flat_comparison(
 
     The ticket's "curved numbers compared with the flat ones at equal δ":
     every line of ``labels`` that case 1's cache holds at the same count,
-    seed and repulsion steps; a missing entry is skipped.
+    seed and repulsion steps; a missing entry is skipped. A tangential line
+    (E4.11) is read over case 1's seed line of the same warp and reach
+    (``flat_twin``): on flat lines the two are the same rows to the march's
+    tolerance (§3.10, a test), and H16 asks for exactly that ratio.
     """
     flat = load_knee_cache(outputs)
     rows = []
@@ -2123,12 +2200,18 @@ def flat_comparison(
             for r in entries:
                 row = {"problem": problem, "delta": delta, "n": r["n"]}
                 for label in labels:
-                    k = knee_key(problem, delta, r["n"], label, seed, iterations, t_end)
+                    twin = flat_twin(label)
+                    k = knee_key(problem, delta, r["n"], twin, seed, iterations, t_end)
                     if k in flat and f"{label}/rms" in r:
                         row[f"flat/{label}"] = flat[k]["rms"]
                         row[f"curved/{label}"] = r[f"{label}/rms"]
                 rows.append(row)
     return rows
+
+
+def flat_twin(label: str) -> str:
+    """Case 1's line a curved line is read over: itself, or a tangential one's seeds."""
+    return label.replace("tangential", "seeds", 1)
 
 
 def print_flat_comparison(
@@ -2156,11 +2239,16 @@ def print_flat_comparison(
         print(line)
 
 
-def figure_name(geometry: Geometry) -> str:
-    """``heat2d_stiff_seeds.png`` for case 1, the geometry's tag in it otherwise."""
+def figure_name(geometry: Geometry, tangential: bool = False) -> str:
+    """``heat2d_stiff_seeds.png`` for case 1, the geometry's tag in it otherwise.
+
+    With the tangential chain as the sweep's main line (E4.11) ``seeds``
+    becomes ``tangential``, so E4.6's and E4.7's figures are never overwritten.
+    """
+    stem = "heat2d_stiff_tangential" if tangential else "heat2d_stiff_seeds"
     if geometry.is_case1:
-        return "heat2d_stiff_seeds.png"
-    return f"heat2d_stiff_seeds_{geometry.tag.replace(' ', '_')}.png"
+        return f"{stem}.png"
+    return f"{stem}_{geometry.tag.replace(' ', '_')}.png"
 
 
 def run_seeds(args) -> dict:
@@ -2168,18 +2256,25 @@ def run_seeds(args) -> dict:
 
     On another geometry than case 1 (E4.7) the same sweep against the product
     grid, without E4.3's straddling-row readings, with H9's truncation probe
-    and the curved lines over case 1's at equal (δ, n).
+    and the curved lines over case 1's at equal (δ, n). With the
+    ``tangential`` line (E4.11, §3.10) the tangential chain is the sweep's
+    main line: the ratios, H7's warp, H8's penalty, the δ = 0 comparison with
+    E2.3, the probe and the figure are its, route (a) one of the lines.
     """
     t0 = time.perf_counter()
     geometry = args.geometry
     reach = args.seed_reach
-    labels = [
-        seed_label(label == "seeds", reach) if label.startswith("seeds") else label
-        for label in args.operators
-    ]
-    seeds, plain = seed_label(True, reach), seed_label(False, reach)
-    if seeds not in labels:
-        raise ValueError(f"the sweep needs the {seeds!r} line; got {labels}")
+    marched = {
+        seed_label(w, TANH_REACH, c): seed_label(w, reach, c)
+        for c in (False, True)
+        for w in (True, False)
+    }
+    labels = [marched.get(label, label) for label in args.operators]
+    if seed_label(True, reach) not in labels:
+        raise ValueError(f"the sweep needs the {seed_label(True, reach)!r} line")
+    tangential = seed_label(True, reach, True) in labels
+    seeds = seed_label(True, reach, tangential)
+    plain = seed_label(False, reach, tangential)
     cache = load_knee_cache(args.outputs, geometry)
     results = knee_sweep(
         args.counts,
@@ -2195,10 +2290,11 @@ def run_seeds(args) -> dict:
     )
     save_knee_cache(args.outputs, cache, geometry)
     tables: dict = {"sweep": results}
+    chain = "the tangential chain" if tangential else "route (a)"
     where = (
         "case 1's tanh edges"
         if geometry.is_case1
-        else f"the tanh edges of {geometry.name} (route (a))"
+        else f"the tanh edges of {geometry.name} ({chain})"
     )
     against = "the separable reference" if geometry.is_case1 else "the product grid"
     if not geometry.is_case1:
@@ -2261,9 +2357,13 @@ def run_seeds(args) -> dict:
                 f"H4 at δ = 0, {what}: the seed operator is the construction there"
                 " (E2.3's rows), so the line is port notes §2.4–2.5's"
                 if geometry.is_case1
-                else f"route (a) at δ = 0 against the curved construction, {what}:"
-                " E2.3 carries the curvature and alpha's Taylor table, the frozen"
-                " profile neither",
+                else f"{chain} at δ = 0 against the curved construction, {what}:"
+                " E2.3 carries the curvature and alpha's Taylor table, "
+                + (
+                    "the tangential chain both in its ξ-series (H15)"
+                    if tangential
+                    else "the frozen profile neither"
+                ),
             )
         if problem == "elliptic":
             print_probe(
@@ -2284,13 +2384,21 @@ def run_seeds(args) -> dict:
                 " flat (E4.3–E4.6's cache), curved, and curved ÷ flat",
             )
     args.outputs.mkdir(parents=True, exist_ok=True)
+    # E4.11's figure keeps one line per role in its top row: the ablations
+    # (the two plain lines, direct-reach) are the tables' and the warp panel's.
+    top = (
+        [r for r in labels if "-plain" not in r and r != "direct-reach"]
+        if tangential
+        else None
+    )
     plot_seeds(
         results,
         labels,
         seeds,
         plain,
-        args.outputs / figure_name(geometry),
-        None if geometry.is_case1 else f"{geometry.name}: route (a) seeds",
+        args.outputs / figure_name(geometry, tangential),
+        None if geometry.is_case1 else f"{geometry.name}: {chain} seeds",
+        top,
     )
     cache_name, _ = geometry.cache()
     print(
@@ -2300,11 +2408,269 @@ def run_seeds(args) -> dict:
     return tables
 
 
+# --- E4.11: the tangential chain's own tables ---------------------------------------
+
+
+TANGENTIAL_CIRCLES = (0.25, 0.35)
+"""H14's two circles about the strip's centre (#81's scratch), 0.2 between them and
+1 outside, so that ``RingMode`` is an exact equilibrium through both."""
+
+CIRCLES_FROM = 2500
+"""The circles' smallest count: at 1250 nodes the inner circle's curvature 4 takes
+a stencil's normal line to 0.81 of its focal distance, past ``FOOT_CURVATURE``,
+and the seeds refuse it (§3.10's scope)."""
+
+
+def circles_problem() -> tuple[Domain, RingMode]:
+    """The concentric circles with constant pieces, and the mode exact through them."""
+    band = Band(
+        *(Circle(r) for r in TANGENTIAL_CIRCLES), Constant2D(0.2), Constant2D(1.0)
+    )
+    return Domain(band, band.interfaces, STRIP), RingMode(
+        TANGENTIAL_CIRCLES, (1.0, 0.2, 1.0), mode=2
+    )
+
+
+def crossing_rows(nodes: NodeSet, domain: Domain) -> np.ndarray:
+    """``(m, 30)`` node indices of E2.3's crossing stencils on ``domain``."""
+    stencils = build_stencils(nodes, domain, interface=BOUNDARY)
+    (group,) = [g for g in stencils.groups if g.kind == INTERFACE_KIND]
+    return group.index[interface_crossings(nodes, domain.material, group.index)]
+
+
+def circle_probe_rows(counts: Sequence[int], seed: int, iterations: int) -> list[dict]:
+    """H14: E2.3's, route (a)'s and the tangential rows on ``RingMode`` (§3.10).
+
+    The mode solves ``L u = 0`` through both circles, so each crossing row
+    applied to it at the nodes is that row's truncation error; the RMS over
+    the rows per count, and what a tangential row costs.
+    """
+    domain, mode = circles_problem()
+    band = domain.material
+    rows = []
+    for n in (n for n in counts if n >= CIRCLES_FROM):
+        nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
+        values: dict[str, list[float]] = {
+            "construction": [],
+            "seeds": [],
+            "tangential": [],
+        }
+        seconds = 0.0
+        for idx in crossing_rows(nodes, domain):
+            xy = nodes.xy[idx]
+            u = mode(xy[:, 0], xy[:, 1])
+            values["construction"].append(stencil_weights(xy, band, 4) @ u)
+            values["seeds"].append(seed_weights(xy, band) @ u)
+            t0 = time.perf_counter()
+            values["tangential"].append(seed_weights(xy, band, tangential=True) @ u)
+            seconds += time.perf_counter() - t0
+        row = {"n": n, "h": nodes.h, "rows": len(values["seeds"])}
+        for label, v in values.items():
+            row[label] = float(np.sqrt(np.mean(np.square(v))))
+        row["ms"] = 1e3 * seconds / max(row["rows"], 1)
+        rows.append(row)
+    return rows
+
+
+def span_rows(counts: Sequence[int], seed: int, iterations: int) -> list[dict]:
+    """H15's span half: the tangential block against E2.3's translated basis, case 2.
+
+    At δ = 0 on every crossing stencil, the sine of the largest principal
+    angle between the two 15-column spans at the 30 nodes; on case 1 they are
+    one span to rounding (H2, §4.3), on a curved or tangentially varying edge
+    two approximations of one space, whose distance should fall with h.
+    """
+    domain = case2()
+    band = domain.material
+    rows = []
+    for n in counts:
+        nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
+        angles = []
+        for idx in crossing_rows(nodes, domain):
+            xy = nodes.xy[idx]
+            tb = seed_basis(xy, band, tangential=True)
+            basis = interface_stencil(xy, band, 4).polynomial_block()
+            angles.append(np.sin(subspace_angles(basis, tb.block).max()))
+        rows.append(
+            {
+                "n": n,
+                "h": nodes.h,
+                "stencils": len(angles),
+                "median": float(np.median(angles)),
+                "max": float(np.max(angles)),
+            }
+        )
+    return rows
+
+
+TANGENTIAL_SPECTRUM_N = 1600
+"""The node set of the tangential spectra (H6's twin on case 2): dense eigenvalues
+of the interior operator in about a second each."""
+
+
+def spectrum_rows(seed: int, iterations: int) -> list[dict]:
+    """The interior spectra of the seed operators on case 2, per δ (H6's twin).
+
+    Route (a) and the tangential chain, warped and plain (one march per row for
+    both warps, ``seed_operators``), and E2.3's curved rows at δ = 0: the
+    rightmost eigenvalue, the leftmost and the largest imaginary part in units of
+    ``h⁻²``, and how many sit right of the axis. The parabolic sweep marches BD4
+    on these operators; a positive eigenvalue would be its growing mode.
+    """
+    domain = case2()
+    nodes = build_node_set(
+        domain, TANGENTIAL_SPECTRUM_N, seed=seed, iterations=iterations
+    )
+    h2 = nodes.h**2
+    rows = []
+    for delta in CURVED_DELTAS:
+        medium = SmoothBand(domain.material, delta)
+        stencils = build_stencils(
+            nodes,
+            replace(domain, material=medium),
+            interface=BOUNDARY,
+            reach=TANH_REACH,
+        )
+        ops = {"seeds": seed_operators(nodes, medium, stencils, (True,))[0][True]}
+        both, _ = seed_operators(
+            nodes, medium, stencils, (True, False), tangential=True
+        )
+        ops["tangential"], ops["tangential-plain"] = both[True], both[False]
+        if delta == 0.0:
+            crossing = build_stencils(nodes, domain, interface=BOUNDARY)
+            ops["construction"] = interface_aware_operator(nodes, medium, crossing)
+        for label, op in ops.items():
+            lam = interior_eigenvalues(op, nodes)
+            rows.append(
+                {
+                    "delta": delta,
+                    "operator": label,
+                    "max_re": float(lam.real.max()),
+                    "min_re_h2": float(h2 * lam.real.min()),
+                    "max_im_h2": float(h2 * np.abs(lam.imag).max()),
+                    "positive": int((lam.real > 0.0).sum()),
+                }
+            )
+    return rows
+
+
+TANGENTIAL_TIMING = (10000, 400)
+"""H17's timing: the node set and how many seeded rows per width, E4.7's (§4.6)."""
+
+
+def timing_table(seed: int, iterations: int) -> list[dict]:
+    """H17: the median ``seed_basis`` per width on case 2, route (a) and tangential.
+
+    Evenly spaced rows among those the rule seeds at each δ, each basis built
+    once per chain; times on a quiet machine are what the notes quote (§4.6's
+    lesson: concurrent runs inflate them).
+    """
+    n, count = TANGENTIAL_TIMING
+    domain = case2()
+    nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
+    rows = []
+    for delta in CURVED_DELTAS:
+        medium = SmoothBand(domain.material, delta)
+        stencils = build_stencils(
+            nodes,
+            replace(domain, material=medium),
+            interface=BOUNDARY,
+            reach=TANH_REACH,
+        )
+        (group,) = [g for g in stencils.groups if g.kind == INTERFACE_KIND]
+        index = group.index[seeded_rows(nodes, medium, group.index, TANH_REACH)]
+        index = index[:: max(1, len(index) // count)][:count]
+        times: dict[bool, list[float]] = {False: [], True: []}
+        for idx in index:
+            for chain in (False, True):
+                t0 = time.perf_counter()
+                seed_basis(nodes.xy[idx], medium, tangential=chain)
+                times[chain].append(1e3 * (time.perf_counter() - t0))
+        rows.append(
+            {
+                "delta": delta,
+                "rows": len(index),
+                "flat_ms": float(np.median(times[False])),
+                "tangential_ms": float(np.median(times[True])),
+            }
+        )
+    return rows
+
+
+def print_tangential(tables: dict) -> None:
+    rows = tables["circles"]
+    print(
+        "\nH14, the concentric circles 0.25 and 0.35 (0.2 between, 1 outside):"
+        " RMS of L u over E2.3's crossing rows on RingMode, order per halving of h"
+        f" (from {CIRCLES_FROM} nodes: FOOT_CURVATURE)"
+    )
+    columns = {k: _with_rates(rows, k) for k in ("construction", "seeds", "tangential")}
+    print(
+        "       n  rows |  E2.3 curved         route (a)            tangential"
+        "           | ms a tangential row"
+    )
+    for i, r in enumerate(rows):
+        print(
+            f"  {r['n']:6d} {r['rows']:5d} |  {columns['construction'][i]:<20}"
+            f" {columns['seeds'][i]:<20} {columns['tangential'][i]:<20} |"
+            f" {r['ms']:8.1f}"
+        )
+    print(
+        "  fit          |  "
+        + "".join(f"{_fit(rows, k):<21.2f}" for k in ("construction", "seeds"))
+        + f"{_fit(rows, 'tangential'):<20.2f} |"
+    )
+    rows = tables["span"]
+    print(
+        "\nH15, case 2 at δ = 0: sin of the largest principal angle between the"
+        " tangential span and E2.3's translated basis over every crossing stencil"
+    )
+    print("       n  stencils |  median               max")
+    median = _with_rates(rows, "median")
+    for i, r in enumerate(rows):
+        print(f"  {r['n']:6d} {r['stencils']:9d} |  {median[i]:<20} {r['max']:.2e}")
+    print(
+        f"\nH6 on case 2, {TANGENTIAL_SPECTRUM_N} nodes: the interior spectrum of each"
+        " seed operator per δ (h² scales the extremes)"
+    )
+    print("       δ  operator          |   max Re   h² min Re   h² max |Im|   Re > 0")
+    for r in tables["spectra"]:
+        print(
+            f"  {r['delta']:6.4f}  {r['operator']:<17} | {r['max_re']:8.3f}"
+            f" {r['min_re_h2']:11.2f} {r['max_im_h2']:13.3f} {r['positive']:8d}"
+        )
+    n, _ = TANGENTIAL_TIMING
+    print(
+        f"\nH17 on case 2, {n} nodes: the median seed_basis per seeded row (ms),"
+        " route (a) and tangential (quote only from a quiet machine)"
+    )
+    print("       δ   rows |  route (a)  tangential   ratio")
+    for r in tables["timing"]:
+        print(
+            f"  {r['delta']:6.4f} {r['rows']:6d} | {r['flat_ms']:9.1f}"
+            f" {r['tangential_ms']:11.1f} {r['tangential_ms'] / r['flat_ms']:7.1f}"
+        )
+
+
+def run_tangential(args) -> dict:
+    """E4.11's own tables (§3.10's H14, H15's span half); the sweep is ``seeds``'s."""
+    t0 = time.perf_counter()
+    tables = {
+        "circles": circle_probe_rows(args.counts, args.seed, args.iterations),
+        "span": span_rows(args.counts, args.seed, args.iterations),
+        "spectra": spectrum_rows(args.seed, args.iterations),
+        "timing": timing_table(args.seed, args.iterations),
+    }
+    print_tangential(tables)
+    print(f"\ntangential tables {time.perf_counter() - t0:.1f} s")
+    return {"tangential": tables}
+
+
 def main(argv: Sequence[str] | None = None) -> dict:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
         "--mode",
-        choices=("all", "references", "naive", "stencils", "seeds"),
+        choices=("all", "references", "naive", "stencils", "seeds", "tangential"),
         default="all",
     )
     parser.add_argument(
@@ -2364,6 +2730,9 @@ def main(argv: Sequence[str] | None = None) -> dict:
         args.deltas = list(STUDY_DELTAS if args.geometry.is_case1 else CURVED_DELTAS)
     if not args.geometry.is_case1 and args.mode not in ("references", "seeds"):
         parser.error("another geometry than case 1 runs --mode references or seeds")
+    increasing = list(args.counts) == sorted(set(args.counts))
+    if args.mode == "tangential" and (min(args.counts) < 300 or not increasing):
+        parser.error("give increasing counts of 300 nodes or more")
     if args.mode in ("all", "naive", "seeds"):
         if any(n < 300 for n in args.counts) or list(args.counts) != sorted(
             set(args.counts)
@@ -2390,6 +2759,8 @@ def main(argv: Sequence[str] | None = None) -> dict:
         tables.update(run_stencils(args))
     if args.mode == "seeds":
         tables.update(run_seeds(args))
+    if args.mode == "tangential":
+        tables.update(run_tangential(args))
     return tables
 
 

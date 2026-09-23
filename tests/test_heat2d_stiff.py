@@ -24,6 +24,7 @@ from heat2d_stiff import (  # noqa: E402
     Geometry,
     curve_level,
     edge_diagnostics,
+    flat_twin,
     knee_key,
     load_knee_cache,
     main,
@@ -260,6 +261,11 @@ def test_seed_label_carries_the_warp_and_a_non_default_reach():
     assert seed_label(True) == "seeds" and seed_label(False) == "seeds-plain"
     assert seed_label(True, 5.0) == "seeds-r5"
     assert seed_label(False, 5.0) == "seeds-plain-r5"
+    # E4.11's chain rides in the label too, and is read over case 1's seeds.
+    assert seed_label(True, tangential=True) == "tangential"
+    assert seed_label(False, 5.0, True) == "tangential-plain-r5"
+    assert flat_twin("tangential-plain-r5") == "seeds-plain-r5"
+    assert flat_twin("construction") == "construction"
 
 
 def test_seed_operators_build_both_warps_from_one_march():
@@ -400,6 +406,22 @@ def test_the_geometries_keep_case_ones_keys_and_cache():
         Geometry(0.02, "linear")
 
 
+def test_a_curved_cache_from_before_the_level_cutoff_is_refused(tmp_path):
+    # E4.11's review: the tangential labels do not say which level cutoff
+    # built them, so the file's version does. A version-1 file (E4.7's, or the
+    # first cutoff's) is refused whole rather than read back in silence.
+    two = Geometry(0.02, "sine")
+    key = knee_key("elliptic", 0.0, 1250, "tangential", 0, 100, 0.1, two.tag)
+    cache = {key: {"rms": 1.25e-4}}
+    save_knee_cache(tmp_path, cache, two)
+    assert load_knee_cache(tmp_path, two) == cache
+    assert CURVED_CACHE_META["version"] == 2
+    data = json.loads((tmp_path / CURVED_CACHE).read_text())
+    data["meta"] = {**CURVED_CACHE_META, "version": 1}
+    (tmp_path / CURVED_CACHE).write_text(json.dumps(data))
+    assert load_knee_cache(tmp_path, two) == {}
+
+
 def test_the_curved_sweep_at_the_two_smallest_counts(tmp_path, capsys):
     # E4.7 (#38), stiff note §4.6: route (a) on case 2. At δ = 0 the
     # construction is E2.6's curved line (3.06e-5 at 1250 nodes, now against
@@ -444,6 +466,86 @@ def test_the_curved_sweep_at_the_two_smallest_counts(tmp_path, capsys):
             assert r["seeds/rms"] < r["construction/rms"]
     again = main(argv)
     assert again["sweep"] == tables["sweep"]
+
+
+def test_the_tangential_line_on_the_curved_sweep(tmp_path, capsys):
+    # E4.11 (#81), stiff note §3.10 and §4.7: the tangential chain as the
+    # sweep's main line, beside route (a). At 1250 nodes it is the coarsest
+    # point of its line (1.25e-4 at δ = 0, 4× E2.3's); what the test pins is
+    # the probe: its crossing rows converge between 900 and 1250 nodes where
+    # route (a)'s stall, and its figure and labels are its own, E4.7's
+    # untouched.
+    argv = [
+        "--mode",
+        "seeds",
+        "--amplitude",
+        "0.02",
+        "--counts",
+        "900",
+        "1250",
+        "--deltas",
+        "0",
+        "0.0025",
+        "--operators",
+        "construction",
+        "seeds",
+        "tangential",
+        "tangential-plain",
+        "--outputs",
+        str(tmp_path),
+    ]
+    tables = main(argv)
+    out = capsys.readouterr().out
+    assert "the tanh edges of case 2 (the tangential chain)" in out
+    assert "the tangential chain at δ = 0 against the curved construction" in out
+    assert (tmp_path / "heat2d_stiff_tangential_a0.02_sine.png").exists()
+    assert not (tmp_path / "heat2d_stiff_seeds_a0.02_sine.png").exists()
+    elliptic = tables["sweep"]["elliptic"]
+    jump = {r["n"]: r for r in elliptic[0.0]}
+    assert jump[1250]["tangential/rms"] == pytest.approx(1.253e-4, rel=1e-3)
+    assert jump[1250]["seeds/rms"] == pytest.approx(3.804e-4, rel=1e-3)
+    for delta in (0.0, 0.0025):
+        rows = elliptic[delta]
+        chain = [r["tangential/probe_crossing"] for r in rows]
+        frozen = [r["seeds/probe_crossing"] for r in rows]
+        assert chain[1] / chain[0] < 0.65 and frozen[1] / frozen[0] > 0.75
+        assert chain[1] < 0.6 * frozen[1]
+    ratios = tables["ratios/elliptic"]
+    assert all("over/tangential-plain" in r for r in ratios)
+    again = main(argv)
+    assert again["sweep"] == tables["sweep"]
+
+
+def test_the_tangential_tables(capsys, monkeypatch):
+    # E4.11's own tables: H14 on the concentric circles (from 2500 nodes, the
+    # focal-distance guard), H15's span distance on case 2, and H6's twin on
+    # case 2 (here on 900 nodes at two widths; the documented run is 1600 at
+    # the four).
+    import heat2d_stiff
+
+    monkeypatch.setattr(heat2d_stiff, "TANGENTIAL_SPECTRUM_N", 900)
+    monkeypatch.setattr(heat2d_stiff, "TANGENTIAL_TIMING", (1250, 10))
+    monkeypatch.setattr(heat2d_stiff, "CURVED_DELTAS", (0.0, 0.0025))
+    tables = main(["--mode", "tangential", "--counts", "1250", "2500"])["tangential"]
+    out = capsys.readouterr().out
+    assert "H14, the concentric circles" in out and "H15, case 2" in out
+    (circle,) = tables["circles"]
+    assert circle["n"] == 2500
+    assert circle["tangential"] == pytest.approx(3.81e-3, rel=0.01)
+    assert circle["tangential"] < 0.3 * circle["construction"] < circle["seeds"]
+    assert [r["n"] for r in tables["span"]] == [1250, 2500]
+    assert tables["span"][1]["median"] < 0.8 * tables["span"][0]["median"]
+    # H6's twin: no seed operator on case 2 has an eigenvalue right of the axis,
+    # and the warped rows' spectrum is E2.3's at δ = 0 (max Re −7.18, 2026-09-22).
+    spectra = tables["spectra"]
+    assert all(r["positive"] == 0 for r in spectra)
+    at_zero = {r["operator"]: r for r in spectra if r["delta"] == 0.0}
+    for label in ("seeds", "tangential"):
+        assert at_zero[label]["max_re"] == pytest.approx(
+            at_zero["construction"]["max_re"], abs=0.01
+        )
+    assert [r["rows"] for r in tables["timing"]] == [10, 10]
+    assert all(r["tangential_ms"] > 0 for r in tables["timing"])
 
 
 def test_the_curved_reference_table(tmp_path, capsys):
