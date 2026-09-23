@@ -68,6 +68,10 @@ class Curve(Protocol):
 
     def curvature(self, s: np.ndarray) -> np.ndarray: ...
 
+    def speed(self, s: np.ndarray) -> np.ndarray:
+        """``|γ′(s)|``, arc length per unit parameter (the tangential metric, §3.10)."""
+        ...
+
     def closest(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """Parameter of the point of the curve nearest ``(x, y)``."""
         ...
@@ -150,6 +154,10 @@ class _Graph:
     def curvature(self, s: np.ndarray) -> np.ndarray:
         (s,) = _as_float(s)
         return self.second(s) / (1.0 + self.slope(s) ** 2) ** 1.5
+
+    def speed(self, s: np.ndarray) -> np.ndarray:
+        (s,) = _as_float(s)
+        return np.sqrt(1.0 + self.slope(s) ** 2)
 
     def closest(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """Newton on ``(s - x) + (c(s) - y) c'(s) = 0`` from ``s = x``.
@@ -312,6 +320,12 @@ class Circle:
         # Counter-clockwise with the outward normal: the circle bends away
         # from +normal.
         return np.full_like(np.asarray(s, dtype=float), -1.0 / self.radius)
+
+    def speed(self, s: np.ndarray) -> np.ndarray:
+        return np.full_like(np.asarray(s, dtype=float), self.length)
+
+    def curvature_bound(self) -> float:
+        return 1.0 / self.radius
 
     def closest(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         x, y = _as_float(x, y)
@@ -590,6 +604,31 @@ class SmoothBand:
         _, gx, gy = self._blend(x, y)
         return gx, gy
 
+    def alpha_given(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        distances: tuple[float | np.ndarray, float | np.ndarray],
+    ) -> np.ndarray:
+        """``alpha`` at points whose signed distances to the two curves are known.
+
+        For the tangential chain's samples (E4.11, stiff note §3.10): along the
+        foot curve's coordinate lines the distance to that curve is the line's
+        ``d`` at every sample, and the other curve's is computed per sample, or
+        is ``±inf`` where its edge is saturated over the whole stencil
+        (``edge_blend`` returns the piece exactly there). ``_blend``'s steps in
+        its order, without the gradient, so with the same distances it is
+        ``alpha`` bit for bit. A jump has no edges to blend and is refused.
+        """
+        if self.delta == 0.0:
+            raise ValueError("a jump has no distances to blend: sample its pieces")
+        x, y = _as_float(x, y)
+        a = self.outside.alpha(x, y)
+        for piece, d in zip((self.inside, self.outside), distances, strict=True):
+            z = np.asarray(d, dtype=float) / self.delta
+            a, _ = edge_blend(a, piece.alpha(x, y), z)
+        return a
+
     def _blend(
         self, x: np.ndarray, y: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -626,13 +665,17 @@ class SmoothBand:
         on a curved foot curve the profile also carries the anchor's
         distance to it (``NormalProfile.foot``), exact along the line, and a
         line that would reach toward the curve's focal distance is refused
-        (``FOOT_CURVATURE``). The ring's circles are E4.8's (#39), marched as
-        widths.
+        (``FOOT_CURVATURE``). Circles about one centre (E4.11, #81, for the
+        tangential chain's ``RingMode`` check) have a radial normal line, so
+        their crossings and flanks are radial distances, exact; they are read
+        from the stored radii, and the ring's widths-from-the-outer-radius
+        rule (§3.6) stays E4.8's (#39). Graphs and circles together, or
+        circles about two centres, are refused.
         """
-        if not all(isinstance(c, _Graph) for c in self.interfaces):
+        graphs = all(isinstance(c, _Graph) for c in self.interfaces)
+        if not (graphs or _concentric(self.interfaces)):
             raise NotImplementedError(
-                "normal profiles cross graphs only; the ring's circles are "
-                "E4.8 (#39), marched as widths from the outer radius"
+                "normal profiles cross graphs, or circles about one centre"
             )
         curve = self.interfaces[j]
         s = curve.closest(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
@@ -655,6 +698,11 @@ class SmoothBand:
                 for f in flanks if self.delta > 0.0 else (0.0,):
                     stops.append(((other.c + f) - float(y)) / (scale * ny))
                 continue
+            if isinstance(other, Circle):
+                r = hypot(float(x) - other.cx, float(y) - other.cy)
+                for f in flanks if self.delta > 0.0 else (0.0,):
+                    stops.append((other.radius + f - r) / scale)
+                continue
             centre = _line_crossing(other, float(x), float(y), nx, ny, scale)
             px = float(x) + scale * centre * nx
             ox, oy = (float(c) for c in other.normal(np.array(px % PERIOD)))
@@ -672,6 +720,13 @@ class SmoothBand:
             regions = self.region_index(*line.point(probes))
             pieces = tuple(self.region_piece(int(r)) for r in regions)
         return replace(line, pieces=pieces)
+
+
+def _concentric(curves: tuple[Curve, ...]) -> bool:
+    """Whether every curve is a circle about one centre."""
+    return all(isinstance(c, Circle) for c in curves) and (
+        len({(c.cx, c.cy) for c in curves}) == 1
+    )
 
 
 def _line_crossing(

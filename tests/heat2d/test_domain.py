@@ -649,12 +649,69 @@ def test_alpha_function_is_the_profiles_alpha_per_segment(delta, inside):
     np.testing.assert_allclose(at, m.alpha(px, py), rtol=2e-16, atol=0)
 
 
-def test_normal_profile_refuses_the_ring_for_now():
-    # Sine graphs are route (a)'s (E4.7); the ring's circles are marched as
-    # widths from the outer radius, E4.8's.
-    m = SmoothBand(case3().material, 0.01)
-    with pytest.raises(NotImplementedError, match="E4.8"):
-        m.normal_profile(0, 0.3, 0.6, 0.08)
+@pytest.mark.parametrize("delta", (0.0, 0.004))
+def test_normal_profile_crosses_concentric_circles_radially(delta):
+    # E4.11 (§3.10, for H14's RingMode check): circles about one centre have a
+    # radial normal line, so both crossings and their flanks are radial
+    # distances, exact; the foot distance is carried as on a sine graph.
+    band = Band(Circle(0.25), Circle(0.35), Constant2D(0.2), Constant2D(1.0))
+    m = SmoothBand(band, delta)
+    x, y, h_s = 0.5 + 0.27 * np.cos(0.7), 0.5 + 0.27 * np.sin(0.7), 0.06
+    for j in (0, 1):
+        p = m.normal_profile(j, x, y, h_s)
+        np.testing.assert_allclose((p.nx, p.ny), (np.cos(0.7), np.sin(0.7)), atol=1e-15)
+        flanks = np.array([-EDGE_STOP, 0.0, EDGE_STOP]) * delta if delta else [0.0]
+        want = np.sort([(r + f - 0.27) / h_s for r in (0.25, 0.35) for f in flanks])
+        np.testing.assert_allclose(p.stops, want, rtol=0, atol=1e-14)
+        assert p.foot[0] == j
+        np.testing.assert_allclose(p.foot[1], 0.27 - (0.25, 0.35)[j], atol=1e-15)
+        # A point on a jump's stop is the segment above's (``NormalProfile``)
+        # and the closed band's (``Band``): only the smooth edges' are compared.
+        eta = np.linspace(-2.0, 2.0, 401)
+        if delta:
+            eta = np.concatenate([eta, p.stops])
+        np.testing.assert_allclose(p.alpha(eta), m.alpha(*p.point(eta)), rtol=1e-13)
+    if delta == 0.0:
+        assert p.pieces == (band.outside, band.inside, band.outside)
+
+
+def test_normal_profile_refuses_mixed_or_eccentric_curves():
+    for band in (
+        Band(FlatLine(0.3), Circle(0.2), Constant2D(0.2), Constant2D(1.0)),
+        Band(Circle(0.2), Circle(0.3, cx=0.52), Constant2D(0.2), Constant2D(1.0)),
+    ):
+        with pytest.raises(NotImplementedError, match="circles about one centre"):
+            SmoothBand(band, 0.01).normal_profile(0, 0.5, 0.75, 0.08)
+
+
+@pytest.mark.parametrize("curve", CURVES)
+def test_speed_is_the_arc_length_per_unit_parameter(curve):
+    # The tangential chain's metric (§3.10): |γ′| against a centred difference
+    # of the curve's own points, periodic in x on a graph.
+    step = 1e-5
+    px, py = curve.point(S + step)
+    qx, qy = curve.point(S - step)
+    chord = np.hypot(periodic_dx(px - qx), py - qy) / (2 * step)
+    np.testing.assert_allclose(curve.speed(S), chord, rtol=1e-9)
+
+
+@pytest.mark.parametrize("delta", (0.002, 0.01))
+def test_alpha_given_the_distances_is_alpha(delta):
+    # The tangential chain's samples (§3.10): the blend with both distances
+    # supplied is ``alpha`` bit for bit, and an infinite distance gives the
+    # piece on that side exactly.
+    m = SmoothBand(case2().material, delta)
+    rng = np.random.default_rng(3)
+    x, y = rng.uniform(0.0, 1.0, 400), rng.uniform(0.5, 0.9, 400)
+    d = tuple(c.signed_distance(x, y) for c in m.interfaces)
+    assert np.array_equal(m.alpha_given(x, y, d), m.alpha(x, y))
+    inside = m.inside.alpha(x, y)
+    np.testing.assert_array_equal(m.alpha_given(x, y, (np.inf, -np.inf)), inside)
+    np.testing.assert_array_equal(
+        m.alpha_given(x, y, (-np.inf, d[1])), m.outside.alpha(x, y)
+    )
+    with pytest.raises(ValueError, match="no distances"):
+        SmoothBand(case2().material, 0.0).alpha_given(x, y, d)
 
 
 # --- route (a): the normal profile of a curved interface (E4.7) --------------

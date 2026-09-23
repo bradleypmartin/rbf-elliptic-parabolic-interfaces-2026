@@ -42,20 +42,40 @@ in ``(ξ, φ₀₁(η))``, the warp the march brings with it, and their right-ha
 side the chain rule for ``L G(ξ, η̃(η))`` with the cancellation
 ``α η̃′ ≡ α_e`` checked, not assumed. ``operators.seed_operator`` puts those
 rows into the global matrix on the stencils that see an edge.
+
+``tangential=True`` (E4.11, #81, §3.10) builds the same stencil in the foot
+curve's own coordinates, ``x = γ(σ) + d n(σ)``, where the edge is a
+coordinate line at every ξ: the seeds keep every level ``j ≤ 4 − b``, and
+alpha's and the metric's variation along the curve, expanded in ξ, couples
+them (``coupled_chain``, 55 levels, 110 states). That is what route (a)'s
+frozen profile cannot carry on a curved or tangentially varying edge
+(§4.6); on a flat edge with alpha a function of the normal alone the extra
+levels stay zero and the seeds are the ones above.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
-from math import atan2, pi
+from math import atan2, copysign, exp, factorial, inf, pi
 
 import numpy as np
 from scipy.integrate import solve_ivp
 
+from ..fd_weights import fornberg_weights
+from ..heat1d.domain import TANH_REACH
 from ..heat1d.stiff import MERGE_TOL, SEED_ATOL, SEED_RTOL, march_targets
-from .domain import Band, NormalProfile, SmoothBand
+from .domain import (
+    Band,
+    Circle,
+    Constant2D,
+    Curve,
+    FlatLine,
+    NormalProfile,
+    Piece2D,
+    SmoothBand,
+)
 from .interface import Frame
 from .neighbors import periodic_dx
 from .rbf import (
@@ -81,6 +101,20 @@ identically zero, so the march returns ``α_e`` to the bit (§4.3);
 ``seed_coordinates`` checks it rather than assuming it, and a failure means
 the march, not the geometry.
 """
+
+
+SERIES_DEGREE = 4
+"""The tangential chain's series in ξ (§3.10): ``α/m̂``, ``α m̂`` and ``m̂`` to ``ξ⁴``.
+
+Level ``j`` of seed ``(a, b)`` is ``O(h^{j−a})`` above its top and the
+series' terms ``O(h^k)``, so what the truncation drops is ``O(h⁵)`` in u, an
+order beyond the rows' local ``O(h³)``.
+"""
+
+SAMPLE_HALF, SAMPLE_STEP = 5, 0.2
+"""The tangential series' samples: ``2 · 5 + 1`` points 0.2 stencil radii apart
+along each coordinate line, ``ξ ∈ [−1, 1]``, for Fornberg's weights at ξ = 0
+(§3.10: 15 points at 0.12 moved case 2's weights by 3.6e-10)."""
 
 
 @dataclass(frozen=True)
@@ -161,19 +195,141 @@ def chain(degree: int = SEED_DEGREE) -> Chain:
 
 
 @dataclass(frozen=True)
+class CoupledChain:
+    """The level bookkeeping of §3.10: every level of every seed, coupled in ξ.
+
+    ``levels[l] = (a, b, j)`` for ``j = degree − b`` down to 0, seeds in
+    ``polynomial_exponents`` order: 55 levels at degree 4. With the series in
+    ξ of ``m̂``, ``α/m̂`` and ``1/(α m̂)`` (``M_k``, ``A_k``, ``(1/B)_k``) the
+    level fluxes ``ψ_i = Σ_k B_k g′_{i−k}`` and the values ``g`` march as
+
+        g′ = Σ_k (1/B)_k shift_k ψ,    ψ′ = α_e Σ_k M_k source_k g − Σ_k A_k along_k g,
+
+    with ``shift_k`` taking each seed's level ``i − k`` to its level ``i``,
+    ``source_k`` the lower seeds of the chain (``Chain.source``'s) shifted by
+    k, and ``along_k`` the ξ-part ``∂_ξ (A ∂_ξ ·)``, level ``i + 2 − k`` into
+    level ``i`` with ``(i + 2 − k)(i + 1)``; each is stacked over
+    ``k = 0 … series`` as one ``((series + 1) · size, size)`` matrix.
+    ``seed_of`` and ``power`` are ``Chain``'s, so ``SeedProfiles`` evaluates
+    either chain.
+    """
+
+    degree: int
+    series: int
+    levels: tuple[tuple[int, int, int], ...]
+    shift: np.ndarray
+    source: np.ndarray
+    along: np.ndarray
+    seed_of: np.ndarray
+    power: np.ndarray
+
+    @property
+    def size(self) -> int:
+        return len(self.levels)
+
+    def index(self, a: int, b: int, j: int) -> int:
+        """The state of level ``j`` of the seed of ``ξᵃ ηᵇ``."""
+        return self.levels.index((a, b, j))
+
+    def initial(self, alpha_e: float) -> np.ndarray:
+        """``(g, ψ)`` at the anchor: §3.2's data, every other level zero (``m̂ = 1``)."""
+        y = np.zeros(2 * self.size)
+        for m, (a, b, j) in enumerate(self.levels):
+            if j == a and b == 0:
+                y[m] = 1.0
+            if j == a and b == 1:
+                y[self.size + m] = alpha_e
+        return y
+
+    def rate(
+        self,
+        alpha_e: float,
+        coefficients: Callable[[float], tuple[np.ndarray, np.ndarray, np.ndarray]],
+    ) -> Callable[[float, np.ndarray], np.ndarray]:
+        """The first-order system on one segment; ``coefficients(η) = (M, A, 1/B)``."""
+        n, q = self.size, self.series + 1
+        shift, source, along = self.shift, self.source, self.along
+
+        def rate(eta: float, y: np.ndarray) -> np.ndarray:
+            m, a, inverse = coefficients(eta)
+            g = y[:n]
+            out = np.empty_like(y)
+            out[:n] = inverse @ (shift @ y[n:]).reshape(q, n)
+            out[n:] = alpha_e * (m @ (source @ g).reshape(q, n)) - a @ (
+                along @ g
+            ).reshape(q, n)
+            return out
+
+        return rate
+
+
+@cache
+def coupled_chain(
+    degree: int = SEED_DEGREE, series: int = SERIES_DEGREE
+) -> CoupledChain:
+    """The ``CoupledChain`` of degree ≤ ``degree`` (55 levels at degree 4)."""
+    exponents = [tuple(int(v) for v in e) for e in polynomial_exponents(degree)]
+    levels = tuple((a, b, j) for a, b in exponents for j in range(degree - b, -1, -1))
+    where = {state: m for m, state in enumerate(levels)}
+    n, q = len(levels), series + 1
+    shift, along = np.zeros((q, n, n)), np.zeros((q, n, n))
+    lower = np.zeros((n, n))
+    seed_of = np.zeros((len(exponents), n))
+    for m, (a, b, i) in enumerate(levels):
+        seed_of[exponents.index((a, b)), m] = 1.0
+        for k in range(q):
+            if (a, b, i - k) in where:
+                shift[k, m, where[(a, b, i - k)]] = 1.0
+            s = i + 2 - k
+            if s >= 1 and (a, b, s) in where:
+                along[k, m, where[(a, b, s)]] = s * (i + 1)
+        for (a2, b2), c in (((a - 2, b), a * (a - 1)), ((a, b - 2), b * (b - 1))):
+            if c and (a2, b2, i) in where:
+                lower[m, where[(a2, b2, i)]] += c
+    source = np.einsum("kij,jl->kil", shift, lower)
+    power = np.array([j for _, _, j in levels])
+    return CoupledChain(
+        degree,
+        series,
+        levels,
+        shift.reshape(q * n, n),
+        source.reshape(q * n, n),
+        along.reshape(q * n, n),
+        seed_of,
+        power,
+    )
+
+
+def _series_product(p: np.ndarray, q: np.ndarray) -> np.ndarray:
+    """``p q`` truncated at ``p``'s degree: coefficients in ξ."""
+    return np.convolve(p, q)[: p.size]
+
+
+def _series_inverse(p: np.ndarray) -> np.ndarray:
+    """``1 / p`` truncated at ``p``'s degree (``p₀ ≠ 0``), in floats (the rate's)."""
+    c = p.tolist()
+    inverse = 1.0 / c[0]
+    r = [inverse]
+    for k in range(1, len(c)):
+        r.append(-sum(c[i] * r[k - i] for i in range(1, k + 1)) * inverse)
+    return np.array(r)
+
+
+@dataclass(frozen=True)
 class SeedProfiles:
     """The chain's state at points ``eta`` of one normal line (§3.2).
 
     ``g[l, i]`` and ``psi[l, i]`` are state ``l`` of ``chain.levels`` at
     ``eta[i]``, in stencil units. ``psi`` is ``α g′``, continuous through a
-    jump; E4.8's residual probes read it.
+    jump; E4.8's residual probes read it. For a ``CoupledChain`` (§3.10) it is
+    each level's share of the normal flux, ``Σ_k B_k g′_{i−k}``.
     """
 
     eta: np.ndarray
     g: np.ndarray
     psi: np.ndarray
     alpha_e: float
-    chain: Chain
+    chain: Chain | CoupledChain
 
     def values(self, xi: np.ndarray) -> np.ndarray:
         """``φ_e(ξ_i, η_i)`` as ``(..., len(eta), q)``; ``xi`` broadcasts to ``eta``."""
@@ -205,8 +361,29 @@ def seed_profiles(
         raise ValueError("eta must be a 1-D array of points on the line")
     ch = chain(degree)
     a_e = profile.alpha_e if alpha_e is None else float(alpha_e)
-    y0 = ch.initial(a_e)
-    out = np.empty((2 * ch.size, eta.size))
+
+    def rate_of(segment: int) -> Callable[[float, np.ndarray], np.ndarray]:
+        return ch.rate(a_e, profile.alpha_function(segment))
+
+    out = _march(ch.initial(a_e), eta, profile, rate_of, rtol, atol)
+    return SeedProfiles(eta, out[: ch.size], out[ch.size :], a_e, ch)
+
+
+def _march(
+    y0: np.ndarray,
+    eta: np.ndarray,
+    profile: NormalProfile,
+    rate_of: Callable[[int], Callable[[float, np.ndarray], np.ndarray]],
+    rtol: float,
+    atol: float,
+) -> np.ndarray:
+    """The state at every ``eta``: both directions from ``y0`` at the anchor (§3.3).
+
+    One ``solve_ivp`` per segment between consecutive targets (the points,
+    exact, and the profile's stops within reach), ``rate_of(segment)`` the
+    system on each; either chain's march.
+    """
+    out = np.empty((y0.size, eta.size))
     out[:, eta == 0.0] = y0[:, None]
     for side in (-1.0, 1.0):
         ahead = side * eta > 0.0
@@ -219,7 +396,7 @@ def seed_profiles(
         for t in march_targets(side * eta[ahead], inside):
             t1 = side * t
             segment = int(profile.segment(0.5 * (t0 + t1)))
-            rate = ch.rate(a_e, profile.alpha_function(segment))
+            rate = rate_of(segment)
             sol = solve_ivp(rate, (t0, t1), y, method="DOP853", rtol=rtol, atol=atol)
             if not sol.success:
                 raise RuntimeError(
@@ -228,7 +405,239 @@ def seed_profiles(
             y, t0 = sol.y[:, -1], t1
             hit = ahead & np.isclose(eta, t1, rtol=0.0, atol=MERGE_TOL)
             out[:, hit] = y[:, None]
-    return SeedProfiles(eta, out[: ch.size], out[ch.size :], a_e, ch)
+    return out
+
+
+@dataclass(frozen=True)
+class FootCoordinates:
+    """One stencil in its foot curve's normal coordinates (§3.10).
+
+    A point near ``curve`` (interface ``interface``) is ``γ(σ) + d n(σ)``;
+    about the anchor's foot point ``s0`` and distance ``d_e``, in units of
+    ``scale``, ``ξ = mu (σ − s0) / scale`` and ``η = (d − d_e) / scale``, with
+    ``mu`` the metric ``|γ′| (1 − κ d)`` at the anchor, so that ``m̂ = 1``
+    there and ξ is the arc length of the anchor's parallel curve. ``px, py``
+    and ``nx, ny`` are the foot points and unit normals of the sample lines
+    ``ξ_k = SAMPLE_STEP · (−SAMPLE_HALF … SAMPLE_HALF)``, ``weights``
+    Fornberg's at ξ = 0 on them over ``k!`` (Taylor coefficients), and
+    ``metric`` the pair ``(G, K)`` of series with ``m̂ = G − d K``.
+    """
+
+    curve: Curve
+    interface: int
+    s0: float
+    d_e: float
+    mu: float
+    scale: float
+    px: np.ndarray
+    py: np.ndarray
+    nx: np.ndarray
+    ny: np.ndarray
+    weights: np.ndarray
+    metric: tuple[np.ndarray, np.ndarray]
+
+    def points(self, eta: float) -> tuple[np.ndarray, np.ndarray]:
+        """The samples at ``η``: one point on each line, at distance ``d_e + h_s η``."""
+        d = self.d_e + self.scale * eta
+        return self.px + d * self.nx, self.py + d * self.ny
+
+    def series(self, samples: np.ndarray) -> np.ndarray:
+        """Taylor coefficients in ξ at ξ = 0 of a function sampled on the lines.
+
+        A constant is its own series exactly, so that a flat line with alpha
+        a function of the normal alone couples nothing (§3.10).
+        """
+        if np.all(samples == samples[0]):
+            out = np.zeros(self.weights.shape[0])
+            out[0] = samples[0]
+            return out
+        return self.weights @ samples
+
+    def metric_at(self, eta: float) -> np.ndarray:
+        """``m̂``'s series in ξ on the line ``η``."""
+        g, k = self.metric
+        return g - (self.d_e + self.scale * eta) * k
+
+
+@cache
+def _sample_weights(series: int) -> np.ndarray:
+    xi = SAMPLE_STEP * np.arange(-SAMPLE_HALF, SAMPLE_HALF + 1)
+    w = fornberg_weights(0.0, xi, series)
+    return w / np.array([factorial(k) for k in range(series + 1)])[:, None]
+
+
+def foot_coordinates(
+    curve: Curve,
+    interface: int,
+    x: np.ndarray,
+    y: np.ndarray,
+    scale: float,
+    series: int = SERIES_DEGREE,
+) -> tuple[FootCoordinates, np.ndarray, np.ndarray]:
+    """The ``FootCoordinates`` of the nodes ``(x, y)`` (anchor first), and their ξ, η.
+
+    Each node's foot point and distance by ``closest`` and
+    ``signed_distance``, one Newton each, inside the focal distance that
+    ``normal_profile``'s ``FOOT_CURVATURE`` guards; ξ periodic in the curve's
+    parameter (x on a graph, the turn on a circle).
+    """
+    s, d = curve.closest(x, y), curve.signed_distance(x, y)
+    s0, d_e = float(s[0]), float(d[0])
+    mu = float(curve.speed(s[:1])[0]) * (1.0 - float(curve.curvature(s[:1])[0]) * d_e)
+    sk = s0 + scale * SAMPLE_STEP * np.arange(-SAMPLE_HALF, SAMPLE_HALF + 1) / mu
+    px, py = (np.asarray(v, dtype=float) for v in curve.point(sk))
+    nx, ny = (np.asarray(v, dtype=float) for v in curve.normal(sk))
+    coords = FootCoordinates(
+        curve,
+        interface,
+        s0,
+        d_e,
+        mu,
+        scale,
+        px,
+        py,
+        nx,
+        ny,
+        _sample_weights(series),
+        (np.zeros(series + 1), np.zeros(series + 1)),
+    )
+    speed = curve.speed(sk) / mu
+    metric = (coords.series(speed), coords.series(speed * curve.curvature(sk)))
+    xi = mu * periodic_dx(s - s0) / scale
+    return replace(coords, metric=metric), xi, (d - d_e) / scale
+
+
+def _other_edge(
+    medium: SmoothBand, coords: FootCoordinates, eta: np.ndarray
+) -> float | None:
+    """``±inf`` if the other curve's edge is saturated on every sample, else ``None``.
+
+    The samples on the march's lines lie within ``reach`` of the anchor (the
+    largest distance to the lines' ends; each line is straight in η), and a
+    signed distance moves by at most the distance moved, so beyond
+    ``TANH_REACH δ + reach`` the other edge's blend is its piece to ``e^{−40}``
+    times the contrast at every sample (§3.10).
+    """
+    other = medium.interfaces[1 - coords.interface]
+    ax, ay = coords.points(0.0)
+    ax, ay = float(ax[SAMPLE_HALF]), float(ay[SAMPLE_HALF])
+    reach = 0.0
+    for t in (min(0.0, float(eta.min())), max(0.0, float(eta.max()))):
+        px, py = coords.points(t)
+        reach = max(reach, float(np.hypot(periodic_dx(px - ax), py - ay).max()))
+    d0 = other.signed_distance_at(ax, ay)
+    if abs(d0) - reach >= TANH_REACH * medium.delta:
+        return copysign(inf, d0)
+    return None
+
+
+def _alpha_series(
+    coords: FootCoordinates, piece: Piece2D | SmoothBand, saturated: float | None
+) -> Callable[[float], np.ndarray]:
+    """``η ↦`` alpha's series in ξ on the coordinate line ``η`` (§3.10).
+
+    A constant piece is its own series. The smooth band's foot edge is a
+    function of ``d`` alone, exact; its other edge is the saturated value
+    ``saturated`` when ``_other_edge`` found one, and a float foot-point
+    Newton per sample otherwise. With the other edge saturated the blend is
+    linear in the two pieces with one weight per line, so their series are
+    blended instead of their samples (``_blend``'s steps, to rounding), which
+    is most of what a smooth row costs. Any other piece is sampled as it
+    stands: at δ = 0 the segment's own piece on both sides of the curve, its
+    smooth extension, as E2.3's Taylor tables are.
+    """
+    if isinstance(piece, Constant2D):
+        constant = np.zeros(coords.weights.shape[0])
+        constant[0] = piece.value
+        return lambda eta: constant
+    if isinstance(piece, SmoothBand):
+        j = coords.interface
+        other = piece.interfaces[1 - j]
+        if saturated is not None:
+            inside = _alpha_series(coords, piece.inside, None)
+            outside = _alpha_series(coords, piece.outside, None)
+
+            def linear(eta: float) -> np.ndarray:
+                z = (coords.d_e + coords.scale * eta) / piece.delta
+                out = outside(eta)
+                zs = (z, saturated) if j == 0 else (saturated, z)
+                a = _edge_series(out, inside(eta), zs[0])
+                return _edge_series(a, out, zs[1])
+
+            return linear
+
+        def blended(eta: float) -> np.ndarray:
+            x, y = coords.points(eta)
+            d = coords.d_e + coords.scale * eta
+            if saturated is None:
+                far = np.array(
+                    [
+                        other.signed_distance_at(float(u), float(v))
+                        for u, v in zip(x, y, strict=True)
+                    ]
+                )
+            else:
+                far = saturated
+            return coords.series(
+                piece.alpha_given(x, y, (d, far) if j == 0 else (far, d))
+            )
+
+        return blended
+    weights = coords.weights
+    return lambda eta: weights @ piece.alpha(*coords.points(eta))
+
+
+def _edge_series(a: np.ndarray, b: np.ndarray, z: float) -> np.ndarray:
+    """``edge_value`` on two series with one weight: ``(1 − s) a + s b``, ``s(z)``."""
+    e = exp(-2.0 * abs(z))
+    small = e / (1.0 + e)
+    return b + small * (a - b) if z >= 0.0 else a + small * (b - a)
+
+
+def _coefficients(
+    coords: FootCoordinates, alpha: Callable[[float], np.ndarray]
+) -> Callable[[float], tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """``η ↦ (M, A, 1/B)``: the series of ``m̂``, ``α/m̂`` and ``1/(α m̂)``."""
+
+    def coefficients(eta: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        a, m = alpha(eta), coords.metric_at(eta)
+        return (
+            m,
+            _series_product(a, _series_inverse(m)),
+            _series_inverse(_series_product(a, m)),
+        )
+
+    return coefficients
+
+
+def tangential_profiles(
+    coords: FootCoordinates,
+    profile: NormalProfile,
+    eta: np.ndarray,
+    medium: SmoothBand,
+    alpha_e: float,
+    degree: int = SEED_DEGREE,
+    rtol: float = SEED_RTOL,
+    atol: float = SEED_ATOL,
+) -> SeedProfiles:
+    """March the coupled chain along ``profile``'s line to the points ``eta`` (§3.10).
+
+    ``seed_profiles``' march (``_march``) with ``CoupledChain``'s rate and the
+    tangential series of each segment's piece; the line ``ξ = 0`` of
+    ``coords`` is ``profile``'s.
+    """
+    eta = np.asarray(eta, dtype=float)
+    if eta.ndim != 1:
+        raise ValueError("eta must be a 1-D array of points on the line")
+    ch = coupled_chain(degree)
+    saturated = _other_edge(medium, coords, eta) if medium.delta > 0.0 else None
+
+    def rate_of(segment: int) -> Callable[[float, np.ndarray], np.ndarray]:
+        alpha = _alpha_series(coords, profile.pieces[segment], saturated)
+        return ch.rate(alpha_e, _coefficients(coords, alpha))
+
+    out = _march(ch.initial(alpha_e), eta, profile, rate_of, rtol, atol)
+    return SeedProfiles(eta, out[: ch.size], out[ch.size :], alpha_e, ch)
 
 
 @dataclass(frozen=True)
@@ -273,6 +682,50 @@ class SeedBasis:
         return self.block[:, _column(self.profiles.chain.degree, 0, 1)]
 
 
+@dataclass(frozen=True)
+class TangentialBasis:
+    """One tangential seed stencil (§3.10): ``SeedBasis`` in the foot curve's frame.
+
+    ``coordinates`` takes the frame's place and ``xi, eta`` are the nodes'
+    normal coordinates in it; ``profile`` is the normal line ``ξ = 0``
+    (route (a)'s, unchanged) and ``profiles`` the 110 states of
+    ``coupled_chain`` on it. ``block`` and ``rhs`` are ``SeedBasis``'s, the
+    right-hand side ``2 α_e`` on the two quadratics and nothing else, since
+    the chain holds on the whole line ``ξ = 0``. ``gradient`` is the
+    Gaussians' first-order coefficients at the anchor, ``(A_1(0), B_η(0))``
+    = ``(∂_ξ (α/m̂), ∂_η (α m̂))``, which are ``SeedBasis.gradient`` on a flat
+    line; ``anchor_flux`` is ``(ψ, ψ′)`` of φ₀₁'s level 0 at the anchor, the
+    warp's ``α η̃′`` and its derivative (``α_e`` and 0 by the chain's
+    structure, read from the march and the rate).
+    """
+
+    xy: np.ndarray
+    medium: SmoothBand
+    interface: int
+    coordinates: FootCoordinates
+    profile: NormalProfile
+    xi: np.ndarray
+    eta: np.ndarray
+    profiles: SeedProfiles
+    block: np.ndarray
+    rhs: np.ndarray
+    gradient: tuple[float, float]
+    anchor_flux: tuple[float, float]
+
+    @property
+    def scale(self) -> float:
+        return self.coordinates.scale
+
+    @property
+    def alpha_e(self) -> float:
+        return self.profiles.alpha_e
+
+    @property
+    def warp(self) -> np.ndarray:
+        """``η̃ = φ₀₁(ξ, η)`` at the nodes, all its levels (§3.10)."""
+        return self.block[:, _column(self.profiles.chain.degree, 0, 1)]
+
+
 def _column(degree: int, a: int, b: int) -> int:
     e = polynomial_exponents(degree)
     return int(np.flatnonzero((e[:, 0] == a) & (e[:, 1] == b))[0])
@@ -293,13 +746,15 @@ def seed_basis(
     degree: int = SEED_DEGREE,
     rtol: float = SEED_RTOL,
     atol: float = SEED_ATOL,
-) -> SeedBasis:
+    tangential: bool = False,
+) -> SeedBasis | TangentialBasis:
     """The ``SeedBasis`` of the nodes ``xy``, anchored at ``xy[0]``.
 
     ``h_s`` is the largest distance from the anchor (periodic in x), E2.3's
     scale. ``α_e`` is the medium's own value at the anchor, the owner's at a
     jump as in E2.3 and the 1-D march. A jump ``Band`` is marched as its
-    ``SmoothBand`` at δ = 0.
+    ``SmoothBand`` at δ = 0. ``tangential=True`` is §3.10's
+    ``TangentialBasis`` on the same normal line.
     """
     xy = np.asarray(xy, dtype=float)
     q = polynomial_count(degree)
@@ -314,6 +769,8 @@ def seed_basis(
     x0, y0 = float(x[0]), float(y[0])
     j = nearest_interface(medium, x0, y0)
     profile = medium.normal_profile(j, x0, y0, scale)
+    if tangential:
+        return _tangential_basis(xy, medium, j, profile, scale, degree, rtol, atol)
     frame = Frame(x0, y0, atan2(profile.ny, profile.nx) - pi / 2, scale)
     xi, eta = frame.local(x, y)
     alpha_e = float(medium.alpha(x[:1], y[:1])[0])
@@ -338,7 +795,81 @@ def seed_basis(
     )
 
 
-def seed_coordinates(sb: SeedBasis, warp: bool = True) -> tuple[np.ndarray, np.ndarray]:
+def _coordinate_lines(a: Curve, b: Curve) -> bool:
+    """Whether ``b`` is a line ``d = const`` of ``a``'s normal coordinates."""
+    if isinstance(a, FlatLine) and isinstance(b, FlatLine):
+        return True
+    return (
+        isinstance(a, Circle) and isinstance(b, Circle) and (a.cx, a.cy) == (b.cx, b.cy)
+    )
+
+
+def _tangential_basis(
+    xy: np.ndarray,
+    medium: SmoothBand,
+    j: int,
+    profile: NormalProfile,
+    scale: float,
+    degree: int,
+    rtol: float,
+    atol: float,
+) -> TangentialBasis:
+    """``seed_basis(tangential=True)`` past the checks the two bases share."""
+    x, y = xy[:, 0], xy[:, 1]
+    curve, other = medium.interfaces[j], medium.interfaces[1 - j]
+    if medium.delta == 0.0 and not _coordinate_lines(curve, other):
+        side = other.level(x, y)
+        if (side > 0.0).any() and (side < 0.0).any():
+            raise NotImplementedError(
+                "the stencil crosses both curves, and the other is not a "
+                "coordinate line of the foot curve's frame (§3.10)"
+            )
+    coords, xi, eta = foot_coordinates(curve, j, x, y, scale, SERIES_DEGREE)
+    alpha_e = float(medium.alpha(x[:1], y[:1])[0])
+    profiles = tangential_profiles(
+        coords, profile, eta, medium, alpha_e, degree, rtol, atol
+    )
+    q = polynomial_count(degree)
+    rhs = np.zeros(q)
+    rhs[_column(degree, 2, 0)] = rhs[_column(degree, 0, 2)] = 2.0 * alpha_e
+    # The Gaussians' first-order coefficients at the anchor: ∂_ξ(α/m̂) from the
+    # series the march uses, and ∂_η(α m̂) = h_s (∂_n α − α_e K_0) from the
+    # medium's gradient and the metric (m̂ = G − d K is 1 there).
+    ch = profiles.chain
+    segment = int(profile.segment(np.zeros(1))[0])
+    saturated = _other_edge(medium, coords, eta) if medium.delta > 0.0 else None
+    coefficients = _coefficients(
+        coords, _alpha_series(coords, profile.pieces[segment], saturated)
+    )
+    _, a, _ = coefficients(0.0)
+    gx, gy = (float(g[0]) for g in medium.gradient(x[:1], y[:1]))
+    normal = gx * profile.nx + gy * profile.ny
+    gradient = (float(a[1]), scale * (normal - alpha_e * float(coords.metric[1][0])))
+    rate = ch.rate(alpha_e, coefficients)
+    level = ch.index(0, 1, 0)
+    anchor_flux = (
+        float(profiles.psi[level, 0]),
+        float(rate(0.0, ch.initial(alpha_e))[ch.size + level]),
+    )
+    return TangentialBasis(
+        xy,
+        medium,
+        j,
+        coords,
+        profile,
+        xi,
+        eta,
+        profiles,
+        profiles.values(xi),
+        rhs,
+        gradient,
+        anchor_flux,
+    )
+
+
+def seed_coordinates(
+    sb: SeedBasis | TangentialBasis, warp: bool = True
+) -> tuple[np.ndarray, np.ndarray]:
     """The nodes in the Gaussian block's coordinates: ``(ξ, φ₀₁(η))``, or ``(ξ, η)``.
 
     §3.4's warp. ``φ₀₁`` is the seed of ``η``, the constant-flux solution
@@ -347,10 +878,15 @@ def seed_coordinates(sb: SeedBasis, warp: bool = True) -> tuple[np.ndarray, np.n
     stencils) and the smooth stretch at δ > 0, read off the same march as the
     block. The flux ``ψ₀₁`` must be ``α_e`` along the whole line for the
     ``G_η̃`` term of ``L G`` to cancel, so it is checked here against
-    ``WARP_TOL``. ``warp=False`` is the plain-Gaussian ablation (H7).
+    ``WARP_TOL``. ``warp=False`` is the plain-Gaussian ablation (H7). A
+    ``TangentialBasis``' warp is ``φ₀₁(ξ, η)`` with all its levels, whose
+    level-0 flux is not constant along the line on a curved or tangentially
+    varying edge: only its anchor value enters, as ``anchor_flux`` (§3.10).
     """
     if not warp:
         return sb.xi, sb.eta
+    if isinstance(sb, TangentialBasis):
+        return sb.xi, sb.warp
     flux = sb.profiles.psi[sb.profiles.chain.index(0, 1, 0)]
     drift = float(np.abs(flux - sb.alpha_e).max() / abs(sb.alpha_e))
     if drift > WARP_TOL:
@@ -369,6 +905,7 @@ def seed_weights(
     warp: bool = True,
     rtol: float = SEED_RTOL,
     atol: float = SEED_ATOL,
+    tangential: bool = False,
 ) -> np.ndarray:
     """Weights of ``div(alpha grad u)`` at ``xy[0]`` from ``u`` at the nodes ``xy``.
 
@@ -394,13 +931,20 @@ def seed_weights(
     ``seed_coordinates``'s check on the whole line is what actually guards
     the cancellation. With ``warp=False`` the coordinates are the frame's own
     and the plain Gaussian's right-hand side carries the true ``α_η G_η``.
-    The weights come back in physical units, ``w̃ / h_s²``.
+    The weights come back in physical units, ``w̃ / h_s²``. ``tangential=True``
+    is the same system on §3.10's ``TangentialBasis``, the Gaussians in
+    ``(ξ, φ₀₁(ξ, η))`` of the foot curve's coordinates with
+    ``α_e Δ + A_1(0) ∂_ξ`` for their right-hand side (``+ B_η(0) ∂_η``
+    plain).
     """
-    return weights_of(seed_basis(xy, medium, degree, rtol, atol), shape, warp)
+    sb = seed_basis(xy, medium, degree, rtol, atol, tangential)
+    return weights_of(sb, shape, warp)
 
 
-def weights_of(sb: SeedBasis, shape: float = GA_SHAPE, warp: bool = True) -> np.ndarray:
-    """``seed_weights`` on a ``SeedBasis`` already marched (the ablations' entry)."""
+def weights_of(
+    sb: SeedBasis | TangentialBasis, shape: float = GA_SHAPE, warp: bool = True
+) -> np.ndarray:
+    """``seed_weights`` on a basis already marched (the ablations' entry)."""
     xi, eta = seed_coordinates(sb, warp)
     x, y = sb.xy[:, 0], sb.xy[:, 1]
     r = np.hypot(periodic_dx(x - x[0]), y - y[0])
@@ -413,10 +957,13 @@ def weights_of(sb: SeedBasis, shape: float = GA_SHAPE, warp: bool = True) -> np.
         # the chain: 1 and 0 for this chain, whatever the profile (see
         # ``seed_weights``), and read rather than written so that they are
         # the chain's own numbers.
-        segment = int(sb.profile.segment(np.zeros(1))[0])
-        rate = ch.rate(a_e, sb.profile.alpha_function(segment))
-        flux = float(sb.profiles.psi[ch.index(0, 1, 0), 0])
-        d_flux = float(rate(0.0, ch.initial(a_e))[ch.size + ch.index(0, 1, 0)])
+        if isinstance(sb, TangentialBasis):
+            flux, d_flux = sb.anchor_flux
+        else:
+            segment = int(sb.profile.segment(np.zeros(1))[0])
+            rate = ch.rate(a_e, sb.profile.alpha_function(segment))
+            flux = float(sb.profiles.psi[ch.index(0, 1, 0), 0])
+            d_flux = float(rate(0.0, ch.initial(a_e))[ch.size + ch.index(0, 1, 0)])
         slope = flux / a_e
         b_rbf = (
             a_e * gaussian_derivative(xi, eta, eps, "dxx")
