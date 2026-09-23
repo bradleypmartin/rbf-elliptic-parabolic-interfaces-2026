@@ -5,6 +5,7 @@ import pytest
 from scipy.optimize import brentq
 
 from heat_interfaces.heat1d.exact import edge_resistance_deficit
+from heat_interfaces.heat2d import treatments
 from heat_interfaces.heat2d.domain import (
     Band,
     Constant2D,
@@ -139,6 +140,20 @@ def test_case2_matches_a_polar_quadrature_that_shears_nothing(delta, panels):
         got = np.array(disc_integrals(material, np.array([x0]), np.array([y0]), r))
         ref = polar_integrals(material, x0, y0, r, curve, panels, n=24 if delta else 64)
         assert np.abs(got[:, 0] / ref - 1).max() < 1e-13
+
+
+def test_the_batches_join_without_a_seam(monkeypatch):
+    # The sweeps' 40,000-node sets run 20 batches of DISC_CHUNK discs; every
+    # other test here fits in one. A chunk of 7 cuts the same discs into many
+    # batches, ragged at the end, and must change nothing but the rounding.
+    rng = np.random.default_rng(6)
+    x = rng.random(100)
+    y = 0.6 + 0.02 * np.sin(2 * np.pi * x) + (rng.random(100) - 0.5) * 0.08
+    material = SmoothBand(case2().material, 0.0025)
+    whole = np.array(disc_integrals(material, x, y, 0.02))
+    monkeypatch.setattr(treatments, "DISC_CHUNK", 7)
+    batched = np.array(disc_integrals(material, x, y, 0.02))
+    assert np.abs(batched / whole - 1).max() < 1e-14
 
 
 def test_more_gauss_points_change_nothing():

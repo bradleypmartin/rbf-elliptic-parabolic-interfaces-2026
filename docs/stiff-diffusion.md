@@ -5326,7 +5326,12 @@ switches itself off, since `max(δ, m h)` knows δ.
   behind at 40,000 nodes. The honest 2-D comparators are therefore the naive
   product (which needs nothing) and the δ = 0 construction (which needs δ to
   be switched off). The treatments earn one sentence, this section's figure
-  and the crossover (h/δ ≈ 2–3 for the half-spacing disc).
+  and the crossover (h/δ ≈ 2–3 for the half-spacing disc). The sentence must
+  keep one caveat: at the jump the half-spacing disc is sampling *by
+  construction* on this node layout (E2.1's innermost rows sit exactly h/2
+  off the curve, so the disc is tangent to it), so "worse than sampling at
+  the jump" is a statement about the radius-h means and T0, not about
+  averaging α as such (the E4.9 spar's second finding).
 - *E4.10 (#41)*: the figures `docs/figures/heat2d_stiff_treatments.png` and
   `heat2d_stiff_treatments_a0.02_sine.png` (top: the parabolic lines at the
   jump, the narrowest and the widest δ; bottom: each family over the naive
