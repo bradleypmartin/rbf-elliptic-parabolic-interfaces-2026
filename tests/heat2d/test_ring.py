@@ -526,3 +526,94 @@ def test_on_a_ring_the_warp_is_the_flux_seeds_level_zero():
     cross = interface_crossings(nodes2, case2().material, index)
     tb = seed_basis(nodes2.xy[index[cross][0]], case2().material, tangential=True)
     np.testing.assert_array_equal(seeds.seed_coordinates(tb)[1], tb.warp)
+
+
+# --- the Gaussians on rows anchored in an edge (E4.12) -------------------------------
+
+
+def tail_rows(delta: float, n: int = 20000):
+    """Eq. 40's smooth ring at s = 10³ and its 30-node stencils by node."""
+    domain = case3(1e3)
+    nodes = build_node_set(domain, n, seed=0, iterations=100)
+    index, _ = knn(nodes.xy, 30)
+    return nodes, index, SmoothBand(domain.material, delta, "resistance")
+
+
+def test_the_diagonal_share_keeps_the_anchors_sign():
+    assert seeds.diagonal_share(np.array([-4.0, 1.0, 1.0, 2.0])) == 1.0
+    assert seeds.diagonal_share(np.array([1.0, 1.0, -3.0])) == -0.25
+
+
+def test_at_delta_zero_every_anchor_is_on_its_piece_and_the_rule_is_the_warp():
+    # α_e is the band's own alpha at δ = 0, so the rule never fires there and
+    # E4.8's rows are unchanged bit for bit.
+    for s in (1e3, 1e11):
+        nodes, rows = ring_stencils(s, count=8)
+        for idx in rows:
+            sb = seed_basis(nodes.xy[idx], case3(s).material, tangential=True)
+            assert seeds.on_piece(sb)
+            w, warped = seeds.gaussian_choice(sb)
+            assert warped
+            np.testing.assert_array_equal(w, weights_of(sb, edge_rule=False))
+
+
+def test_in_the_rings_tail_the_warp_weakens_the_diagonal_and_the_rule_keeps_plain():
+    # §4.10: the δ = 0.001 outlier at 20,000 nodes. The 588 rows anchored in the
+    # resistivity tail (α_e 0.20–0.43 of the piece) have the warp's diagonal share
+    # at 0.08–0.13 against plain's 0.25–0.27; the rule keeps plain on each.
+    nodes, index, band = tail_rows(0.001)
+    r = np.hypot(nodes.x - 0.5, nodes.y - 0.5)
+    alpha = band.alpha(nodes.x, nodes.y)
+    tail = np.flatnonzero((np.abs(r - 0.35) < 0.006) & (alpha < 0.61) & (alpha > 0.1))
+    assert tail.size == 588
+    for i in tail[:: tail.size // 6]:
+        sb = seed_basis(nodes.xy[index[i]], band, tangential=True)
+        assert not seeds.on_piece(sb)
+        warp = weights_of(sb, edge_rule=False)
+        plain = weights_of(sb, warp=False)
+        assert seeds.diagonal_share(warp) < 0.15 < 0.2 < seeds.diagonal_share(plain)
+        w, warped = seeds.gaussian_choice(sb)
+        assert not warped
+        np.testing.assert_array_equal(w, plain)
+        np.testing.assert_array_equal(saddle_system(sb), saddle_system(sb, warp=False))
+
+
+def test_where_plain_loses_its_diagonal_the_rule_keeps_the_warp():
+    # δ = 0.0025 at 20,000 nodes, where the edge is nearly resolved: plain
+    # Gaussians give some tail rows an anchor weight of the wrong sign.
+    nodes, index, band = tail_rows(0.0025)
+    for i in (319, 665):
+        sb = seed_basis(nodes.xy[index[i]], band, tangential=True)
+        assert not seeds.on_piece(sb)
+        plain = weights_of(sb, warp=False)
+        warp = weights_of(sb, edge_rule=False)
+        assert seeds.diagonal_share(plain) < 0.0 < 0.1 < seeds.diagonal_share(warp)
+        w, warped = seeds.gaussian_choice(sb)
+        assert warped
+        np.testing.assert_array_equal(w, warp)
+
+
+def test_the_rule_is_on_by_default_on_a_ring_only():
+    # Off a ring (case 2's sine pair at δ > 0) E4.11's warp is kept on every row
+    # unless the rule is asked for; on the ring edge_rule=False is E4.8's warp.
+    nodes, index, band = tail_rows(0.001)
+    r = np.hypot(nodes.x - 0.5, nodes.y - 0.5)
+    i = int(np.argmin(np.abs(r - 0.3533)))
+    sb = seed_basis(nodes.xy[index[i]], band, tangential=True)
+    assert not seeds.on_piece(sb) and not seeds.gaussian_choice(sb)[1]
+    assert seeds.gaussian_choice(sb, edge_rule=False)[1]
+    medium = SmoothBand(case2().material, 0.01)
+    nodes2 = build_node_set(case2(), 2500, seed=0, iterations=20)
+    index2, _ = knn(nodes2.xy, 30)
+    alpha = medium.alpha(nodes2.x, nodes2.y)
+    piece = medium.band.alpha(nodes2.x, nodes2.y)
+    off = np.flatnonzero(np.abs(np.log(alpha / piece)) > 0.5)
+    chosen = []
+    for i in off[:8]:
+        tb = seed_basis(nodes2.xy[index2[i]], medium, tangential=True)
+        assert not seeds.on_piece(tb)
+        w, warped = seeds.gaussian_choice(tb)
+        assert warped
+        np.testing.assert_array_equal(w, weights_of(tb, edge_rule=False))
+        chosen.append(seeds.gaussian_choice(tb, edge_rule=True)[1])
+    assert not all(chosen)

@@ -64,7 +64,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import cache
-from math import acos, atan2, copysign, exp, factorial, inf, pi
+from math import acos, atan2, copysign, exp, factorial, inf, log, pi
 
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -106,6 +106,17 @@ WARP_TOL = 1e-9
 identically zero, so the march returns ``α_e`` to the bit (§4.3);
 ``seed_coordinates`` checks it rather than assuming it, and a failure means
 the march, not the geometry.
+"""
+
+PIECE_TOL = 0.05
+"""How far ``α_e`` may sit from its piece's alpha and the anchor still be on it.
+
+E4.12 (#84, stiff note §3.11): the warp ``φ₀₁′ = α_e/α`` presumes slope 1 over
+the anchor's side of the stencil, which holds where the anchor sits on its
+piece, ``|ln(α_e / α_piece)| ≤ PIECE_TOL`` with ``α_piece`` the δ = 0 band's
+alpha at the anchor (``on_piece``). At δ = 0 the two are equal. An anchor off
+its piece sits in an edge, where the warp squeezes (or stretches) its own side
+by ``α_e/α_piece``; the rule there is ``gaussian_choice``'s.
 """
 
 
@@ -1139,6 +1150,7 @@ def seed_weights(
     atol: float = SEED_ATOL,
     tangential: bool = False,
     flux: bool | None = None,
+    edge_rule: bool | None = None,
 ) -> np.ndarray:
     """Weights of ``div(alpha grad u)`` at ``xy[0]`` from ``u`` at the nodes ``xy``.
 
@@ -1168,16 +1180,80 @@ def seed_weights(
     is the same system on §3.10's ``TangentialBasis``, the Gaussians in
     ``(ξ, φ₀₁(ξ, η))`` of the foot curve's coordinates with
     ``α_e Δ + A_1(0) ∂_ξ`` for their right-hand side (``+ B_η(0) ∂_η``
-    plain).
+    plain). ``edge_rule`` is ``gaussian_choice``'s (E4.12): on a ring, a row
+    anchored in an edge keeps whichever Gaussians give it the stronger diagonal.
     """
     sb = seed_basis(xy, medium, degree, rtol, atol, tangential, flux)
-    return weights_of(sb, shape, warp)
+    return weights_of(sb, shape, warp, edge_rule)
 
 
 def weights_of(
-    sb: SeedBasis | TangentialBasis, shape: float = GA_SHAPE, warp: bool = True
+    sb: SeedBasis | TangentialBasis,
+    shape: float = GA_SHAPE,
+    warp: bool = True,
+    edge_rule: bool | None = None,
 ) -> np.ndarray:
     """``seed_weights`` on a basis already marched (the ablations' entry)."""
+    return gaussian_choice(sb, shape, warp, edge_rule)[0]
+
+
+def on_piece(sb: SeedBasis | TangentialBasis) -> bool:
+    """Whether the anchor's alpha is its piece's to ``PIECE_TOL`` (E4.12).
+
+    The piece is the δ = 0 band's at the anchor, so at δ = 0 every anchor is
+    on it; at δ > 0 an anchor off it sits in an edge, and on the ring's
+    resistance composition in the resistivity tail that reaches several δ out.
+    """
+    x0, y0 = sb.xy[:1, 0], sb.xy[:1, 1]
+    piece = float(sb.medium.band.alpha(x0, y0)[0])
+    return abs(log(sb.alpha_e / piece)) <= PIECE_TOL
+
+
+def diagonal_share(w: np.ndarray) -> float:
+    """``−w_e / Σ_{j≠e} |w_j|`` of a row whose anchor is its first node.
+
+    Appendix B's diagonal dominance ratio (eq. 93) with the sign kept: positive
+    where the anchor weight of a ``div(alpha grad)`` row has its right sign,
+    and the larger the more the anchor dominates the row.
+    """
+    return float(-w[0] / np.abs(w[1:]).sum())
+
+
+def gaussian_choice(
+    sb: SeedBasis | TangentialBasis,
+    shape: float = GA_SHAPE,
+    warp: bool = True,
+    edge_rule: bool | None = None,
+) -> tuple[np.ndarray, bool]:
+    """``(weights, warped)``: a seed row and whether its Gaussians are warped.
+
+    E4.12's rule (#84, stiff note §3.11). With ``warp`` and the rule on, a row
+    whose anchor is off its piece (``on_piece``) is solved with both Gaussian
+    blocks on the one march and keeps the weights whose anchor dominates the
+    row more (``diagonal_share``), the warp on a tie. The warp's squeeze of
+    the anchor's side weakens that diagonal about threefold in the ring's
+    resistivity tail, and a ring of such rows is what put δ = 0.001 at 20,000
+    nodes an order above its neighbours (§4.8); plain Gaussians fail the other
+    way where the edge is nearly resolved, a wrong-signed anchor weight. The
+    rule is on by default on a band with a ``gap`` (EABE eq. 40's ring) and off
+    elsewhere, so E4.4–E4.11's rows are unchanged; ``edge_rule`` forces it
+    either way. At δ = 0 every anchor is on its piece and the rule is the
+    warp bit for bit.
+    """
+    w = _solve_weights(sb, shape, warp)
+    rule = sb.medium.gap is not None if edge_rule is None else edge_rule
+    if not (warp and rule) or on_piece(sb):
+        return w, warp
+    plain = _solve_weights(sb, shape, False)
+    if diagonal_share(plain) > diagonal_share(w):
+        return plain, False
+    return w, True
+
+
+def _solve_weights(
+    sb: SeedBasis | TangentialBasis, shape: float, warp: bool
+) -> np.ndarray:
+    """The saddle-point solve of ``seed_weights`` with the Gaussians given."""
     xi, eta, eps = _gaussian_coordinates(sb, shape, warp)
     a_e = sb.alpha_e
     g_xi, g_eta = sb.gradient
@@ -1240,14 +1316,19 @@ def _gaussian_coordinates(
 
 
 def saddle_system(
-    sb: SeedBasis | TangentialBasis, shape: float = GA_SHAPE, warp: bool = True
+    sb: SeedBasis | TangentialBasis,
+    shape: float = GA_SHAPE,
+    warp: bool = True,
+    edge_rule: bool | None = None,
 ) -> np.ndarray:
     """EABE eq. 2's matrix ``[[A, S], [Sᵀ, 0]]`` of ``weights_of``'s solve.
 
-    The Gaussians in ``seed_coordinates``' coordinates and the seed block;
-    for the conditioning tables (E4.8), the solve itself is ``weights_of``'s.
+    The Gaussians ``gaussian_choice`` keeps, in ``seed_coordinates``'
+    coordinates, and the seed block; for the conditioning tables (E4.8), the
+    solve itself is ``weights_of``'s.
     """
-    xi, eta, eps = _gaussian_coordinates(sb, shape, warp)
+    warped = gaussian_choice(sb, shape, warp, edge_rule)[1]
+    xi, eta, eps = _gaussian_coordinates(sb, shape, warped)
     block = gaussian(xi[:, None] - xi[None, :], eta[:, None] - eta[None, :], eps)
     q = sb.block.shape[1]
     return np.block([[block, sb.block], [sb.block.T, np.zeros((q, q))]])
