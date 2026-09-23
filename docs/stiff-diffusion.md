@@ -14,7 +14,8 @@ through it (E4.3, #34, §4.2), the scalar seeds on one stencil (E4.4,
 (E4.6, #37, §4.5) and the curved feature (E4.7, #38, §4.6), on to E4.10
 (#41); §3.10 designs the tangential chain that E4.7 asked for (E4.11,
 #81), and §4.7 holds its results; §3.11 is what EABE eq. 40's ring needed
-beyond it (E4.8, #39), and §4.8 holds the ring's results. The port
+beyond it (E4.8, #39), and §4.8 holds the ring's results; §4.9 holds the
+coefficient treatments on scattered nodes (E4.9, #40). The port
 of the 2016 methods this builds on is in
 `docs/port-notes.md`.
 
@@ -2111,7 +2112,7 @@ radial quadratic on the ring.
 | H9 | **Route (a) reproduces the flat numbers** at δ ≥ 0.005 for n ≥ 5000 and shows its geometric floor `κ r²/2` (§3.5's table) at δ = 0.0025 on the coarse sets as a factor ≤ 1.5 above the flat line; the seed rows' residual on the true curved solution (E4.7's probe) converges at the bulk rows' rate; the tangential-α term of case 2's inside piece changes the constant, not the order. Route (a′) is built only if the probe's residual stalls. *Fails (§4.6): the probe stalls on both terms; E4.11. Answered by E4.11 (§3.10, §4.7): the tangential chain reproduces the flat numbers within 1.4–3.9× from 5000 nodes at every δ, and its probe converges at 2.7–3.6.* | the curved sweep against the flat one at equal δ; the residual probe | E4.7 |
 | H10 | **The 2-D knee** (P2's twin, measured first): naive `Dx A Dx + Dy A Dy` on scattered nodes is first order while `h ≳ δ` and fourth order once `h ≲ δ`, elliptic and parabolic; the δ = 0 construction sits on an O(δ) floor (the two references' difference, exact from the separable solves) for `h ≳ 2δ` and grows once the grid resolves the edge (§2.2); what separates resolved from unresolved most sharply is the flux jump across the edge read from the discrete solution. Watch the naive operator's coarse-set growing mode (+847 at 900 nodes, +17.7 at 1250) before quoting a parabolic naive number. | the naive and construction lines of the flat sweep | E4.3, E4.6 |
 | H11 | **The ring**: the seed march through both edges reproduces E2.9's s = 10³ line at δ = 0 (the Fig. 19 twin) and the matched radial residual stays at or below port notes §2.9's worst-stencil line at every s (the fit `1.5e-18 s`, not the single s = 10¹¹ point 1.4e-7), with no `O(s κ² scale)` term; the raw seed block conditions like `s w/h_s` (one column) and O(1) column-scaled; the march floor of §3.3 is the first limit to appear, at the largest s and smallest δ, and the stored width's 8e-8 the second. *Answered by E4.8 (§3.11, §4.8): the seeds are exact on the matched profile to rounding at every s (1.3–2.1e-15 at 10,000 nodes, E2.3 1.36e-7 at 10¹¹), their block and system condition independently of s (`s w = 1` on eq. 40: the `s w/h_s` above took w = 0.001), no march floor appears, and the stored width floors nothing once the ring carries its `gap` (without it the stops lose digits like s, 1.2e-10 at 10¹¹). Fig. 19's twin needed the flux seeds and φ₀₁'s level 0 as the warp, and is then fourth order at every s, 0.48–0.97× E2.3 from 5000 nodes.* | `matched_residual` per (s, δ); Fig. 20's twin with a seeds line | E4.8 |
-| H12 | **The comparators** (P10's twin): the disc harmonic and arithmetic means and the widened edge cap the naive operator at second order once `h ≲ δ/4` and are first order while the edge is unresolved; T0 is the worst, sitting on the widened floor; there is no conservative scheme on scattered nodes, so T1-FV has no twin and the strongest low-order comparator is the two-cell disc harmonic mean; the seeds are 3–4 orders below every treatment at δ ≤ h/4 on the parabolic problem. The ranking is quoted in the RMS norm with the max norm beside it. | the comparator tables per δ, elliptic and parabolic | E4.9 |
+| H12 | **The comparators** (P10's twin): the disc harmonic and arithmetic means and the widened edge cap the naive operator at second order once `h ≲ δ/4` and are first order while the edge is unresolved; T0 is the worst, sitting on the widened floor; there is no conservative scheme on scattered nodes, so T1-FV has no twin and the strongest low-order comparator is the two-cell disc harmonic mean; the seeds are 3–4 orders below every treatment at δ ≤ h/4 on the parabolic problem. The ranking is quoted in the RMS norm with the max norm beside it. *Answered by E4.9 (§4.9): the disc means cap the naive product at second order once resolved (the r²/8 term, measured), and T0 is then the naive line; the radius-h means and T0 are first order while unresolved, T0 the worst on its own floor; but the two-cell disc harmonic mean is not the strongest comparator. It is 1.6–3.4× above plain sampling at the jump, and no treatment beats sampling by more than 1.75× anywhere; the half-spacing means help only while h ≳ 2–3δ. The seeds' lead over the best treatment grows from 2.3 to 4.7 orders over 1250–40,000 nodes.* | the comparator tables per δ, elliptic and parabolic | E4.9 |
 
 ### 3.8 For the implementer of E4.2–E4.10
 
@@ -5051,3 +5052,322 @@ block; the flux seeds' O(h⁵) fit against the 15's O(h⁴); the warped ε; the
 level-0 warp on the ring and every level on case 2. `tests/test_heat2d_ring.py`:
 the ring domains, the far read, the four parts and the cache round trip at small
 counts, and the refusals.
+
+### 4.9 The coefficient treatments on scattered nodes (E4.9, #40)
+
+![the treatments on case 1](figures/heat2d_stiff_treatments.png)
+
+`heat2d/treatments.py` and `scripts/heat2d_stiff.py --mode treatments`: plan
+§3.4's "change the medium, keep the scheme" comparators, on E4.6's flat sweep
+(case 1, δ ∈ {0, 0.04, 0.01, 0.005, 0.0025}) and E4.11's curved one (case 2,
+δ ∈ {0, 0.01, 0.005, 0.0025}), 1250–40,000 nodes, both problems, the same
+references, and the same norm (the RMS over all nodes, with the max norm
+beside it, as H12 asks). There are six lines:
+
+- **T1**: the harmonic mean `area / ∫ dA/α` over a disc of radius h/2 and of
+  radius h about every node (`harmonic-0.5h`, `harmonic-1h`).
+- **T2**: the arithmetic mean `∫ α dA / area` over the same two discs
+  (`arithmetic-0.5h`, `arithmetic-1h`).
+- **T0**: the band at `max(δ, m h)` for m = 1, 2 (`widened-1h`,
+  `widened-2h`).
+
+Each is the naive product `Dx A Dx + Dy A Dy` on the treated alpha. The
+columns they are read against are all reread from the geometry's cache,
+never re-solved: sampling (`naive`), the δ = 0 construction, and the seeds
+(case 1's `seeds`, and the tangential chain on case 2, as the E4.11
+breadcrumb asks).
+
+Times (2026-09-23): each geometry's documented sweep took 21 min, the two run
+side by side, so both times are inflated; 800 s of each was the 40,000-node
+count. The default counts 1250–10,000 took 2.6 min cold on case 1 and 3.4
+min on case 2, and everything reprints from the caches in about a second.
+The builds are cheap (the disc quadrature is 0.2–13 s per (δ, radius) at
+40,000 nodes); the time is the solves, about 30 s per line at 40,000.
+
+**Decisions, none of them re-derivable from the tables.**
+
+- *A treatment is a medium the naive product samples*, as in 1-D (§2.4).
+  `NodalAlpha2D(nodes, values)` answers `alpha` at its own node set and
+  refuses any other point. A reference or a diagnostic that reached for it
+  would read the treatment where it should read the true medium; the
+  straddling-row readings take the true band. Its `repr` hashes the whole
+  table (E3.5's MEDIUM finding, fixed before it could bite). T0 is
+  `SmoothBand(band, max(δ, m h))`. Every node is treated, as in 1-D: a
+  treatment is a uniform rule, not an edge detector.
+- *The disc means are exact to rounding* (`disc_integrals`). The integral is
+  an iterated Gauss–Legendre in the product grid's `ShearMap` coordinates
+  `(x, η)`, `dA = y_η dx dη`. There both curves of a flat or case-2 band are
+  the lines `η = c_k` and the rows `y = 0, 1` are `η = 0, 1`, so a line of
+  constant η crosses no edge:
+  - *outer*, in η over the disc's preimage: substituted
+    `η = m + w sin θ`, so the chord's square root at the top and bottom is
+    analytic, and cut at `c_k ± EDGE_CUTS δ` (E3.2's elements, 24 points
+    each);
+  - *inner*, along each chord: its ends are found by Newton from outside the
+    disc, which is monotone because the chord function is convex.
+
+  The checks (`tests/heat2d/test_treatments.py`):
+  - the area is πr² inside the strip and πr² minus the circular segments at
+    the rows, both to 1e-13;
+  - across the flat jump the two integrals are the segment-area closed forms
+    to 1e-13;
+  - on case 2 they match an independent polar rule to 1e-13, at δ = 0 (cut at
+    the ray–curve crossings and at the angles where the curve meets the
+    circle) and at δ = 0.0025 (40 panels a direction); at the jump the polar
+    rule itself needed 64 points, and at 32 it was 2e-11 off;
+  - 24 against 36 points agree to 1e-13;
+  - the small-disc expansions `AM = α + (r²/8) Δα + O(r⁴)` and
+    `HM = α + (r²/8)(Δα − 2|∇α|²/α) + O(r⁴)` hold, with remainders falling
+    16× a halving of r;
+  - as δ → 0, `∫ dA/α` loses `c δ` per unit of the edge's chord, with c 1-D's
+    `edge_resistance_deficit`, while `∫ α dA` has no first-order term (the
+    fold's tanh is odd about the centre) and approaches the jump at O(δ²).
+- *The radii are h/2 and h, with h the node set's `h`*. The discs are clipped
+  at y = 0 and y = 1 and periodic in x.
+- *Nothing else is built.* There is no twin of T1-FV: a conservative scheme
+  with exact face conductances needs faces, which a scattered node set does
+  not have. T3 waits on E5.2 (#43). The smooth ring (the E4.8 breadcrumb) is
+  left out by Brad's call (2026-09-23): it is not in the ticket, and E4.12
+  (#84) reruns the ring's δ > 0 lines first. If it is taken up,
+  `disc_integrals` needs one more frame (polar about the ring's centre,
+  where the circles are `ρ = const`, Jacobian ρ), and `heat2d_ring.py`'s
+  part 4 needs the labels.
+- *The treatments are opt-in labels* (`TREATMENT_LABELS`) in
+  `sweep_operators`, cached beside the other lines in `heat2d_stiff_knee.json`
+  and `heat2d_stiff_curved.json`; neither cache's meta moves. T0's entries
+  carry `own_floor`, the widened band's reference against the true one at the
+  nodes.
+
+**At the jump the h/2 disc does nothing, by the node layout.** E2.1's
+straddling rows sit 0.5h, 1.37h and 2.23h off each curve, and the free nodes
+are further out, so a disc of radius h/2 at most touches the edge. At δ = 0
+both h/2 means change no node on case 1 (their `rows` reading is 0 at every
+count) and are the naive line to 1e-9 relative: 1-D's one-cell window ending
+on the jump (§2.4), now forced by the layout rather than by a placement. The
+radius-h disc reaches the innermost pair only (268 nodes at 5000). A node
+half a spacing off the edge gets `1/α = 0.8045/α_own + 0.1955/α_other`,
+0.561 beside the band and 0.237 in it; the table matches that by hand to
+four digits. On case 2 the inside piece varies, so the h/2 means move every
+node in the band by `(r²/8)(…)`, about 1e-6 of alpha. That is below naive's
+error at every count (0.997–1.002 of it from 5000 nodes), so the second-order
+cap the smooth piece implies never shows in this range.
+
+**Case 1, every line's fitted order** (RMS / max). The parabolic fits start
+at 2500: every treatment is the naive product on another alpha, and it
+inherits that product's 1250-node growing mode (one eigenvalue at +12.5 to
++33.5, BD4's root 1.44–2.82 at `dt = h`; none at 2500 and none on case 2),
+so the driver prints the parabolic fits again from `GROWING_BELOW`.
+
+| δ | naive | harmonic h/2 | harmonic h | arithmetic h/2 | arithmetic h | widened h | widened 2h | construction | seeds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| *equilibrium* | | | | | | | | | |
+| 0 | 1.50 / 1.50 | 1.50 / 1.50 | 1.02 / 1.13 | 1.50 / 1.50 | 0.83 / 0.71 | 0.68 / 0.54 | 0.60 / 0.48 | 4.77 / 4.82 | 4.77 / 4.82 |
+| 0.04 | 5.18 / 4.96 | 1.97 / 1.95 | 1.97 / 1.96 | 2.05 / 2.02 | 2.00 / 1.99 | 5.18 / 4.96 | 7.79 / 7.47 | −0.88 / −0.82 | 4.23 / 4.61 |
+| 0.01 | 3.99 / 4.16 | 2.40 / 2.86 | 1.77 / 1.75 | 2.59 / 2.77 | 1.81 / 1.81 | 4.32 / 3.89 | 2.22 / 2.24 | −0.18 / −0.19 | 4.31 / 4.64 |
+| 0.005 | 2.97 / 3.02 | 2.20 / 2.60 | 1.60 / 1.56 | 2.23 / 2.36 | 1.51 / 1.48 | 2.01 / 1.73 | 1.01 / 0.91 | 0.08 / 0.07 | 4.23 / 4.54 |
+| 0.0025 | 2.22 / 2.24 | 2.08 / 2.15 | 1.41 / 1.44 | 1.95 / 2.06 | 1.21 / 1.10 | 0.99 / 0.82 | 0.78 / 0.65 | 0.01 / −0.02 | 4.48 / 4.74 |
+| *parabolic, 2500–40,000* | | | | | | | | | |
+| 0 | 1.61 / 1.35 | 1.61 / 1.35 | 0.96 / 0.94 | 1.61 / 1.35 | 0.86 / 0.75 | 0.74 / 0.63 | 0.55 / 0.39 | 4.79 / 4.76 | 4.79 / 4.76 |
+| 0.04 | 5.10 / 4.94 | 1.98 / 2.00 | 1.97 / 1.98 | 1.99 / 2.00 | 1.99 / 1.98 | 5.10 / 4.94 | 7.25 / 6.94 | −0.90 / −0.74 | 4.16 / 4.51 |
+| 0.01 | 4.23 / 4.11 | 2.28 / 2.58 | 1.82 / 1.81 | 2.47 / 2.54 | 1.89 / 1.88 | 5.23 / 4.72 | 2.51 / 2.53 | −0.29 / −0.23 | 4.27 / 4.53 |
+| 0.005 | 3.11 / 2.91 | 2.15 / 2.45 | 1.64 / 1.62 | 2.17 / 2.16 | 1.62 / 1.64 | 2.42 / 2.18 | 0.99 / 0.83 | 0.08 / 0.08 | 4.03 / 4.38 |
+| 0.0025 | 2.58 / 2.16 | 2.20 / 2.07 | 1.44 / 1.41 | 1.93 / 1.91 | 1.30 / 1.21 | 1.10 / 0.97 | 0.73 / 0.57 | 0.01 / −0.01 | 4.32 / 4.62 |
+
+T0's 7.8 at δ = 0.04 is not an order. At 5000 nodes 2h drops below δ, T0
+becomes the naive line, and the fit spans the step off its floor.
+
+**Case 1 at 40,000 nodes**, equilibrium, RMS error, each treatment over the
+naive line in brackets:
+
+| δ | h/δ | naive | harmonic h/2 | harmonic h | arithmetic h/2 | arithmetic h | widened h | widened 2h | construction | seeds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | jump | 3.44e-04 | 3.44e-04 (1.00) | 9.98e-04 (2.90) | 3.44e-04 (1.00) | 8.33e-04 (2.42) | 1.24e-03 (3.60) | 2.19e-03 (6.37) | 5.28e-09 | 5.28e-09 |
+| 0.04 | 0.13 | 8.22e-09 | 6.37e-06 (775) | 2.55e-05 (3100) | 4.80e-06 (584) | 1.92e-05 (2330) | 8.22e-09 (1) | 8.22e-09 (1) | 1.90e-02 | 8.78e-09 |
+| 0.01 | 0.53 | 2.45e-06 | 2.96e-05 (12.1) | 1.18e-04 (48.1) | 2.00e-05 (8.15) | 7.91e-05 (32.3) | 2.45e-06 (1) | 9.50e-05 (38.8) | 3.69e-03 | 8.42e-09 |
+| 0.005 | 1.05 | 2.89e-05 | 7.44e-05 (2.58) | 2.37e-04 (8.22) | 6.22e-05 (2.16) | 1.79e-04 (6.19) | 7.18e-05 (2.49) | 1.08e-03 (37.5) | 1.07e-03 | 8.82e-09 |
+| 0.0025 | 2.11 | 8.36e-05 | 1.24e-04 (1.48) | 4.13e-04 (4.94) | 1.41e-04 (1.69) | 3.58e-04 (4.28) | 6.36e-04 (7.60) | 1.62e-03 (19.4) | 6.18e-04 | 7.99e-09 |
+
+**No treatment beats sampling by more than 1.75×, and at the jump none
+beats it at all past the coarsest sets.** Over the whole sweep (case 1's
+parabolic 1250-node set aside, for its growing mode), the best each treatment
+does against the naive line on the same nodes is:
+
+- case 1: 0.62 (arithmetic h/2) and 0.74 (harmonic h/2), both at δ = 0.0025
+  on 10,000 nodes (h/δ = 4.2), and on the parabolic problem 0.73 and 0.77;
+  the radius-h means gain only on the coarsest sets (elliptic at 1250 nodes:
+  0.66 arithmetic, 0.96 harmonic; parabolic at 2500: 0.85 arithmetic);
+- case 2: 0.57 (arithmetic h, δ = 0.005, 2500 nodes), 0.65 (arithmetic h/2)
+  and 0.73 (harmonic h/2, δ = 0.0025, 10,000 nodes).
+
+At the jump, from 5000 nodes on, the h/2 means are the naive line, and every
+treatment that changes alpha there is worse than sampling:
+
+| treatment | case 1, elliptic | case 1, parabolic | case 2, elliptic | case 2, parabolic |
+| --- | --- | --- | --- | --- |
+| harmonic h | 1.58–3.28× | 2.18–3.42× | 1.88–3.07× | 2.68–2.85× |
+| arithmetic h | 1.28–2.60× | 1.85–3.00× | 1.76–2.82× | 2.68–2.91× |
+| widened h | 1.74–3.79× | 2.59–4.46× | 2.80–4.06× | 3.93–4.53× |
+| widened 2h | 2.73–6.40× | 3.83–7.88× | 5.15–6.19× | 5.75–8.24× |
+
+**The crossover against sampling** (the h/δ at which a treatment's error
+over the naive line's passes 1, log-linear between counts). The h/2 means
+cross at a fixed `h/δ` of 1.8–3.5, at every width and on both cases:
+
+| crossover h/δ | δ = 0.01 | δ = 0.005 | δ = 0.0025 |
+| --- | --- | --- | --- |
+| case 1, elliptic: harmonic h/2 / arithmetic h/2 | 2.12 / 1.89 | 2.47 / 2.43 | 2.59 / 3.00 |
+| case 1, parabolic | 2.07 / 1.89 | 2.59 / 2.73 | 2.68 / 3.34 |
+| case 2, elliptic | 1.92 / 1.83 | 2.68 / 3.40 | 2.49 / 2.66 |
+| case 2, parabolic | 1.90 / 1.87 | 2.64 / 3.52 | 2.75 / 3.27 |
+
+So a disc of half a spacing helps, a little, only while the edge is at
+least two to three spacings narrower than the grid, and hurts from there
+on, exactly 1-D's "they help only while h ≳ δ and must know δ to be switched
+off". The radius-h means and T0 have no such crossover. Where they cross at
+all (case 1, elliptic: arithmetic h at h/δ = 2.44, 3.74 and 7.43 for
+δ = 0.01, 0.005 and 0.0025; widened h at 5.09 and 10.42), the crossing falls
+between 1250 and 5000 nodes at every width. That is a count, not an h/δ: at
+the jump the same lines turn at the same counts (arithmetic h goes 0.84,
+0.98, 1.53 of naive over 1250, 2500 and 5000 nodes). Their early wins belong
+to the coarsest node sets, not to the edge. On case 2 several of them cross
+twice around 2500 nodes, where the naive line itself is an outlier (4.77e-3
+at 2500 against 4.73e-3 at 1250). At δ = 0.04 every disc mean hurts at every
+count. T0 there is the naive line at every count for m = 1 and from 5000
+nodes for m = 2, so it cannot hurt; before that the m = 2 line is 42–63×
+worse.
+
+**What the treatments do at the edge: nothing that converges.** Case 1's
+straddling-row readings (§4.2's flux on the innermost pair, relative to
+`α v′` at the curve) at δ = 0 and 40,000 nodes give one-sided flux errors of:
+
+- naive 0.34, and the h/2 means the same;
+- harmonic h 0.36 (its jump across the pair 0.39, against naive's 0.55);
+- arithmetic h 0.30, widened h 0.47, widened 2h 0.59.
+
+None of these converges with n, and neither does the naive one (E4.3's
+plateau). At δ = 0.0025 the h/2 means take naive's 0.31 to 0.18 at 10,000
+nodes and 0.21 to 0.10 at 20,000: the part of the sweep where they help.
+
+In 1-D the two-cell harmonic mean worked by turning the jump's O(1) flux
+defect into an O(h) one on the two nodes beside it (§2.4). Here no treatment
+does. Our reading, not a proof: a treatment changes alpha only where its
+disc meets the edge (the innermost pair, at radius h), while the product's
+rows reach two stencil radii, about 7h, and every row within that reach sees
+the kink in u. And the bar is higher than in 1-D: the sampled product is
+already order 1.5 at the jump in both norms (E4.3), where 1-D's naive line
+was first order. The radius-h means are first order in both norms (harmonic
+1.02 / 1.13, arithmetic 0.83 / 0.71), so they fall behind from about 2500
+nodes.
+
+**T0 on its floor.** The widened edge solves another problem exactly, and
+its error is that problem's distance from the true one, as in 1-D:
+
+| error ÷ own floor | case 1, elliptic | case 1, parabolic | case 2, elliptic | case 2, parabolic |
+| --- | --- | --- | --- | --- |
+| widened 2h | 0.996–1.000 | 0.977–1.052 | 0.989–1.000 | 0.86–0.96 |
+| widened h, h ≥ 1.4δ | 1.008–1.027 | 1.000–1.022 | 0.986–1.017 | 0.93–0.96 |
+
+At the knee (h/δ = 1.05, where `m h − δ` is a sliver) the m = 1 ratio rises
+to 1.51 and 1.26 on case 1, elliptic, at δ = 0.01 and 0.005. From 2500
+nodes on, T0 at m = 2 is the worst treatment at every unresolved (δ, n), in
+both norms, on both problems and both cases. At 1250 an h/2 mean (case 1) or
+the arithmetic h mean (case 2) is sometimes worse in the max norm, as is an
+h/2 mean on case 1's parabolic growing-mode set. Where `δ ≥ m h` T0
+is the naive line bit for bit: of the six, it is the one treatment that
+switches itself off, since `max(δ, m h)` knows δ.
+
+**H12, clause by clause.**
+
+- *"Cap the naive operator at second order once h ≲ δ/4"*: **holds for the
+  disc means, not for T0.** At δ = 0.04 the four disc means fit 1.95–2.06 in
+  both norms and both problems, sit 584–3100× above the naive line at 40,000
+  nodes, and the radius-h line is 4.00× the h/2 one (3.996 harmonic, 3.998
+  arithmetic): the `r²/8` term of the mean-value expansion, measured. T0 is
+  the naive line there, fifth order (5.18), as 1-D found ("naive = T0"
+  resolved, §2.4).
+- *"First order while the edge is unresolved"*: **holds for the radius-h
+  means and T0**. At the jump they fit 0.55–1.02 in the RMS norm on both
+  cases and problems, T0 still pre-asymptotic on its `c (m h − δ)` floor.
+  **Not for the h/2 means**: they are the naive line at the jump (1.50) and
+  fit 1.93–2.59 at δ > 0 on case 1.
+- *"T0 is the worst, on the widened floor"*: **holds** (the table above).
+- *"There is no conservative scheme on scattered nodes, so T1-FV has no twin
+  and the strongest low-order comparator is the two-cell disc harmonic
+  mean"*: **the first half holds, the second is wrong.** The radius-h
+  harmonic mean is 1.6–3.4× *above* sampling at the jump from 5000 nodes.
+  The best treatment anywhere is a half-spacing mean, which is sampling
+  itself at the jump and gains at most 1.6× (case 1) or 1.75× (case 2)
+  elsewhere while h ≳ 2–3δ. On scattered nodes the strongest low-order
+  comparator is the naive product itself.
+- *"The seeds 3–4 orders below every treatment at δ ≤ h/4, parabolic"*:
+  **holds from 5000 nodes, and the gap grows.** The best treatment over the
+  seed line at the jump is 2.3, 2.9, 3.3, 3.8, 4.3 and 4.7 orders at 1250 …
+  40,000 nodes on case 1, and 1.6, 2.3, 3.0, 3.4, 4.1 and 4.7 on case 2
+  (tangential). At δ = 0.0025, while h ≥ 4δ (to 10,000 nodes), it is 2.3,
+  2.8, 3.2 and 3.6 on case 1. The order gap (about 4.8 against at most 1.6)
+  makes
+  it grow roughly like h⁻³.
+- *"The RMS norm with the max norm beside"*: **done, and it does not change
+  the verdict.** In 1-D the max norm called the two-cell mean first order
+  where the RMS said 1.5 (a local defect). Here the radius-h means' two fits
+  at the jump differ by only 0.02–0.13, so the max norm does not reorder
+  them. It moves the coarse counts' ranking (at 1250 nodes on case 1 the
+  widened h line is the best treatment in the max norm and the arithmetic h
+  one in the RMS) and T0's fits (0.65 / 0.21 at m = 2 on case 2).
+
+**What the manuscript says, and what E4.10 inherits.**
+
+- *The comparator paragraph.* In 1-D the finite-volume scheme with exact face
+  conductances is the strongest low-order comparator, exact at equilibrium
+  and second order at every δ (§2.4). On scattered nodes it has no twin, and
+  the nodal treatments that stand in for it do not beat plain sampling: at
+  most 1.75× anywhere in the sweep, worse than sampling at the jump from 5000
+  nodes, and capped at second order once the edge is resolved, 580–3100×
+  behind at 40,000 nodes. The honest 2-D comparators are therefore the naive
+  product (which needs nothing) and the δ = 0 construction (which needs δ to
+  be switched off). The treatments earn one sentence, this section's figure
+  and the crossover (h/δ ≈ 2–3 for the half-spacing disc). The sentence must
+  keep one caveat: at the jump the half-spacing disc is sampling *by
+  construction* on this node layout (E2.1's innermost rows sit exactly h/2
+  off the curve, so the disc is tangent to it), so "worse than sampling at
+  the jump" is a statement about the radius-h means and T0, not about
+  averaging α as such (the E4.9 spar's second finding).
+- *E4.10 (#41)*: the figures `docs/figures/heat2d_stiff_treatments.png` and
+  `heat2d_stiff_treatments_a0.02_sine.png` (top: the parabolic lines at the
+  jump, the narrowest and the widest δ; bottom: each family over the naive
+  line against h/δ, every width with its own marker); the run commands in
+  the driver's docstring; `--data-dir` and the results file are not added
+  here.
+- *E5.2 (#43)*: pin the scattered-node form of the conductance rule to a
+  source before the manuscript names it, and decide T3.
+- *The ring*: see the decisions above.
+
+**Tests.** `tests/heat2d/test_treatments.py`:
+
+- a constant alpha left alone by every mean;
+- the area inside and clipped at the rows;
+- the flat jump's segment-area closed forms;
+- case 2 against the unsheared polar rule at δ = 0 and 0.0025;
+- more Gauss points changing nothing;
+- the two small-disc expansions;
+- AM ≥ HM;
+- ∫1/α's first-order approach with 1-D's constant and ∫α's second-order one;
+- the ring refused;
+- the nodal table read at its nodes only, and its hash seeing the middle of
+  the table;
+- the naive operator reading a table as it reads the medium, bit for bit;
+- the widened edge's width, its δ-independence below `m h`, and its kept
+  composition.
+
+`tests/test_heat2d_stiff.py`:
+
+- the labels' kinds and factors, and the seed line per geometry;
+- a treatment built by `sweep_operators` equal to `naive_operator` on the
+  treated medium bit for bit, the two means at one radius from one
+  quadrature;
+- the treatment sweep at 900 and 1250 nodes: the h/2 means equal to naive at
+  the jump with no node changed, T0 equal to naive where δ ≥ h, T0 on its
+  floor to 1 %, the seeds two orders below every treatment at 1250, every
+  disc mean above naive at δ = 0.04, and the cache's round trip;
+- the case-2 sweep at the jump: its own cache and figure, the curved-over-flat
+  table, and the tangential line below every treatment.

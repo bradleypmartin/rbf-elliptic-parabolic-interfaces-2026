@@ -119,6 +119,24 @@ E2.3's translated basis on case 2 at δ = 0, H6's twin on case 2 (the seed
 operators' interior spectra at 1600 nodes per δ), and H17's timing (the median
 ``seed_basis`` of 400 seeded rows per δ at 10,000 nodes, both chains).
 
+``--mode treatments`` (E4.9, #40; stiff note §3.7 H12, §4.9 records) is plan
+§3.4's comparison: change the *medium* the naive operator samples, keep the
+operator (``heat2d/treatments.py``). Six opt-in lines (``TREATMENT_LABELS``):
+the harmonic (T1) and arithmetic (T2) means of alpha over a disc of radius
+h/2 and h about each node, exact to rounding by quadrature in the product
+grid's sheared coordinates, and the edge widened (T0) to ``max(δ, m h)`` for
+m = 1, 2; T1-FV has no twin on scattered nodes and T3 waits on E5.2. They run
+beside E4.3's naive and construction lines and the seed line (case 1's
+``seeds``, the tangential chain on another geometry), all reread from the
+geometry's cache, against the same references. The tables: every line's error
+in the RMS and the max norm with its order; each treatment over the naive line
+at every (δ, n) and the ``h/δ`` where it crosses 1 (the crossover against
+sampling); T0 over its own floor, the widened band's reference against the true
+one; H12's best and worst treatment against the seeds where the edge is
+unresolved; the ranking; every line's fit (the parabolic ones again from
+``GROWING_BELOW``); and off case 1 each line over its case-1 twin. Figure:
+``heat2d_stiff_treatments[_<tag>].png``.
+
     uv run python scripts/heat2d_stiff.py              # 2.5 min cold, 21 s cached
     uv run python scripts/heat2d_stiff.py --mode naive \
         --counts 1250 2500 5000 10000 20000 40000 80000 160000   # 58 min once
@@ -155,6 +173,11 @@ operators' interior spectra at 1600 nodes per δ), and H17's timing (the median
         --counts 1250 2500 5000 10000 20000 40000 80000 160000  # B's δ = 0, 23 min
     uv run python scripts/heat2d_stiff.py --mode tangential \
         --counts 1250 2500 5000 10000 20000 40000               # H14, H15, spectra
+    uv run python scripts/heat2d_stiff.py --mode treatments     # 3 min cold, s cached
+    uv run python scripts/heat2d_stiff.py --mode treatments \
+        --counts 1250 2500 5000 10000 20000 40000               # E4.9 on case 1
+    uv run python scripts/heat2d_stiff.py --mode treatments --amplitude 0.02 \
+        --counts 1250 2500 5000 10000 20000 40000               # E4.9 on case 2
 """
 
 from __future__ import annotations
@@ -216,6 +239,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     case2,
     control_exact,
     direct_operator,
+    disc_means,
     gaussian_derivative,
     interface_aware_operator,
     interface_crossings,
@@ -235,6 +259,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     solve_equilibrium,
     stencil_weights,
     weights_of,
+    widened_edge,
 )
 from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
 
@@ -288,6 +313,35 @@ expansion off (``curvature=False``, EABE Fig. 10's "linear interface"), which is
 measured against on a curved one (E4.7, §4.6); and E4.11's tangential chain
 (§3.10), warped and plain, the seeds in the foot curve's own coordinates."""
 
+TREATMENT_LABELS = (
+    "harmonic-0.5h",
+    "harmonic-1h",
+    "arithmetic-0.5h",
+    "arithmetic-1h",
+    "widened-1h",
+    "widened-2h",
+)
+"""E4.9's coefficient treatments (#40, ``heat2d/treatments.py``), each the naive
+operator on a changed medium: the harmonic (T1) and arithmetic (T2) means of
+alpha over a disc of radius h/2 and h about every node, and the edge widened
+(T0) to ``max(δ, m h)`` for m = 1, 2. The suffix is the radius or the width in
+units of the node set's ``h``. Opt-in lines, like ``EXTRA_LABELS``, so the
+default runs and their caches do not move; ``--mode treatments`` runs all six."""
+
+HARMONIC = "#008300"
+"""T1, the harmonic disc means: green."""
+
+ARITHMETIC = "#e87ba4"
+"""T2, the arithmetic disc means: magenta."""
+
+WIDENED = "#595959"
+"""T0, the widened edge: a dark neutral, as 1-D's T0 was grey. With the naive
+orange and the seeds' blue the five hues clear the dataviz validator's
+all-pairs gates (normal-vision ΔE ≥ 15, colour-blind ΔE ≥ 9.4; the grey is
+below the chroma floor on purpose); beside the tangential cyan the magenta is
+in the colour-blind warn band (6.9), so every line keeps a marker, and the
+larger radius or width is dashed with open markers."""
+
 SEEDS_PLAIN = "#7fb3d5"
 """The seeds' ablation: the same blue as the seeds, lighter (``plotting``'s key,
 and ``heat2d_stiff_eigenvalues.py``'s)."""
@@ -317,8 +371,17 @@ STYLE = {
     "construction-flat": (CONSTRUCTION_FLAT, "x"),
     "tangential": (TANGENTIAL, "P"),
     "tangential-plain": (TANGENTIAL_PLAIN, "X"),
+    "harmonic-0.5h": (HARMONIC, "D"),
+    "harmonic-1h": (HARMONIC, "D"),
+    "arithmetic-0.5h": (ARITHMETIC, "p"),
+    "arithmetic-1h": (ARITHMETIC, "p"),
+    "widened-1h": (WIDENED, "h"),
+    "widened-2h": (WIDENED, "h"),
 }
 """Colour and marker per line, E4.5's driver's."""
+
+WIDER = ("harmonic-1h", "arithmetic-1h", "widened-2h")
+"""The treatments drawn dashed with open markers: the larger disc or width."""
 
 QUANTITIES = ("rms", "max", "profile", "flux", "jump")
 """What ``edge_diagnostics`` returns, in the order the tables print it."""
@@ -817,6 +880,56 @@ def seed_operators(
     return {w: op.tocsr() for w, op in ops.items()}, seeded
 
 
+def treatment_of(label: str) -> tuple[str, float]:
+    """``("harmonic" | "arithmetic" | "widened", factor)`` of a treatment label."""
+    if label not in TREATMENT_LABELS:
+        raise ValueError(f"{label!r} is not one of {TREATMENT_LABELS}")
+    kind, _, factor = label.partition("-")
+    return kind, float(factor.removesuffix("h"))
+
+
+def treated_medium(
+    label: str, nodes: NodeSet, medium: SmoothBand, means: dict[float, tuple]
+):
+    """The medium the naive operator samples for one treatment (plan §3.4).
+
+    A disc mean is a ``NodalAlpha2D`` over discs of radius ``factor · h``;
+    ``means`` memoises the pair per radius, so the harmonic and arithmetic
+    lines at one radius pay for one quadrature. The widened edge is the true
+    band at ``max(δ, factor · h)``.
+    """
+    kind, factor = treatment_of(label)
+    if kind == "widened":
+        return widened_edge(nodes, medium, factor)
+    if factor not in means:
+        means[factor] = disc_means(nodes, medium, factor * nodes.h)
+    harmonic, arithmetic = means[factor]
+    return harmonic if kind == "harmonic" else arithmetic
+
+
+def own_floor(
+    geometry: Geometry,
+    delta: float,
+    label: str,
+    problem: str,
+    nodes: NodeSet,
+    t: float,
+) -> float:
+    """T0's floor: the widened band's reference against the true band's, RMS.
+
+    The widened edge solves another problem exactly, and 1-D found its error
+    *is* that problem's distance from the true one (stiff note §2.4: to 0.1 %
+    at m = 2); zero where ``δ ≥ m h`` and nothing is widened.
+    """
+    _, m = treatment_of(label)
+    width = max(delta, m * nodes.h)
+    if width == delta:
+        return 0.0
+    c = PROBLEMS[problem]
+    wide, true = geometry.reference(width, c), geometry.reference(delta, c)
+    return rms_error(wide(nodes.x, nodes.y, t), true(nodes.x, nodes.y, t))
+
+
 def sweep_operators(
     labels: Sequence[str],
     nodes: NodeSet,
@@ -834,12 +947,17 @@ def sweep_operators(
     stencils of this node set; the reach group depends on δ and is built
     here. The readings are the rows the method recomputes and the seconds
     the build took, which the tables quote. ``domain`` is the geometry's
-    (case 1 by default); only its material is replaced.
+    (case 1 by default); only its material is replaced. A treatment
+    (``TREATMENT_LABELS``) is the naive operator on ``treated_medium``: its
+    rows are the nodes whose alpha the treatment changed, and the two means
+    at one radius share one disc quadrature, charged to whichever is built
+    first.
     """
     families = {
         chain: [w for w in (True, False) if seed_label(w, reach, chain) in labels]
         for chain in (False, True)
     }
+    means: dict[float, tuple] = {}
     marched = {seed_label(w, reach, c) for c in (False, True) for w in (True, False)}
     built: dict[str, tuple[sp.csr_array, str | None, dict[str, float]]] = {}
     seed_group: list[Stencils] = []
@@ -888,8 +1006,15 @@ def sweep_operators(
                     if g.kind == INTERFACE_KIND
                 )
             )
+        elif label in TREATMENT_LABELS:
+            treated = treated_medium(label, nodes, medium, means)
+            op = naive_operator(nodes, treated, groups["plain"])
+            permc = PRODUCT_ORDERING
+            sampled = medium.alpha(nodes.x, nodes.y)
+            changed = treated.alpha(nodes.x, nodes.y) / sampled - 1.0
+            rows = int(np.sum(np.abs(changed) > 1e-12))
         else:
-            known = (*SWEEP_LABELS, *EXTRA_LABELS)
+            known = (*SWEEP_LABELS, *EXTRA_LABELS, *TREATMENT_LABELS)
             raise ValueError(f"unknown line {label!r}; one of {known}")
         built[label] = (op, permc, {"rows": rows, "seconds": time.perf_counter() - t0})
     for chain, warps in families.items():
@@ -993,7 +1118,8 @@ def knee_sweep(
     straddling-row readings assume the separable mode), and keys its entries
     by its ``tag``. Every operator built here also carries the truncation
     probe on the elliptic entry (``probe_seeded``, ``probe_crossing``,
-    ``probe_bulk``); case-1 entries cached before E4.7 have none.
+    ``probe_bulk``); case-1 entries cached before E4.7 have none. A widened
+    edge (E4.9) also carries its ``own_floor`` per problem.
     """
     domain = geometry.domain()
     results: dict[str, dict[float, list[dict]]] = {
@@ -1071,7 +1197,11 @@ def knee_sweep(
                             )
                         else:
                             diagnostics = rms_and_max(refs[problem], u, nodes, t)
-                        extra = probe if problem == "elliptic" else {}
+                        extra = dict(probe) if problem == "elliptic" else {}
+                        if label.startswith("widened-"):
+                            extra["own_floor"] = own_floor(
+                                geometry, delta, label, problem, nodes, t
+                            )
                         cache[key(problem, delta, label)] = {
                             **diagnostics,
                             **readings,
@@ -1771,9 +1901,16 @@ def _fit(rows: list[dict], name: str) -> float:
 
 
 def print_sweep(
-    results: dict[float, list[dict]], labels: Sequence[str], title: str
+    results: dict[float, list[dict]],
+    labels: Sequence[str],
+    title: str,
+    quantity: str = "rms",
 ) -> None:
-    """Per δ: every line's RMS error (order per halving of h), and the line's fit."""
+    """Per δ: every line's RMS error (order per halving of h), and the line's fit.
+
+    ``quantity`` is any reading the entries carry: the max norm beside the RMS
+    in E4.9's tables.
+    """
     print(f"\n{title}")
     header = "     n       h |" + "".join(f" {label:<16} |" for label in labels)
     for delta, rows in results.items():
@@ -1786,7 +1923,7 @@ def print_sweep(
         )
         print(f"  {name}{span}")
         print(f"  {header}")
-        columns = {label: _with_rates(rows, f"{label}/rms") for label in labels}
+        columns = {label: _with_rates(rows, f"{label}/{quantity}") for label in labels}
         for i, row in enumerate(rows):
             line = f"  {row['n']:6d}  {row['h']:.4f} |"
             for label in labels:
@@ -1794,7 +1931,7 @@ def print_sweep(
             print(line)
         line = "     fit          |"
         for label in labels:
-            line += f" {_fit(rows, f'{label}/rms'):16.2f} |"
+            line += f" {_fit(rows, f'{label}/{quantity}'):16.2f} |"
         print(line)
 
 
@@ -2233,7 +2370,7 @@ def print_flat_comparison(
         for label in shown:
             if f"flat/{label}" in r:
                 f, c = r[f"flat/{label}"], r[f"curved/{label}"]
-                line += f" {f:20.2e} {c:8.2e} {c / f:5.0f} |"
+                line += f" {f:20.2e} {c:8.2e} {c / f:5.3g} |"
             else:
                 line += f" {'-':>20} {'-':>8} {'-':>5} |"
         print(line)
@@ -2666,11 +2803,499 @@ def run_tangential(args) -> dict:
     return {"tangential": tables}
 
 
+# --- E4.9: the coefficient treatments -----------------------------------------------
+
+
+UNRESOLVED = 4.0
+"""``h/δ`` from which H12 calls an edge unresolved (``δ ≤ h/4``); δ = 0 always is."""
+
+GROWING_BELOW = 1800
+"""Counts below this carry E4.3's coarse-set growing mode on case 1: the naive
+product has one eigenvalue at +17.7 (δ = 0) to +25.1 (δ = 0.04) at 1250 nodes,
+and every treatment, being the same product on another alpha, inherits it
+(+12.5 to +33.5, BD4's root 1.44–2.82 at ``dt = h``); none at 2500, none on
+case 2. The parabolic fits are printed again from this count up."""
+
+
+def treatment_lines(geometry: Geometry) -> list[str]:
+    """The comparator table's columns: sampling, the six treatments, the two ends.
+
+    The seed line is case 1's ``seeds`` and the tangential chain elsewhere
+    (the E4.11 breadcrumb: route (a) is first order where alpha varies along
+    the edge, so it is not the method on case 2).
+    """
+    seeds = "seeds" if geometry.is_case1 else "tangential"
+    return ["naive", *TREATMENT_LABELS, "construction", seeds]
+
+
+def treatment_ratios(
+    results: dict[float, list[dict]], quantity: str = "rms"
+) -> list[dict]:
+    """Per (δ, n): each treatment's error over the naive line's (below 1: it helps)."""
+    rows = []
+    for delta, lines in results.items():
+        for r in lines:
+            row = {"delta": delta, "n": r["n"], "h_over_delta": r["h_over_delta"]}
+            for label in TREATMENT_LABELS:
+                row[label] = r[f"{label}/{quantity}"] / r[f"naive/{quantity}"]
+            rows.append(row)
+    return rows
+
+
+def crossovers(ratios: list[dict]) -> dict[str, dict[float, list[float]]]:
+    """Where each treatment crosses sampling: the ``h/δ`` at which ÷ naive passes 1.
+
+    Per δ > 0 along the counts (``h/δ`` falling), log-linear between the two
+    counts that bracket 1; an empty list where the ratio stays on one side over
+    the counts swept (``print_crossovers`` says which).
+    """
+    out: dict[str, dict[float, list[float]]] = {label: {} for label in TREATMENT_LABELS}
+    deltas = sorted({r["delta"] for r in ratios if r["delta"] > 0.0}, reverse=True)
+    for delta in deltas:
+        rows = [r for r in ratios if r["delta"] == delta]
+        for label in TREATMENT_LABELS:
+            found = []
+            for a, b in zip(rows[:-1], rows[1:], strict=True):
+                la, lb = np.log(a[label]), np.log(b[label])
+                if la * lb < 0.0:
+                    xa, xb = np.log(a["h_over_delta"]), np.log(b["h_over_delta"])
+                    found.append(float(np.exp(xa + (xb - xa) * la / (la - lb))))
+            out[label][delta] = found
+    return out
+
+
+def print_treatment_ratios(ratios: list[dict], title: str) -> None:
+    """Each treatment over the naive line at every (δ, n)."""
+    print(f"\n{title}")
+    header = "      δ       n    h/δ |" + "".join(
+        f" {label:>15} |" for label in TREATMENT_LABELS
+    )
+    print(header)
+    for r in ratios:
+        ratio = "   jump" if r["delta"] == 0.0 else f"{r['h_over_delta']:7.2f}"
+        line = f"  {r['delta']:6.4f}  {r['n']:6d} {ratio} |"
+        line += "".join(f" {r[label]:15.3g} |" for label in TREATMENT_LABELS)
+        print(line)
+
+
+def print_crossovers(
+    cross: dict[str, dict[float, list[float]]], ratios: list[dict], title: str
+) -> None:
+    """Per treatment and δ: the crossover ``h/δ``, or which side it stays on."""
+    print(f"\n{title}")
+    deltas = sorted({r["delta"] for r in ratios if r["delta"] > 0.0}, reverse=True)
+    print("                  |" + "".join(f" {f'δ = {d:g}':>22} |" for d in deltas))
+    for label in TREATMENT_LABELS:
+        line = f"  {label:<15} |"
+        for delta in deltas:
+            found = cross[label][delta]
+            rows = [r for r in ratios if r["delta"] == delta]
+            if found:
+                cell = ", ".join(f"{c:.2f}" for c in found)
+            else:
+                side = "helps" if rows[0][label] < 1.0 else "hurts"
+                cell = (
+                    f"{side} {rows[0]['h_over_delta']:.2f}…"
+                    f"{rows[-1]['h_over_delta']:.2f}"
+                )
+            line += f" {cell:>22} |"
+        print(line)
+
+
+def print_widened_floors(results: dict[float, list[dict]], title: str) -> None:
+    """T0 against its own floor: the widened reference's distance from the true one."""
+    print(f"\n{title}")
+    widened = [label for label in TREATMENT_LABELS if label.startswith("widened-")]
+    print(
+        "      δ       n    h/δ |"
+        + "".join(
+            f" {label + ': error':>18}  {'floor':>9}  {'÷':>6} |" for label in widened
+        )
+    )
+    for delta, lines in results.items():
+        for r in lines:
+            ratio = "   jump" if delta == 0.0 else f"{r['h_over_delta']:7.2f}"
+            line = f"  {delta:6.4f}  {r['n']:6d} {ratio} |"
+            for label in widened:
+                error, floor = r[f"{label}/rms"], r[f"{label}/own_floor"]
+                if floor > 0.0:
+                    line += f" {error:18.3e}  {floor:9.3e}  {error / floor:6.3f} |"
+                else:
+                    line += f" {error:18.3e}  {'δ ≥ m h: the true band':>17} |"
+            print(line)
+
+
+def h12_rows(
+    results: dict[float, list[dict]], seeds: str, quantity: str = "rms"
+) -> list[dict]:
+    """H12 where the edge is unresolved (δ = 0 or ``h/δ ≥ 4``): the best treatment.
+
+    Beside it the worst, the naive and construction lines and the seeds, and
+    ``orders``, ``log10`` of the best treatment over the seeds.
+    """
+    rows = []
+    for delta, lines in results.items():
+        for r in lines:
+            if delta > 0.0 and r["h_over_delta"] < UNRESOLVED:
+                continue
+            errors = {label: r[f"{label}/{quantity}"] for label in TREATMENT_LABELS}
+            best = min(errors, key=errors.get)
+            worst = max(errors, key=errors.get)
+            rows.append(
+                {
+                    "delta": delta,
+                    "n": r["n"],
+                    "h_over_delta": r["h_over_delta"],
+                    "best": best,
+                    "best_error": errors[best],
+                    "worst": worst,
+                    "worst_error": errors[worst],
+                    "naive": r[f"naive/{quantity}"],
+                    "construction": r[f"construction/{quantity}"],
+                    "seeds": r[f"{seeds}/{quantity}"],
+                    "orders": float(np.log10(errors[best] / r[f"{seeds}/{quantity}"])),
+                }
+            )
+    return rows
+
+
+def print_h12(rows: list[dict], seeds: str, title: str) -> None:
+    print(f"\n{title}")
+    print(
+        "      δ       n    h/δ |  best treatment      error  |  worst"
+        f"                error |      naive  construction  {seeds:>10} |"
+        "  best ÷ seeds (orders)"
+    )
+    for r in rows:
+        ratio = "   jump" if r["delta"] == 0.0 else f"{r['h_over_delta']:7.2f}"
+        print(
+            f"  {r['delta']:6.4f}  {r['n']:6d} {ratio} |"
+            f"  {r['best']:<15} {r['best_error']:9.2e}  |"
+            f"  {r['worst']:<15} {r['worst_error']:9.2e} |"
+            f"  {r['naive']:9.2e}  {r['construction']:12.2e}  {r['seeds']:10.2e} |"
+            f"  {10 ** r['orders']:10.3g} ({r['orders']:4.1f})"
+        )
+
+
+def print_treatment_fluxes(results: dict[float, list[dict]], title: str) -> None:
+    """E4.3's flux on the innermost pair per line: what a treatment does at the edge.
+
+    Case 1 only (the readings assume the separable mode): the one-sided flux
+    error on either side of the pair and the error in its jump, both over the
+    reference's ``α v′`` at the curve, the largest over both curves.
+    """
+    print(f"\n{title}")
+    lines = ["naive", *TREATMENT_LABELS]
+    print("      δ       n    h/δ |" + "".join(f" {label:>17} |" for label in lines))
+    for delta, rows in results.items():
+        for r in rows:
+            ratio = "   jump" if delta == 0.0 else f"{r['h_over_delta']:7.2f}"
+            line = f"  {delta:6.4f}  {r['n']:6d} {ratio} |"
+            for label in lines:
+                cell = f"{r[f'{label}/flux']:.2f} / {r[f'{label}/jump']:.2f}"
+                line += f" {cell:>17} |"
+            print(line)
+
+
+def print_ranking(
+    results: dict[float, list[dict]], labels: Sequence[str], title: str
+) -> None:
+    """Per (δ, n): every line from the lowest RMS error to the highest."""
+    print(f"\n{title}")
+    for delta, lines in results.items():
+        for r in lines:
+            order = sorted(labels, key=lambda label: r[f"{label}/rms"])
+            ratio = "   jump" if delta == 0.0 else f"{r['h_over_delta']:7.2f}"
+            print(f"  {delta:6.4f}  {r['n']:6d} {ratio} |  " + " < ".join(order))
+
+
+def print_fits(
+    results: dict[str, dict[float, list[dict]]], labels: Sequence[str], title: str
+) -> None:
+    """Every line's fitted order per δ: RMS / max, elliptic then parabolic.
+
+    The parabolic lines once more from ``GROWING_BELOW`` up, where a coarser
+    count is in the sweep: the growing mode there is the naive product's, not
+    the treatment's, and it moves the parabolic fit alone.
+    """
+    print(f"\n{title}")
+    header = f"  {'problem':<16} {'δ':>6} |"
+    print(header + "".join(f" {label:>15} |" for label in labels))
+    blocks = [(problem, lines, 0) for problem, lines in results.items()]
+    if "parabolic" in results and any(
+        r["n"] < GROWING_BELOW for rows in results["parabolic"].values() for r in rows
+    ):
+        blocks.append(("parabolic", results["parabolic"], GROWING_BELOW))
+    for problem, lines, smallest in blocks:
+        name = f"{problem} ≥ {smallest}" if smallest else problem
+        for delta, every in lines.items():
+            rows = [r for r in every if r["n"] >= smallest]
+            line = f"  {name:<16} {delta:6.4f} |"
+            for label in labels:
+                rms, top = _fit(rows, f"{label}/rms"), _fit(rows, f"{label}/max")
+                line += f" {f'{rms:.2f} / {top:.2f}':>15} |"
+            print(line)
+
+
+def treatments_figure(geometry: Geometry) -> str:
+    """``heat2d_stiff_treatments.png`` on case 1, with the geometry's tag elsewhere."""
+    if geometry.is_case1:
+        return "heat2d_stiff_treatments.png"
+    return f"heat2d_stiff_treatments_{geometry.tag.replace(' ', '_')}.png"
+
+
+def _treatment_line(label: str) -> dict:
+    """Matplotlib keywords of one line: colour and marker, dashed and open if wider."""
+    colour, marker = _style(label)
+    wider = label in WIDER
+    return {
+        "color": colour,
+        "marker": marker,
+        "ls": "--" if wider else "-",
+        "mfc": "none" if wider else colour,
+    }
+
+
+def plot_treatments(
+    results: dict[str, dict[float, list[dict]]],
+    seeds: str,
+    path: Path,
+    title: str,
+) -> None:
+    """Top: every line against N at three widths; bottom: each family ÷ naive.
+
+    The top row is the parabolic problem (H12's), at the jump, the narrowest
+    and the widest δ, the naive orange and the seeds' blue (cyan: the
+    tangential chain) at the two ends; the construction is the tables'. The
+    bottom row is the crossover against sampling: each treatment's RMS over
+    the naive line's against ``h/δ``, both variants of one family per panel,
+    every δ > 0 with its own marker, so a treatment that helps only while
+    the edge is unresolved crosses 1 somewhere left of the dashed ``h = δ``.
+    """
+    parabolic = results["parabolic"]
+    positive = [d for d in parabolic if d > 0.0]
+    widths = sorted(positive)
+    shown = list(
+        dict.fromkeys(
+            [d for d in (0.0, *(widths[:1]), *(widths[-1:])) if d in parabolic]
+        )
+    )
+    lines = ["naive", *TREATMENT_LABELS, seeds]
+    fig = plt.figure(figsize=(11.0, 8.0))
+    axes = fig.subplots(2, 3)
+    for ax in axes[0][len(shown) :]:
+        ax.set_visible(False)
+    for ax, delta in zip(axes[0], shown, strict=False):
+        rows = parabolic[delta]
+        n = np.array([r["n"] for r in rows], dtype=float)
+        for label in lines:
+            # The naive line on top: at the jump the h/2 means are it to the
+            # quadrature's rounding and would hide it.
+            ax.loglog(
+                n,
+                [r[f"{label}/rms"] for r in rows],
+                ms=4,
+                lw=0.9,
+                zorder=3 if label == "naive" else 2,
+                **_treatment_line(label)
+                if label in TREATMENT_LABELS
+                else {
+                    "color": _style(label)[0],
+                    "marker": _style(label)[1],
+                },
+            )
+        _counts_axis(ax, n)
+        name = "the jump" if delta == 0.0 else f"δ = {delta:g}"
+        ax.set_title(f"parabolic, {name}", fontsize=10)
+        ax.set_xlabel("nodes N")
+        ax.grid(True, which="both", alpha=0.25)
+    axes[0][0].set_ylabel("RMS error in u")
+    families = ("harmonic", "arithmetic", "widened")
+    for ax, family in zip(axes[1], families, strict=True):
+        for label in TREATMENT_LABELS:
+            if not label.startswith(family):
+                continue
+            style = _treatment_line(label)
+            for delta in positive:
+                rows = parabolic[delta]
+                ax.loglog(
+                    [r["h_over_delta"] for r in rows],
+                    [r[f"{label}/rms"] / r["naive/rms"] for r in rows],
+                    color=style["color"],
+                    ls=style["ls"],
+                    marker=_marker(delta, positive),
+                    mfc=style["mfc"],
+                    ms=4,
+                    lw=0.8,
+                )
+        ax.axhline(1.0, color="k", lw=0.6)
+        ax.axvline(1.0, color=REFERENCE, lw=0.6, ls="--")
+        ax.set_title(f"{family} ÷ naive (solid: the smaller r or m)", fontsize=9)
+        ax.set_xlabel("h / δ")
+        ax.grid(True, which="both", alpha=0.25)
+        ax.set_visible(bool(positive))
+    axes[1][0].set_ylabel("treatment RMS ÷ naive RMS")
+    handles = [
+        Line2D([], [], ms=5, label=label, **_treatment_line(label))
+        if label in TREATMENT_LABELS
+        else Line2D(
+            [], [], color=_style(label)[0], marker=_style(label)[1], ms=5, label=label
+        )
+        for label in lines
+    ]
+    for delta in positive:
+        handles.append(
+            Line2D(
+                [],
+                [],
+                color="k",
+                marker=_marker(delta, positive),
+                ls="",
+                ms=5,
+                label=f"δ = {delta:g}",
+            )
+        )
+    fig.legend(handles=handles, loc="lower center", ncol=6, fontsize=8)
+    fig.suptitle(title, fontsize=11)
+    fig.tight_layout(rect=(0, 0.075, 1, 0.96))
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def run_treatments(args) -> dict:
+    """E4.9's tables and figure: the treatments against sampling and the seeds.
+
+    One sweep (``knee_sweep``) with ``treatment_lines``: the naive,
+    construction and seed entries are reread from the geometry's cache, the
+    six treatments computed where missing. Per problem: every line's error in
+    the RMS and the max norm with its order, the treatments over the naive
+    line with the crossover in ``h/δ``, T0 against its own floor, H12's best
+    treatment against the seeds where the edge is unresolved, and the ranking;
+    then every line's fit, and on another geometry than case 1 each line over
+    its case-1 twin at equal (δ, n).
+    """
+    t0 = time.perf_counter()
+    geometry = args.geometry
+    labels = treatment_lines(geometry)
+    seeds = labels[-1]
+    cache = load_knee_cache(args.outputs, geometry)
+    results = knee_sweep(
+        args.counts,
+        args.deltas,
+        cache,
+        args.seed,
+        args.iterations,
+        args.t_end,
+        labels=labels,
+        save=lambda: save_knee_cache(args.outputs, cache, geometry),
+        geometry=geometry,
+    )
+    save_knee_cache(args.outputs, cache, geometry)
+    tables: dict = {"sweep": results}
+    against = "the separable reference" if geometry.is_case1 else "the product grid"
+    for problem, lines in results.items():
+        what = (
+            "equilibrium"
+            if problem == "elliptic"
+            else f"parabolic, BD4 dt = h from the analytic history, t = {args.t_end:g}"
+        )
+        for quantity, norm in (("rms", "RMS"), ("max", "max")):
+            print_sweep(
+                lines,
+                labels,
+                f"the treatments on {geometry.name}, {what}: {norm} error (order per"
+                f" halving of h) against {against}",
+                quantity,
+            )
+        ratios = treatment_ratios(lines)
+        tables[f"ratios/{problem}"] = ratios
+        print_treatment_ratios(
+            ratios,
+            f"each treatment's RMS error over the naive line's (sampling), {what}:"
+            " below 1 the treatment helps",
+        )
+        cross = crossovers(ratios)
+        tables[f"crossovers/{problem}"] = cross
+        print_crossovers(
+            cross,
+            ratios,
+            f"the crossover against sampling, {what}: the h/δ where treatment ÷"
+            " naive passes 1 (log-linear between counts), or the side it stays on"
+            " over the h/δ swept",
+        )
+        print_widened_floors(
+            lines,
+            f"T0 on its own floor, {what}: the widened band's reference against the"
+            " true one at the nodes (RMS), and the error over it",
+        )
+        for quantity, norm in (("rms", "RMS"), ("max", "max")):
+            rows = h12_rows(lines, seeds, quantity)
+            tables[f"h12/{problem}/{quantity}"] = rows
+            print_h12(
+                rows,
+                seeds,
+                f"H12 where the edge is unresolved (δ = 0 or h/δ ≥ {UNRESOLVED:g}),"
+                f" {what}, {norm} norm: the best and worst treatment against the"
+                " seeds",
+            )
+        if geometry.is_case1:
+            print_treatment_fluxes(
+                lines,
+                f"the flux on the innermost pair, {what}: one-sided flux error /"
+                " error in its jump across the pair, over |α v′ at the curve|",
+            )
+        print_ranking(lines, labels, f"every line from the lowest RMS error up, {what}")
+    print_fits(
+        results,
+        labels,
+        f"every line's fitted order per δ on {geometry.name}, RMS / max",
+    )
+    if not geometry.is_case1:
+        comparison = flat_comparison(
+            results,
+            ["naive", *TREATMENT_LABELS],
+            args.outputs,
+            args.seed,
+            args.iterations,
+            args.t_end,
+        )
+        tables["flat"] = comparison
+        for problem in results:
+            print_flat_comparison(
+                comparison,
+                ["naive", *TREATMENT_LABELS],
+                problem,
+                f"{geometry.name} over case 1 at equal (δ, n), {problem}: RMS error"
+                " flat, curved, and curved ÷ flat",
+            )
+    args.outputs.mkdir(parents=True, exist_ok=True)
+    plot_treatments(
+        results,
+        seeds,
+        args.outputs / treatments_figure(geometry),
+        f"{geometry.name}: the coefficient treatments against sampling and {seeds}",
+    )
+    cache_name, _ = geometry.cache()
+    print(
+        f"\ntreatment sweep {time.perf_counter() - t0:.1f} s; figure and {cache_name}"
+        f" in {args.outputs}/"
+    )
+    return tables
+
+
 def main(argv: Sequence[str] | None = None) -> dict:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
         "--mode",
-        choices=("all", "references", "naive", "stencils", "seeds", "tangential"),
+        choices=(
+            "all",
+            "references",
+            "naive",
+            "stencils",
+            "seeds",
+            "tangential",
+            "treatments",
+        ),
         default="all",
     )
     parser.add_argument(
@@ -2696,7 +3321,7 @@ def main(argv: Sequence[str] | None = None) -> dict:
     parser.add_argument(
         "--operators",
         nargs="+",
-        choices=(*SWEEP_LABELS, *EXTRA_LABELS),
+        choices=(*SWEEP_LABELS, *EXTRA_LABELS, *TREATMENT_LABELS),
         default=list(SWEEP_LABELS),
         help="the lines of the seed sweep; naive and construction are E4.3's cache",
     )
@@ -2728,12 +3353,18 @@ def main(argv: Sequence[str] | None = None) -> dict:
         parser.error(str(err))
     if args.deltas is None:
         args.deltas = list(STUDY_DELTAS if args.geometry.is_case1 else CURVED_DELTAS)
-    if not args.geometry.is_case1 and args.mode not in ("references", "seeds"):
-        parser.error("another geometry than case 1 runs --mode references or seeds")
+    if not args.geometry.is_case1 and args.mode not in (
+        "references",
+        "seeds",
+        "treatments",
+    ):
+        parser.error(
+            "another geometry than case 1 runs --mode references, seeds or treatments"
+        )
     increasing = list(args.counts) == sorted(set(args.counts))
     if args.mode == "tangential" and (min(args.counts) < 300 or not increasing):
         parser.error("give increasing counts of 300 nodes or more")
-    if args.mode in ("all", "naive", "seeds"):
+    if args.mode in ("all", "naive", "seeds", "treatments"):
         if any(n < 300 for n in args.counts) or list(args.counts) != sorted(
             set(args.counts)
         ):
@@ -2761,6 +3392,8 @@ def main(argv: Sequence[str] | None = None) -> dict:
         tables.update(run_seeds(args))
     if args.mode == "tangential":
         tables.update(run_tangential(args))
+    if args.mode == "treatments":
+        tables.update(run_treatments(args))
     return tables
 
 

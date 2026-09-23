@@ -34,7 +34,11 @@ curved one, E4.7), with the warp
 coordinate and the moment conditions' right-hand side (E4.4), and the seed
 rows themselves, warped or plain (``seed_weights``, E4.5), which
 ``operators.seed_operator`` puts into the global matrix on the stencils that
-see an edge (``seeded_rows``; ``build_operator`` dispatches by name).
+see an edge (``seeded_rows``; ``build_operator`` dispatches by name);
+``treatments``: the coefficient treatments of E4.9, a nodal table of alpha
+for the naive operator to sample (``NodalAlpha2D``), the harmonic and
+arithmetic means of alpha over a disc about each node (by quadrature in the
+product grid's sheared coordinates, exact to rounding) and the widened edge.
 """
 
 from .domain import (
@@ -231,6 +235,15 @@ from .solve import (
     solve_equilibrium,
     solve_iterative,
 )
+from .treatments import (
+    DISC_GAUSS,
+    NodalAlpha2D,
+    arithmetic_discs,
+    disc_integrals,
+    disc_means,
+    harmonic_discs,
+    widened_edge,
+)
 
 __all__ = [
     "BOUNDARY",
@@ -413,4 +426,11 @@ __all__ = [
     "tangential_profiles",
     "seeded_rows",
     "weights_of",
+    "DISC_GAUSS",
+    "NodalAlpha2D",
+    "arithmetic_discs",
+    "disc_integrals",
+    "disc_means",
+    "harmonic_discs",
+    "widened_edge",
 ]

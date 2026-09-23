@@ -21,6 +21,7 @@ from heat2d_stiff import (  # noqa: E402
     OPERATORS,
     QUANTITIES,
     STUDY_DELTAS,
+    TREATMENT_LABELS,
     Geometry,
     curve_level,
     edge_diagnostics,
@@ -34,10 +35,17 @@ from heat2d_stiff import (  # noqa: E402
     save_knee_cache,
     seed_label,
     seed_operators,
+    sweep_operators,
+    treated_medium,
+    treatment_lines,
+    treatment_of,
+    treatments_figure,
 )
 from heat_interfaces.heat1d.domain import TANH_REACH  # noqa: E402
 from heat_interfaces.heat2d import (  # noqa: E402
     BOUNDARY,
+    PRODUCT_ORDERING,
+    NodalAlpha2D,
     ProductGridReference,
     SmoothBand,
     build_node_set,
@@ -45,6 +53,8 @@ from heat_interfaces.heat2d import (  # noqa: E402
     case1,
     case1_reference,
     case2,
+    harmonic_discs,
+    naive_operator,
     seed_operator,
 )
 
@@ -576,3 +586,147 @@ def test_the_curved_geometries_run_the_seed_sweep_and_the_references_only():
     for mode in ("naive", "stencils", "all"):
         with pytest.raises(SystemExit):
             main(["--mode", mode, "--amplitude", "0.02"])
+
+
+def test_the_treatment_labels_name_a_kind_and_a_factor_of_h():
+    assert [treatment_of(label) for label in TREATMENT_LABELS] == [
+        ("harmonic", 0.5),
+        ("harmonic", 1.0),
+        ("arithmetic", 0.5),
+        ("arithmetic", 1.0),
+        ("widened", 1.0),
+        ("widened", 2.0),
+    ]
+    with pytest.raises(ValueError):
+        treatment_of("seeds")
+    assert treatment_lines(CASE1)[-1] == "seeds"
+    assert treatment_lines(Geometry(0.02, "sine"))[-1] == "tangential"
+    assert treatments_figure(CASE1) == "heat2d_stiff_treatments.png"
+    assert (
+        treatments_figure(Geometry(0.02, "sine"))
+        == "heat2d_stiff_treatments_a0.02_sine.png"
+    )
+
+
+def test_a_treatment_is_the_naive_operator_on_a_changed_medium():
+    # E4.9 (#40): plan §3.4's "change the medium, keep the scheme". The two
+    # means at one radius come off one quadrature, the widened edge is the
+    # band at max(δ, m h), and the operator is naive_operator on it bit for bit.
+    nodes = build_node_set(case1(), 900)
+    medium = SmoothBand(case1().material, 0.0025)
+    means: dict = {}
+    for label in TREATMENT_LABELS:
+        kind, factor = treatment_of(label)
+        treated = treated_medium(label, nodes, medium, means)
+        if kind == "widened":
+            assert treated == SmoothBand(case1().material, factor * nodes.h)
+        else:
+            assert isinstance(treated, NodalAlpha2D)
+    assert sorted(means) == [0.5, 1.0]
+    plain = build_stencils(nodes, case1())
+    groups = {
+        "plain": plain,
+        "crossing": build_stencils(nodes, case1(), interface=BOUNDARY),
+    }
+    built = sweep_operators(["harmonic-1h", "widened-2h"], nodes, medium, groups)
+    harmonic = harmonic_discs(nodes, medium, nodes.h)
+    expect = naive_operator(nodes, harmonic, plain)
+    op, permc, readings = built["harmonic-1h"]
+    assert (op != expect).nnz == 0 and permc == PRODUCT_ORDERING
+    assert 0 < readings["rows"] < nodes.n
+    wide = naive_operator(nodes, SmoothBand(case1().material, 2 * nodes.h), plain)
+    assert (built["widened-2h"][0] != wide).nnz == 0
+    assert built["widened-2h"][2]["rows"] == nodes.n
+
+
+def test_the_treatment_sweep_at_the_two_smallest_counts(tmp_path, capsys):
+    # E4.9 (#40), stiff note §4.9: the six treatments against sampling and the
+    # seeds; the documented sweep runs them to 40,000 nodes.
+    argv = [
+        "--mode",
+        "treatments",
+        "--counts",
+        "900",
+        "1250",
+        "--deltas",
+        "0",
+        "0.04",
+        "0.0025",
+        "--outputs",
+        str(tmp_path),
+    ]
+    tables = main(argv)
+    out = capsys.readouterr().out
+    for title in (
+        "over the naive line's (sampling)",
+        "the crossover against sampling",
+        "T0 on its own floor",
+        "H12 where the edge is unresolved",
+        "every line's fitted order per δ",
+    ):
+        assert title in out
+    assert (tmp_path / "heat2d_stiff_treatments.png").exists()
+    for problem, lines in tables["sweep"].items():
+        for delta, rows in lines.items():
+            for r in rows:
+                if delta == 0.0:
+                    # The innermost straddling rows sit half a spacing off
+                    # the line, so an h/2 disc only touches it: both means
+                    # are the sampled alpha to the quadrature's rounding
+                    # (1-D's one-cell window, §2.4).
+                    for label in ("harmonic-0.5h", "arithmetic-0.5h"):
+                        assert r[f"{label}/rows"] == 0
+                        assert r[f"{label}/rms"] == pytest.approx(
+                            r["naive/rms"], rel=1e-9
+                        )
+                if r["h_over_delta"] < 1.0:
+                    # δ ≥ h: nothing to widen at m = 1.
+                    assert r["widened-1h/rows"] == 0
+                    assert r["widened-1h/rms"] == r["naive/rms"]
+                    assert r["widened-1h/own_floor"] == 0.0
+                else:
+                    assert r["widened-1h/own_floor"] > 0.0
+                if problem == "elliptic" and r["n"] == 1250:
+                    # T0 sits on its own floor, the widened band's distance
+                    # from the true one (1-D's to 0.1 % at m = 2).
+                    share = r["widened-2h/rms"] / r["widened-2h/own_floor"]
+                    assert share == pytest.approx(1.0, abs=0.01)
+        for r in tables[f"h12/{problem}/rms"]:
+            # H12's far end: every treatment two orders above the seeds.
+            if r["n"] == 1250:
+                assert r["orders"] > 2.0
+    ratios = {(r["delta"], r["n"]): r for r in tables["ratios/parabolic"]}
+    # Resolved (δ = 0.04, h/δ 0.74): every disc mean worse than sampling.
+    for label in ("harmonic-0.5h", "harmonic-1h", "arithmetic-0.5h", "arithmetic-1h"):
+        assert ratios[(0.04, 1250)][label] > 1.0
+    again = main(argv)
+    assert again["sweep"] == tables["sweep"]
+
+
+def test_the_treatment_sweep_on_case_2(tmp_path, capsys):
+    argv = [
+        "--mode",
+        "treatments",
+        "--amplitude",
+        "0.02",
+        "--counts",
+        "900",
+        "1250",
+        "--deltas",
+        "0",
+        "--outputs",
+        str(tmp_path),
+    ]
+    tables = main(argv)
+    out = capsys.readouterr().out
+    assert "case 2 over case 1 at equal (δ, n)" in out
+    assert (tmp_path / CURVED_CACHE).exists() and not (tmp_path / KNEE_CACHE).exists()
+    assert (tmp_path / "heat2d_stiff_treatments_a0.02_sine.png").exists()
+    for rows in tables["sweep"].values():
+        for r in rows[0.0]:
+            assert r["tangential/rms"] < min(
+                r[f"{label}/rms"] for label in TREATMENT_LABELS
+            )
+            # Case 2's inside piece varies, so every disc mean moves nodes
+            # the jump does not reach; T0 at m = 1 changes the edge only.
+            assert r["harmonic-0.5h/rows"] > 0
