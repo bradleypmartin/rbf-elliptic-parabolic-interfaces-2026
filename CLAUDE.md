@@ -50,15 +50,17 @@ src/heat_interfaces/   library (filled in by the epics; module names are the pla
                        march (BD4), exact (quadrature; Chebyshev-element references,
                        cached), stiff (seeds), treatments (comparators)
   heat2d/              domain (x-periodic strip, Dirichlet rows, interfaces,
-                       straddling node sets), neighbors, rbf (GA + polynomials,
+                       straddling node sets; the smooth band, fold or resistance,
+                       and the ring's exact gap), neighbors, rbf (GA + polynomials,
                        warped GA), interface (scalar continuity matrices with
                        curvature, multi-interface translation), operators, solve
                        (direct; the reduced interior system, gmres/bicgstab,
                        spilu), precondition (DDR, Appendix B's P), march (BD4),
                        exact (separable; the sheared Fourier × Chebyshev product
-                       grid), fd4 (Cartesian Dx A Dx + Dy A Dy), resample (fine →
+                       grid; radial ring modes and the matched radial profile),
+                       fd4 (Cartesian Dx A Dx + Dy A Dy), resample (fine →
                        coarse through the fine stencils; cached references),
-                       seeds, treatments
+                       seeds (flat, tangential, the ring's flux seeds), treatments
 scripts/               drivers writing to outputs/; publish_issues.py;
                        paper_figures.py and paper_numbers.py (E5.3)
 tests/                 pytest; every numerical routine has one
