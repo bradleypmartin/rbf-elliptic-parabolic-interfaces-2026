@@ -1220,19 +1220,19 @@ def _gaussian_coordinates(
     """The Gaussian block's coordinates (``seed_coordinates``) and its ``ε``.
 
     ``ε = shape / d``, ``d`` the nearest node's distance: the physical one as
-    in E2.2 (§3.4, §3.10), except warped on a ring with a ``gap`` (E4.8,
-    §3.11), where it is the distance in ``(ξ, φ₀₁)``. With the anchor inside
-    the smooth ring, where ``α_e`` is a twentieth of the pieces', ``φ₀₁ = ∫
-    α_e/α`` compresses its neighbours twentyfold in η̃, and Gaussians shaped
-    on the physical spacing were too flat there: the probe on the rows
-    within 5δ of the ring at 40,000 nodes and δ = 0.001 was 2.1e-4, and
-    1.8e-5 with ``ε`` from the warped spacing, every other row unchanged
-    (2026-09-23).
+    in E2.2 (§3.4, §3.10), except warped for the tangential chain on a ring
+    with a ``gap`` (E4.8, §3.11), where it is the distance in ``(ξ, φ₀₁)``.
+    With the anchor inside the smooth ring, where ``α_e`` is a twentieth of
+    the pieces', ``φ₀₁ = ∫ α_e/α`` compresses its neighbours twentyfold in
+    η̃, and Gaussians shaped on the physical spacing were too flat there: the
+    probe on the rows within 5δ of the ring at 40,000 nodes and δ = 0.001 was
+    2.1e-4, and 1.8e-5 with ``ε`` from the warped spacing, every other row
+    unchanged (2026-09-23).
     """
     xi, eta = seed_coordinates(sb, warp)
-    if warp and sb.medium.gap is not None:
+    if warp and isinstance(sb, TangentialBasis) and sb.medium.gap is not None:
         d = np.hypot(xi[1:] - xi[0], eta[1:] - eta[0])
-        return xi, eta, shape / float(d[d > 0.0].min())
+        return xi, eta, shape / float(np.where(d > 0.0, d, np.inf).min())
     x, y = sb.xy[:, 0], sb.xy[:, 1]
     r = np.hypot(periodic_dx(x - x[0]), y - y[0])
     eps = shape * sb.scale / float(np.where(r > 0.0, r, np.inf).min())
