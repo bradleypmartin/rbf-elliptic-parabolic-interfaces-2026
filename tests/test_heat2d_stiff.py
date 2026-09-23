@@ -16,6 +16,7 @@ from heat2d_stiff import (  # noqa: E402
     CASE1,
     CURVED_CACHE,
     CURVED_CACHE_META,
+    EDGE,
     KNEE_CACHE,
     KNEE_CACHE_META,
     OPERATORS,
@@ -276,6 +277,12 @@ def test_seed_label_carries_the_warp_and_a_non_default_reach():
     assert seed_label(False, 5.0, True) == "tangential-plain-r5"
     assert flat_twin("tangential-plain-r5") == "seeds-plain-r5"
     assert flat_twin("construction") == "construction"
+    # E4.12's rule, forced on off the ring, is a line of its own.
+    assert seed_label(True, edge=True) == "seeds-edge"
+    assert seed_label(True, 5.0, True, True) == "tangential-edge-r5"
+    assert flat_twin("tangential-edge") == "seeds-edge"
+    with pytest.raises(ValueError):
+        seed_label(False, edge=True)
 
 
 def test_seed_operators_build_both_warps_from_one_march():
@@ -285,12 +292,30 @@ def test_seed_operators_build_both_warps_from_one_march():
     medium = SmoothBand(case1().material, 0.005)
     domain = replace(case1(), material=medium)
     stencils = build_stencils(nodes, domain, interface=BOUNDARY, reach=TANH_REACH)
-    ops, seeded = seed_operators(nodes, medium, stencils, (True, False))
+    ops, seeded, plain = seed_operators(nodes, medium, stencils, (True, False))
     assert 0 < seeded < nodes.n
+    assert plain == {True: 0, False: seeded}
     for warp in (True, False):
         one = seed_operator(nodes, medium, stencils, warp=warp)
         difference = abs(ops[warp] - one).max()
         assert difference <= 1e-9 * abs(one).max()
+
+
+def test_seed_operators_build_the_edge_rule_from_the_same_march():
+    # E4.12's rule forced on (EDGE) is seed_operator's rows with edge_rule=True;
+    # off a ring the library leaves it off, so the warped line is E4.6's. At
+    # δ = 0.04 the grid resolves the edge and many anchors sit in it.
+    nodes = build_node_set(case1(), 900)
+    medium = SmoothBand(case1().material, 0.04)
+    domain = replace(case1(), material=medium)
+    stencils = build_stencils(nodes, domain, interface=BOUNDARY, reach=TANH_REACH)
+    ops, seeded, plain = seed_operators(nodes, medium, stencils, (True, EDGE))
+    assert plain[True] == 0 and 0 < plain[EDGE] < seeded
+    for warp, rule in ((True, None), (EDGE, True)):
+        one = seed_operator(nodes, medium, stencils, edge_rule=rule)
+        difference = abs(ops[warp] - one).max()
+        assert difference <= 1e-9 * abs(one).max()
+    assert abs(ops[True] - ops[EDGE]).max() > 0.0
 
 
 def test_the_seed_sweep_at_the_two_smallest_counts(tmp_path, capsys):

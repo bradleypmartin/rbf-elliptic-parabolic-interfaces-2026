@@ -7,7 +7,10 @@ widths rule); every stored radius is E2.9's. The seeds are E4.11's tangential
 chain (``tangential=True``), warped. The smooth ring is ``SmoothBand(…, δ,
 "resistance")``: the resistivity ``1/α`` blended by the difference of the two
 edges, which keeps the ring's contact resistance 1.5 at every (s, δ) (Brad's
-decision on #39, 2026-09-23). "E2.3" is the jump-aware operator of the papers
+decision on #39, 2026-09-23). A seed row anchored in an edge keeps whichever
+Gaussians, warped or plain, give it the stronger diagonal (E4.12, #84,
+``seeds.gaussian_choice``; stiff note §3.11, §4.10); at δ = 0 every row is
+warped, as in E4.8. "E2.3" is the jump-aware operator of the papers
 (curvature, warped Gaussians), E2.9's "curved" line; on a smooth ring it reads
 the edges as jumps, the δ = 0 construction of E4.3.
 
@@ -27,12 +30,15 @@ Four parts, each skipped by an empty or zero flag:
    for the seeds without the gap (the stored radii, the ablation) and E2.3
    (E2.9's number); the seed block's condition number raw and column-scaled, and
    the seed system's, beside E2.3's polynomial block and system.
-3. ``--spectrum-n``: the seed operator's interior spectrum, warped and plain,
-   and the diagonal dominance of its rows (E2.8's DDR), per s of ``--s`` at
-   δ = 0 and per (s, δ) of ``--smooth-s`` and ``--deltas``.
+3. ``--spectrum-n``: the seed operator's interior spectrum, and plain's, and
+   the diagonal dominance of its rows (E2.8's DDR), per s of ``--s`` at δ = 0
+   and per (s, δ) of ``--smooth-s`` and ``--deltas``, where E4.8's warp on every
+   row is a third line.
 4. ``--probe-counts``: the smooth ring. Per (s, δ) of ``--smooth-s`` and 0 and
    ``--deltas``, four operators (naive ``Dx A Dx + Dy A Dy``, the direct
-   stencil, E2.3, the seeds): the truncation probe, each row applied to the
+   stencil, E2.3, the seeds), and at δ > 0 the seeds with E4.8's warp on every
+   row and with plain Gaussians (``SEED_VARIANTS``, one march for the three):
+   the truncation probe, each row applied to the
    exact mode ``R(r) cos 2θ`` through the ring at its constant part
    (``RingMode`` with the gap at δ = 0, ``SmoothRingMode`` otherwise), RMS over
    the rows the seeds rebuild; and, with ``--fine-n``, the elliptic error on
@@ -82,6 +88,7 @@ import scipy.sparse as sp  # noqa: E402
 from heat_interfaces.heat1d.domain import TANH_REACH  # noqa: E402
 from heat_interfaces.heat2d import (  # noqa: E402
     BOUNDARY,
+    GA_SHAPE,
     INTERFACE_KIND,
     PRODUCT_ORDERING,
     Constant2D,
@@ -98,6 +105,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     case3,
     diagonal_dominance_ratio,
     direct_operator,
+    gaussian_choice,
     interface_aware_operator,
     interface_crossings,
     interface_stencil,
@@ -140,15 +148,33 @@ all below the spacing of every count to 160,000 (h = 0.0026 there)."""
 
 LABELS = ("naive", "direct", "construction", "seeds")
 """Part 4's operators; at δ = 0 it adds ``seeds15``, the seeds without the flux
-seeds (§3.11), as part 1 does beside ``construction`` (E2.3) and ``seeds``."""
+seeds (§3.11), as part 1 does beside ``construction`` (E2.3) and ``seeds``, and
+at δ > 0 the seeds with E4.8's warp on every row and with plain Gaussians."""
+
+SEED_VARIANTS = {
+    "seeds": (True, None),
+    "seeds-warp": (True, False),
+    "seeds-plain": (False, None),
+}
+"""``(warp, edge_rule)`` of each line marched from one ``seed_basis`` per row:
+the seeds (E4.12's rule, ``seeds.gaussian_choice``: on a ring a row anchored in
+an edge keeps the Gaussians with the stronger diagonal), E4.8's construction
+(the warp on every row) and plain Gaussians. At δ = 0 the first two are one."""
 
 FIG19_LABELS = ("construction", "seeds", "seeds15")
 
 
 def probe_labels(delta: float) -> tuple[str, ...]:
-    """Part 4's probe lines at δ: the four, and the seeds without the flux seeds
-    at δ = 0."""
-    return (*LABELS, "seeds15") if delta == 0.0 else LABELS
+    """Part 4's lines at δ: the four, with the seeds without the flux seeds at
+    δ = 0 and the seeds warped on every row and plain at δ > 0 (E4.12)."""
+    if delta == 0.0:
+        return (*LABELS, "seeds15")
+    return (*LABELS, "seeds-warp", "seeds-plain")
+
+
+def spectrum_labels(delta: float) -> tuple[str, ...]:
+    """Part 3's seed operators: the seeds and plain, and at δ > 0 E4.8's warp."""
+    return ("seeds", "seeds-plain") if delta == 0.0 else tuple(SEED_VARIANTS)
 
 
 NAMES = {
@@ -157,6 +183,8 @@ NAMES = {
     "construction": "E2.3",
     "seeds": "seeds",
     "seeds15": "seeds (15)",
+    "seeds-warp": "warp",
+    "seeds-plain": "plain",
 }
 
 COLOURS = {
@@ -165,21 +193,27 @@ COLOURS = {
     "construction": CONSTRUCTION,
     "seeds": AWARE,
     "seeds15": "#7fb3d5",
+    "seeds-warp": "#7fb3d5",
+    "seeds-plain": "#bcbcbc",
 }
 
 CACHE = "heat2d_ring.json"
 CACHE_META = {
     "study": "E4.8 EABE eq. 40 with seeds (tangential, warped) and smooth edges",
-    "version": 3,
+    "version": 4,
     "composition": COMPOSITION,
     "seeds": "degree 4 and the degree-5 flux seeds (20); seeds15 without them",
     "warp": "level 0 of phi01 on the ring; epsilon from the warped spacing",
+    "edge": "off-piece rows keep the Gaussians with the stronger diagonal",
 }
 """Bump ``version`` after any change to the chains, their series or sampling, the
 ring's gap or the composition, as the other stiff caches say. Version 2 is the
 flux seeds (§3.11) and exact keys. Version 3 is the ring's warp, φ₀₁'s level 0,
 and ε from the warped spacing: every seed line was rebuilt; the E2.3, naive and
-direct lines, which neither touches, were carried over."""
+direct lines, which neither touches, were carried over. Version 4 is E4.12's
+rule for rows anchored in an edge: every entry at δ > 0 was rebuilt (the error
+lines read a rebuilt fine run); the δ = 0 entries, where every anchor is on its
+piece and the rule is the warp bit for bit, were carried over."""
 
 RESULTS = "heat2d_ring_results.json"
 
@@ -238,31 +272,83 @@ def reach_stencils(nodes: NodeSet, domain: Domain) -> Stencils:
 
 def build(label: str, nodes: NodeSet, domain: Domain) -> tuple[sp.csr_array, dict]:
     """One operator on ``domain`` and what it cost: seconds and seeded rows."""
+    return build_all((label,), nodes, domain)[label]
+
+
+def build_all(
+    labels: Sequence[str], nodes: NodeSet, domain: Domain
+) -> dict[str, tuple[sp.csr_array, dict]]:
+    """``{label: (operator, cost)}``, the ``SEED_VARIANTS`` from one march per row.
+
+    The cost is the seconds (a shared march split evenly over its lines), the
+    seeded rows and, for a seed line, the rows it keeps plain.
+    """
     material = domain.material
+    family = [lab for lab in labels if lab in SEED_VARIANTS]
+    built = seed_variants(family, nodes, domain) if family else {}
+    for label in labels:
+        if label in built:
+            continue
+        t0 = time.perf_counter()
+        info: dict[str, float] = {}
+        if label == "naive":
+            op = naive_operator(nodes, material, plain_stencils(nodes, domain))
+        elif label == "direct":
+            op = direct_operator(nodes, material, plain_stencils(nodes, domain))
+        elif label == "construction":
+            stencils = aware_stencils(nodes, domain)
+            op = interface_aware_operator(nodes, material, stencils)
+        elif label == "seeds15":
+            stencils = reach_stencils(nodes, domain)
+            info["rows"] = seeded_count(nodes, material, stencils)
+            with refused(nodes.n, material):
+                op = seed_operator(
+                    nodes, material, stencils, tangential=True, flux=False
+                )
+        else:
+            raise ValueError(f"unknown operator {label!r}")
+        info["seconds"] = time.perf_counter() - t0
+        built[label] = (op, info)
+    return {label: built[label] for label in labels}
+
+
+def seed_variants(
+    labels: Sequence[str], nodes: NodeSet, domain: Domain
+) -> dict[str, tuple[sp.csr_array, dict]]:
+    """``seed_operator``'s loop for several ``SEED_VARIANTS``, one march per row.
+
+    The march does not depend on the Gaussians, so each line costs its weight
+    solves only; with one label the operator is ``seed_operator``'s (a test pins
+    it). ``plain`` counts the rows a line keeps plain.
+    """
+    material = domain.material
+    stencils = reach_stencils(nodes, domain)
     t0 = time.perf_counter()
-    info: dict[str, float] = {}
-    if label == "naive":
-        op = naive_operator(nodes, material, plain_stencils(nodes, domain))
-    elif label == "direct":
-        op = direct_operator(nodes, material, plain_stencils(nodes, domain))
-    elif label == "construction":
-        op = interface_aware_operator(nodes, material, aware_stencils(nodes, domain))
-    elif label in ("seeds", "seeds-plain", "seeds15"):
-        stencils = reach_stencils(nodes, domain)
-        info["rows"] = seeded_count(nodes, material, stencils)
-        with refused(nodes.n, material):
-            op = seed_operator(
-                nodes,
-                material,
-                stencils,
-                warp=label != "seeds-plain",
-                tangential=True,
-                flux=label != "seeds15",
-            )
-    else:
-        raise ValueError(f"unknown operator {label!r}")
-    info["seconds"] = time.perf_counter() - t0
-    return op, info
+    ops = {lab: direct_operator(nodes, material, stencils).tolil() for lab in labels}
+    plain = dict.fromkeys(labels, 0)
+    rows = 0
+    with refused(nodes.n, material):
+        for g in stencils.groups:
+            if g.kind != INTERFACE_KIND:
+                continue
+            seen = seeded_rows(nodes, material, g.index)
+            for row, idx in zip(g.rows[seen], g.index[seen], strict=True):
+                sb = seed_basis(nodes.xy[idx], material, g.spec.degree, tangential=True)
+                rows += 1
+                for lab in labels:
+                    warp, edge_rule = SEED_VARIANTS[lab]
+                    w, warped = gaussian_choice(sb, GA_SHAPE, warp, edge_rule)
+                    ops[lab][row, :] = 0.0
+                    ops[lab][row, idx] = w
+                    plain[lab] += not warped
+    seconds = (time.perf_counter() - t0) / len(labels)
+    return {
+        lab: (
+            ops[lab].tocsr(),
+            {"rows": rows, "plain": plain[lab], "seconds": seconds},
+        )
+        for lab in labels
+    }
 
 
 @contextmanager
@@ -522,8 +608,7 @@ def spectrum(s: float, delta: float, n: int, seed: int, iterations: int) -> list
     domain = ring_domain(s, delta)
     nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
     rows = []
-    for label in ("seeds", "seeds-plain"):
-        op, info = build(label, nodes, domain)
+    for label, (op, info) in build_all(spectrum_labels(delta), nodes, domain).items():
         t0 = time.perf_counter()
         lam = interior_eigenvalues(op, nodes)
         system = reduced_system(op, nodes, VALUES)
@@ -597,8 +682,7 @@ def smooth_ring(
             nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
             u = exact_mode(domain)(nodes.x, nodes.y)
             masks = probe_masks(nodes, domain)
-            for label in todo:
-                op, info = build(label, nodes, domain)
+            for label, (op, info) in build_all(todo, nodes, domain).items():
                 residual = op @ u
                 cache[key("probe", s, delta, n, label, seed, iterations)] = {
                     "n": nodes.n,
@@ -619,15 +703,14 @@ def smooth_ring(
             ref, stencils = fine
             todo = [
                 lab
-                for lab in LABELS
+                for lab in probe_labels(delta)
                 if key("error", s, delta, n, lab, fine_n, seed, iterations) not in cache
             ]
             if todo:
                 domain = ring_domain(s, delta)
                 nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
                 far, keep = far_read(ref.u, ref.nodes, stencils, domain.material, nodes)
-                for label in todo:
-                    op, info = build(label, nodes, domain)
+                for label, (op, info) in build_all(todo, nodes, domain).items():
                     u = solve(label, op, nodes)
                     cache[
                         key("error", s, delta, n, label, fine_n, seed, iterations)
@@ -639,7 +722,7 @@ def smooth_ring(
                         **info,
                     }
                 save_cache(outputs, cache)
-            for label in LABELS:
+            for label in probe_labels(delta):
                 k = key("error", s, delta, n, label, fine_n, seed, iterations)
                 row[f"error-{label}"] = cache[k]
         rows.append(row)
@@ -755,9 +838,10 @@ def print_conditioning(rows: list[dict]) -> None:
 
 def print_spectrum(rows: list[dict]) -> None:
     print(
-        f"\nthe seed operator's interior spectrum at {int(rows[0]['n'])} nodes, warped"
-        " and plain (complex: |Im| > 1e-8 max |λ|), and the DDR of its reduced rows"
-        " (the seeded rows and all, least / median)"
+        f"\nthe seed operator's interior spectrum at {int(rows[0]['n'])} nodes: the"
+        " seeds, E4.8's warp on every row (δ > 0) and plain (complex: |Im| > 1e-8"
+        " max |λ|), and the DDR of its reduced rows (the seeded rows and all, least"
+        " / median)"
     )
     print(
         "     s        δ  operator     complex  positive     max Re  h² min Re"
@@ -783,7 +867,7 @@ def print_smooth(results: dict[tuple[float, float], list[dict]]) -> None:
     for (s, delta), rows in results.items():
         print(f"\ns = {tag(s)}, δ = {delta:g}")
         labels = probe_labels(delta)
-        head = "     n       h  rows |" + "".join(
+        head = "     n       h  rows plain |" + "".join(
             f"  {NAMES[lab]:>10s}  order" for lab in labels
         )
         print("probe: " + head)
@@ -799,8 +883,8 @@ def print_smooth(results: dict[tuple[float, float], list[dict]]) -> None:
                 cells.append(f"  {e['seeded']:10.2e}  {_order(rate)}")
             e = r["probe-seeds"]
             print(
-                f"       {int(e['n']):6d}  {e['h']:.4f} {int(e['seeded-rows']):5d} |"
-                + "".join(cells)
+                f"       {int(e['n']):6d}  {e['h']:.4f} {int(e['seeded-rows']):5d}"
+                f" {int(e.get('plain', 0)):5d} |" + "".join(cells)
             )
         entries = {lab: [r[f"probe-{lab}"] for r in rows] for lab in labels}
         print(
@@ -812,12 +896,12 @@ def print_smooth(results: dict[tuple[float, float], list[dict]]) -> None:
         if "error-seeds" not in rows[0]:
             continue
         head = "     n       h   far |" + "".join(
-            f"  {NAMES[lab]:>10s}  order" for lab in LABELS
+            f"  {NAMES[lab]:>10s}  order" for lab in labels
         )
         print("error: " + head)
         for i, r in enumerate(rows):
             cells = []
-            for lab in LABELS:
+            for lab in labels:
                 e = r[f"error-{lab}"]
                 rate = (
                     _rate(rows[i - 1][f"error-{lab}"], e, "far") if i else float("nan")
@@ -828,11 +912,11 @@ def print_smooth(results: dict[tuple[float, float], list[dict]]) -> None:
                 f"       {int(e['n']):6d}  {e['h']:.4f}  {e['far-share']:.2f} |"
                 + "".join(cells)
             )
-        entries = {lab: [r[f"error-{lab}"] for r in rows] for lab in LABELS}
+        entries = {lab: [r[f"error-{lab}"] for r in rows] for lab in labels}
         print(
             "       fit: "
             + ", ".join(
-                f"{NAMES[lab]} {_fit(entries[lab], 'far'):.2f}" for lab in LABELS
+                f"{NAMES[lab]} {_fit(entries[lab], 'far'):.2f}" for lab in labels
             )
         )
 
@@ -992,7 +1076,7 @@ def figure_smooth(results: dict[tuple[float, float], list[dict]]):
             rows = results.get((s, d))
             if not rows:
                 continue
-            for lab in LABELS:
+            for lab in (*LABELS, "seeds-warp") if d > 0.0 else LABELS:
                 n = [r[f"probe-{lab}"]["n"] for r in rows]
                 axes[0, j].loglog(
                     n,

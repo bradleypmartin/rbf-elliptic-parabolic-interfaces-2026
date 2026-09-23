@@ -173,6 +173,13 @@ unresolved; the ranking; every line's fit (the parabolic ones again from
         --counts 1250 2500 5000 10000 20000 40000 80000 160000  # B's δ = 0, 23 min
     uv run python scripts/heat2d_stiff.py --mode tangential \
         --counts 1250 2500 5000 10000 20000 40000               # H14, H15, spectra
+    uv run python scripts/heat2d_stiff.py --mode seeds \
+        --operators naive construction direct direct-reach seeds seeds-plain \
+        seeds-edge --counts 1250 2500 5000 10000 20000 40000    # E4.12's rule, case 1
+    uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
+        --operators naive construction direct direct-reach seeds seeds-plain \
+        tangential tangential-plain tangential-edge \
+        --counts 1250 2500 5000 10000 20000 40000               # E4.12 on case 2
     uv run python scripts/heat2d_stiff.py --mode treatments     # 3 min cold, s cached
     uv run python scripts/heat2d_stiff.py --mode treatments \
         --counts 1250 2500 5000 10000 20000 40000               # E4.9 on case 1
@@ -240,6 +247,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     control_exact,
     direct_operator,
     disc_means,
+    gaussian_choice,
     gaussian_derivative,
     interface_aware_operator,
     interface_crossings,
@@ -258,7 +266,6 @@ from heat_interfaces.heat2d import (  # noqa: E402
     seeded_rows,
     solve_equilibrium,
     stencil_weights,
-    weights_of,
     widened_edge,
 )
 from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
@@ -306,12 +313,20 @@ matrix as the seeds with the marched rows taken out, which is what separates
 the seed rows from their smaller stencil), and the seeds with the warp on and
 off (H7). ``naive`` and ``construction`` are E4.3's cached entries, reread."""
 
-EXTRA_LABELS = ("construction-flat", "tangential", "tangential-plain")
+EXTRA_LABELS = (
+    "construction-flat",
+    "tangential",
+    "tangential-plain",
+    "seeds-edge",
+    "tangential-edge",
+)
 """Lines ``--operators`` offers beyond the default six: E2.3 with its interface
 expansion off (``curvature=False``, EABE Fig. 10's "linear interface"), which is
 ``construction`` bit for bit on flat lines and the δ = 0 limit route (a) is
-measured against on a curved one (E4.7, §4.6); and E4.11's tangential chain
-(§3.10), warped and plain, the seeds in the foot curve's own coordinates."""
+measured against on a curved one (E4.7, §4.6); E4.11's tangential chain
+(§3.10), warped and plain, the seeds in the foot curve's own coordinates; and
+E4.12's rule (#84) forced on for either chain (``EDGE``), which the library
+applies on a ring only, measured here as an ablation (stiff note §4.10)."""
 
 TREATMENT_LABELS = (
     "harmonic-0.5h",
@@ -371,6 +386,8 @@ STYLE = {
     "construction-flat": (CONSTRUCTION_FLAT, "x"),
     "tangential": (TANGENTIAL, "P"),
     "tangential-plain": (TANGENTIAL_PLAIN, "X"),
+    "seeds-edge": (SEEDS_PLAIN, "<"),
+    "tangential-edge": (TANGENTIAL_PLAIN, ">"),
     "harmonic-0.5h": (HARMONIC, "D"),
     "harmonic-1h": (HARMONIC, "D"),
     "arithmetic-0.5h": (ARITHMETIC, "p"),
@@ -828,8 +845,17 @@ def _solve(problem, op, nodes, ref, t_end, permc_spec=None) -> tuple[np.ndarray,
     return u, t_end
 
 
+EDGE = "edge"
+"""``seed_operators``' third variant: E4.12's rule (#84) forced on, the Gaussians
+of a row anchored in an edge the warped or plain ones with the stronger diagonal
+(``seeds.gaussian_choice``), which the library turns on only on a ring."""
+
+
 def seed_label(
-    warp: bool = True, reach: float = TANH_REACH, tangential: bool = False
+    warp: bool = True,
+    reach: float = TANH_REACH,
+    tangential: bool = False,
+    edge: bool = False,
 ) -> str:
     """The cache label of one seed line: the chain, the warp, the reach if not 20 δ.
 
@@ -837,35 +863,50 @@ def seed_label(
     iterations) rides in the label, so that ``KNEE_CACHE_META`` — and with
     it E4.3's naive and construction entries to 160,000 nodes — survives
     (§3.8's cache trap, and §4.4's "a flag that moves the numbers and not
-    the key gives the earlier run's answer back in silence").
+    the key gives the earlier run's answer back in silence"). ``edge`` is
+    E4.12's rule on the warped line (``-edge``).
     """
     name = "tangential" if tangential else "seeds"
+    if edge:
+        if not warp:
+            raise ValueError("E4.12's rule chooses between the warp and plain")
+        name = f"{name}-edge"
     name = name if warp else f"{name}-plain"
     return name if reach == TANH_REACH else f"{name}-r{reach:g}"
+
+
+def variant_label(
+    variant: bool | str, reach: float = TANH_REACH, tangential: bool = False
+) -> str:
+    """``seed_label`` of a ``seed_operators`` variant: True, False or ``EDGE``."""
+    return seed_label(variant is not False, reach, tangential, variant == EDGE)
 
 
 def seed_operators(
     nodes: NodeSet,
     medium: SmoothBand,
     stencils: Stencils,
-    warps: Sequence[bool],
+    warps: Sequence[bool | str],
     reach: float = TANH_REACH,
     shape: float = GA_SHAPE,
     tangential: bool = False,
-) -> tuple[dict[bool, sp.csr_array], int]:
-    """``({warp: L}, the seeded rows)``: ``seed_operator``'s loop, one march per row.
+) -> tuple[dict[bool | str, sp.csr_array], int, dict[bool | str, int]]:
+    """``({warp: L}, the seeded rows, {warp: rows kept plain})``, one march per row.
 
     ``operators.seed_operator`` marches a row and solves for its weights; H7
     wants the same rows with plain Gaussians, and the march — 2.4–8.3 ms a
     row, everything the operator costs — does not depend on the warp. So the
     ablation is built here from one ``seed_basis`` per row and one
-    ``weights_of`` per warp, which halves the sweep's marches. With a single
+    ``gaussian_choice`` per warp, which halves the sweep's marches. With a single
     warp it is ``seed_operator`` exactly (a test pins that). ``tangential``
-    marches §3.10's chain (E4.11).
+    marches §3.10's chain (E4.11). A warp is True (E4.5's, on every row, what
+    ``seed_operator`` builds off a ring), False (plain) or ``EDGE`` (E4.12's
+    rule forced on).
     """
     # Unlike ``seed_operator`` this takes no ``region_index`` shortcut for a
     # material without interfaces: the sweep only ever passes a ``SmoothBand``.
     ops = {w: direct_operator(nodes, medium, stencils, shape).tolil() for w in warps}
+    plain = dict.fromkeys(warps, 0)
     seeded = 0
     for g in stencils.groups:
         if g.kind != INTERFACE_KIND:
@@ -875,9 +916,13 @@ def seed_operators(
             sb = seed_basis(nodes.xy[idx], medium, g.spec.degree, tangential=tangential)
             seeded += 1
             for warp, op in ops.items():
+                w, warped = gaussian_choice(
+                    sb, shape, warp is not False, edge_rule=warp == EDGE
+                )
                 op[row, :] = 0.0
-                op[row, idx] = weights_of(sb, shape, warp)
-    return {w: op.tocsr() for w, op in ops.items()}, seeded
+                op[row, idx] = w
+                plain[warp] += not warped
+    return {w: op.tocsr() for w, op in ops.items()}, seeded, plain
 
 
 def treatment_of(label: str) -> tuple[str, float]:
@@ -953,12 +998,13 @@ def sweep_operators(
     at one radius share one disc quadrature, charged to whichever is built
     first.
     """
+    variants = (True, False, EDGE)
     families = {
-        chain: [w for w in (True, False) if seed_label(w, reach, chain) in labels]
+        chain: [w for w in variants if variant_label(w, reach, chain) in labels]
         for chain in (False, True)
     }
     means: dict[float, tuple] = {}
-    marched = {seed_label(w, reach, c) for c in (False, True) for w in (True, False)}
+    marched = {variant_label(w, reach, c) for c in (False, True) for w in variants}
     built: dict[str, tuple[sp.csr_array, str | None, dict[str, float]]] = {}
     seed_group: list[Stencils] = []
 
@@ -1021,16 +1067,15 @@ def sweep_operators(
         if not warps:
             continue
         t0 = time.perf_counter()
-        ops, seeded = seed_operators(
+        ops, seeded, plain = seed_operators(
             nodes, medium, stencils_of_the_rule(), warps, reach, tangential=chain
         )
         seconds = (time.perf_counter() - t0) / len(warps)
         for warp in warps:
-            built[seed_label(warp, reach, chain)] = (
-                ops[warp],
-                None,
-                {"rows": seeded, "seconds": seconds},
-            )
+            info = {"rows": seeded, "seconds": seconds}
+            if warp == EDGE:
+                info["plain"] = plain[warp]
+            built[variant_label(warp, reach, chain)] = (ops[warp], None, info)
     return built
 
 
@@ -2402,9 +2447,9 @@ def run_seeds(args) -> dict:
     geometry = args.geometry
     reach = args.seed_reach
     marched = {
-        seed_label(w, TANH_REACH, c): seed_label(w, reach, c)
+        variant_label(w, TANH_REACH, c): variant_label(w, reach, c)
         for c in (False, True)
-        for w in (True, False)
+        for w in (True, False, EDGE)
     }
     labels = [marched.get(label, label) for label in args.operators]
     if seed_label(True, reach) not in labels:
@@ -2412,6 +2457,7 @@ def run_seeds(args) -> dict:
     tangential = seed_label(True, reach, True) in labels
     seeds = seed_label(True, reach, tangential)
     plain = seed_label(False, reach, tangential)
+    edge = seed_label(True, reach, tangential, edge=True)
     cache = load_knee_cache(args.outputs, geometry)
     results = knee_sweep(
         args.counts,
@@ -2486,6 +2532,15 @@ def run_seeds(args) -> dict:
                 plain,
                 f"H7, the warp as two lines of the sweep, {what}: the plain-Gaussian"
                 " rows' RMS error over the warped rows'",
+            )
+        if edge in labels:
+            print_warp(
+                lines,
+                seeds,
+                edge,
+                f"E4.12's rule off the ring, {what}: its RMS error over the warped"
+                " rows' (rows anchored off their piece keep the Gaussians with the"
+                " stronger diagonal)",
             )
         if 0.0 in lines and "construction/rms" in lines[0.0][0]:
             print_regression(
@@ -2669,7 +2724,7 @@ def spectrum_rows(seed: int, iterations: int) -> list[dict]:
             reach=TANH_REACH,
         )
         ops = {"seeds": seed_operators(nodes, medium, stencils, (True,))[0][True]}
-        both, _ = seed_operators(
+        both, _, _ = seed_operators(
             nodes, medium, stencils, (True, False), tangential=True
         )
         ops["tangential"], ops["tangential-plain"] = both[True], both[False]
