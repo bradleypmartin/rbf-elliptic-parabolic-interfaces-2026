@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from math import atan, cos, factorial, hypot, sin, sqrt
+from math import atan, cos, exp, expm1, factorial, hypot, sin, sqrt
 from typing import Literal, Protocol
 
 import numpy as np
@@ -101,6 +101,21 @@ distance with a margin of 1.25: there the foot point does not move along the
 line (``NormalProfile.foot``) and the line meets the curve once. Case 2 at
 amplitude 0.02 reaches 0.37 at δ ≤ 0.01 and 0.68 at δ = 0.04 on 1250 nodes; a
 tighter curve, or a coarser set, is refused rather than marched.
+"""
+
+GAP_TOL = 1e-6
+"""How far ``Band.gap`` may sit from its circles' stored width, relative.
+
+EABE eq. 40's stored width is ``1/s`` to 8.3e-8 at ``s = 10¹¹`` (port notes
+§2.9); a gap further off than this belongs to another pair of circles.
+"""
+
+COMPOSITIONS = ("fold", "resistance")
+"""How ``SmoothBand`` composes its two edges (stiff note §3.6, E4.8's decision).
+
+``fold`` blends alpha, E3.2's 1-D medium folded in from the outside piece;
+``resistance`` blends the resistivity ``1/alpha`` by the difference of the
+two edges, which keeps the band's contact resistance at every δ.
 """
 
 
@@ -430,12 +445,33 @@ class Band:
     (EABE eq. 35) and the ring 0.349 ≤ r ≤ 0.35 (eq. 38). Closed at both
     ends, as the MATLAB's ``y <= c2 && y >= c1`` and the papers' brackets
     say; only a point exactly on an interface ever notices.
+
+    ``gap`` is the exact radial distance between two concentric circles,
+    for a ring the stored radii cannot carry: EABE eq. 40's is ``1/s`` wide
+    at a radius of 0.35, and at ``s ≥ 10¹⁰`` the difference of its stored
+    radii is its width to 8e-8 only (port notes §2.9). Everything of the
+    jump's (levels, regions, the translated basis) keeps the stored radii;
+    the seeds' march and the smooth ring's blend read the gap instead
+    (stiff note §3.6's widths from the outer radius, E4.8, #39).
     """
 
     lower: Curve
     upper: Curve
     inside: Piece2D
     outside: Piece2D
+    gap: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.gap is None:
+            return
+        lower, upper = self.lower, self.upper
+        if not _concentric((lower, upper)) or not lower.radius < upper.radius:
+            raise ValueError("a gap belongs to two concentric circles, inner first")
+        stored = upper.radius - lower.radius
+        if not (self.gap > 0.0 and abs(stored - self.gap) <= GAP_TOL * self.gap):
+            raise ValueError(
+                f"the gap {self.gap:.6e} is not the stored radii's width {stored:.6e}"
+            )
 
     @property
     def interfaces(self) -> tuple[Curve, Curve]:
@@ -514,6 +550,18 @@ class SmoothBand:
     their own variation through the blend; ``gradient`` is the blend's, with
     ``∇d`` the unit normal at the foot point.
 
+    ``composition="resistance"`` (E4.8, #39, stiff note §3.6) composes the
+    edges in the resistivity instead,
+
+        1/alpha = 1/outside + (1/inside − 1/outside) [s(d₁/δ) − s(d₂/δ)],
+
+    the difference of the two edges, whose integral across the band is its
+    width exactly, so ``∫ (1/alpha − 1/outside) dn`` is the jump's at every
+    δ: the insulating ring of EABE eq. 40 keeps its contact resistance 1.5
+    whatever δ and s, where the fold loses it once δ exceeds a tenth of the
+    ring's width. The share ``s(a) − s(b)`` is formed without cancellation
+    (``layer_share``) and, on a band with a ``gap``, from ``d₁ = d₂ + gap``.
+
     Everything else is the jump's (stiff note §3.8, decision 1):
     ``region_index``, ``region_piece``, ``piece_index``, ``interfaces`` and the
     pieces' ``taylor`` tables, so the naive operator, the δ = 0 construction
@@ -523,12 +571,21 @@ class SmoothBand:
 
     band: Band
     delta: float
+    composition: str = "fold"
 
     def __post_init__(self) -> None:
         if not (np.isfinite(self.delta) and self.delta >= 0.0):
             raise ValueError("the edge width delta must be finite and non-negative")
         if isinstance(self.band, SmoothBand):
             raise TypeError("smooth a jump Band, not a SmoothBand")
+        if self.composition not in COMPOSITIONS:
+            raise ValueError(
+                f"unknown composition {self.composition!r}; one of {COMPOSITIONS}"
+            )
+
+    @property
+    def gap(self) -> float | None:
+        return self.band.gap
 
     @property
     def lower(self) -> Curve:
@@ -589,6 +646,8 @@ class SmoothBand:
         """
         if self.delta == 0.0:
             return float(self.band.alpha(np.array([x]), np.array([y]))[0])
+        if self.composition == "resistance":
+            return self._resistance_at(x, y, known)
         a = _piece_at(self.outside, x, y)
         for j, (curve, piece) in enumerate(
             ((self.lower, self.inside), (self.upper, self.outside))
@@ -623,6 +682,9 @@ class SmoothBand:
         if self.delta == 0.0:
             raise ValueError("a jump has no distances to blend: sample its pieces")
         x, y = _as_float(x, y)
+        if self.composition == "resistance":
+            d1, d2 = (np.asarray(d, dtype=float) for d in distances)
+            return self._resistance(x, y, d1, d2)[0]
         a = self.outside.alpha(x, y)
         for piece, d in zip((self.inside, self.outside), distances, strict=True):
             z = np.asarray(d, dtype=float) / self.delta
@@ -635,6 +697,11 @@ class SmoothBand:
         if self.delta == 0.0:
             return self.band.alpha(x, y), *self.band.gradient(x, y)
         x, y = np.broadcast_arrays(*_as_float(x, y))
+        if self.composition == "resistance":
+            d2 = self.upper.signed_distance(x, y)
+            gap = self.gap
+            d1 = d2 + gap if gap is not None else self.lower.signed_distance(x, y)
+            return self._resistance(x, y, d1, d2, gradient=True)
         a = self.outside.alpha(x, y)
         ax, ay = self.outside.gradient(x, y)
         for curve, piece in ((self.lower, self.inside), (self.upper, self.outside)):
@@ -648,6 +715,68 @@ class SmoothBand:
             k = (ds / self.delta) * (b - a)
             a, ax, ay = value, gx + k * nx, gy + k * ny
         return a, ax, ay
+
+    def _layer_width(self, d1, d2):
+        """``(d₁ − d₂)/δ``, the layer's width in edge widths: the gap's when known."""
+        if self.gap is not None:
+            return self.gap / self.delta
+        return np.maximum(d1 - d2, 0.0) / self.delta
+
+    def _resistance(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        d1: np.ndarray,
+        d2: np.ndarray,
+        gradient: bool = False,
+    ) -> tuple[np.ndarray, ...]:
+        """The resistance composition's alpha (and gradient) from both distances.
+
+        ``ρ = ρ_out + (ρ_in − ρ_out) D`` with ``ρ = 1/alpha`` and ``D = s(d₁/δ) −
+        s(d₂/δ)``; the gradient is ``−alpha² ∇ρ`` with ``∇d`` each curve's unit
+        normal at its foot point, as ``_blend``'s.
+        """
+        delta = self.delta
+        share, s1, s2 = layer_share(d1 / delta, d2 / delta, self._layer_width(d1, d2))
+        a_out, a_in = self.outside.alpha(x, y), self.inside.alpha(x, y)
+        r_out, r_in = 1.0 / a_out, 1.0 / a_in
+        alpha = 1.0 / (r_out + (r_in - r_out) * share)
+        if not gradient:
+            return (alpha,)
+        (gox, goy), (gix, giy) = self.outside.gradient(x, y), self.inside.gradient(x, y)
+        n1x, n1y = self.lower.normal(self.lower.closest(x, y))
+        n2x, n2y = self.upper.normal(self.upper.closest(x, y))
+        k = (r_in - r_out) / delta
+        rx = (share - 1.0) * gox / a_out**2 - share * gix / a_in**2
+        ry = (share - 1.0) * goy / a_out**2 - share * giy / a_in**2
+        rx = rx + k * (s1 * n1x - s2 * n2x)
+        ry = ry + k * (s1 * n1y - s2 * n2y)
+        return alpha, -(alpha**2) * rx, -(alpha**2) * ry
+
+    def _resistance_at(
+        self, x: float, y: float, known: tuple[int, float] | None
+    ) -> float:
+        """``_resistance``'s alpha at one point, in floats (the seed march's)."""
+        d1 = d2 = None
+        if known is not None:
+            if known[0] == 0:
+                d1 = known[1]
+            else:
+                d2 = known[1]
+        gap = self.gap
+        if d2 is None:
+            if gap is not None and d1 is not None:
+                d2 = d1 - gap
+            else:
+                d2 = self.upper.signed_distance_at(x, y)
+        if d1 is None:
+            d1 = d2 + gap if gap is not None else self.lower.signed_distance_at(x, y)
+        delta = self.delta
+        width = gap / delta if gap is not None else max(d1 - d2, 0.0) / delta
+        share = layer_share_at(d1 / delta, d2 / delta, width)
+        r_out = 1.0 / _piece_at(self.outside, x, y)
+        r_in = 1.0 / _piece_at(self.inside, x, y)
+        return 1.0 / (r_out + (r_in - r_out) * share)
 
     def normal_profile(self, j: int, x: float, y: float, scale: float) -> NormalProfile:
         """The material along interface ``j``'s normal through the anchor ``(x, y)``.
@@ -692,6 +821,9 @@ class SmoothBand:
                 )
             foot = (j, d_e)
         flanks = (-EDGE_STOP * self.delta, 0.0, EDGE_STOP * self.delta)
+        if self.gap is not None:
+            line = self._gap_line(float(x), float(y), nx, ny, float(scale), flanks)
+            return replace(line, foot=foot, pieces=self._pieces(line))
         stops = []
         for other in self.interfaces:
             if isinstance(other, FlatLine):
@@ -711,15 +843,74 @@ class SmoothBand:
                 stops.append(centre + f / (scale * cosine))
         stops = np.unique(stops)
         line = NormalProfile(float(x), float(y), nx, ny, float(scale), stops, (), foot)
+        return replace(line, pieces=self._pieces(line))
+
+    def _pieces(self, line: NormalProfile) -> tuple[Piece2D | SmoothBand, ...]:
+        """The medium on each segment of ``line``: the region's piece at δ = 0."""
+        stops = line.stops
         if self.delta > 0.0:
-            pieces = (self,) * (stops.size + 1)
-        else:
-            probes = np.concatenate(
-                [[stops[0] - 1.0], 0.5 * (stops[:-1] + stops[1:]), [stops[-1] + 1.0]]
-            )
-            regions = self.region_index(*line.point(probes))
-            pieces = tuple(self.region_piece(int(r)) for r in regions)
-        return replace(line, pieces=pieces)
+            return (self,) * (stops.size + 1)
+        probes = np.concatenate(
+            [[stops[0] - 1.0], 0.5 * (stops[:-1] + stops[1:]), [stops[-1] + 1.0]]
+        )
+        regions = self.region_index(*line.point(probes))
+        return tuple(self.region_piece(int(r)) for r in regions)
+
+    def _gap_line(
+        self,
+        x: float,
+        y: float,
+        nx: float,
+        ny: float,
+        scale: float,
+        flanks: tuple[float, float, float],
+    ) -> NormalProfile:
+        """The radial line of a ring with a ``gap``, its stops from the outer circle.
+
+        Stiff note §3.6's widths rule: the stops are offsets from the outer
+        crossing ``origin``, the inner crossing ``−gap/scale`` exactly and the
+        flanks ``± EDGE_STOP δ/scale`` about each, so the march, which runs in
+        the offset (``seeds._march``), crosses a ring of the gap's width to
+        rounding; the absolute stops, two O(1) numbers ``gap/scale`` apart,
+        would give it to ``ulp(1)/(gap/scale)``, 1e-7 at ``s = 10¹¹``.
+        """
+        outer = self.upper
+        origin = (outer.radius - hypot(x - outer.cx, y - outer.cy)) / scale
+        width = self.gap / scale
+        chosen = flanks if self.delta > 0.0 else (0.0,)
+        offsets = np.unique(
+            [f / scale for f in chosen] + [f / scale - width for f in chosen]
+        )
+        # The inner crossing to the bit: ``0.0/scale − width`` is ``−width``.
+        stops = origin + offsets
+        return NormalProfile(x, y, nx, ny, scale, stops, (), None, origin, offsets)
+
+
+def layer_share(
+    a: np.ndarray, b: np.ndarray, width: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``s(a) − s(b)`` for ``a − b = width ≥ 0``, with ``s′(a)`` and ``s′(b)``.
+
+    ``s(z) = ½ (1 + tanh z)``. The difference of two edges ``width`` apart,
+    formed without cancelling the two logistics: with ``e = exp(−2|z|)`` it is
+    ``(1 − e^{−2 width}) w / ((1 + e_a)(1 + e_b))``, ``w`` being ``e_b`` beyond
+    the upper edge, ``e_a`` below the lower one and 1 between them, and
+    ``1 − e^{−2 width}`` an ``expm1``. On EABE eq. 40's ring at ``s = 10¹¹``
+    the width is ``1e-11/δ`` and the difference of the tanh values would keep
+    none of its digits. ``s′(z) = 2 e / (1 + e)²``.
+    """
+    a, b, width = (np.asarray(v, dtype=float) for v in (a, b, width))
+    ea, eb = np.exp(-2.0 * np.abs(a)), np.exp(-2.0 * np.abs(b))
+    envelope = np.where(b >= 0.0, eb, np.where(a <= 0.0, ea, 1.0))
+    share = -np.expm1(-2.0 * width) * envelope / ((1.0 + ea) * (1.0 + eb))
+    return share, 2.0 * ea / (1.0 + ea) ** 2, 2.0 * eb / (1.0 + eb) ** 2
+
+
+def layer_share_at(a: float, b: float, width: float) -> float:
+    """``layer_share``'s value at one point, in floats."""
+    ea, eb = exp(-2.0 * abs(a)), exp(-2.0 * abs(b))
+    envelope = eb if b >= 0.0 else (ea if a <= 0.0 else 1.0)
+    return -expm1(-2.0 * width) * envelope / ((1.0 + ea) * (1.0 + eb))
 
 
 def _concentric(curves: tuple[Curve, ...]) -> bool:
@@ -767,6 +958,11 @@ class NormalProfile:
     the region the segment lies in, so alpha is one-sided at a jump as
     ``Medium1D.elements`` makes it in 1-D, and at δ > 0 the smooth medium on
     every segment. Made by ``SmoothBand.normal_profile``.
+
+    On a ring with a ``gap`` (E4.8, #39) the stops are also carried as
+    ``offsets`` from ``origin``, the outer circle's crossing: ``stops`` is
+    ``origin + offsets``, and the march runs in the offset, so the gap
+    between the two crossings is exact (``SmoothBand._gap_line``).
     """
 
     x0: float
@@ -777,6 +973,8 @@ class NormalProfile:
     stops: np.ndarray
     pieces: tuple[Piece2D | SmoothBand, ...]
     foot: tuple[int, float] | None = None
+    origin: float = 0.0
+    offsets: np.ndarray | None = None
 
     def point(self, eta: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         step = self.scale * np.asarray(eta, dtype=float)
@@ -921,6 +1119,13 @@ def ring_radii(s: float = CASE3_S) -> tuple[float, float]:
     return (inner, 0.35)
 
 
+def ring_gap(s: float = CASE3_S) -> float:
+    """The ring's exact width ``1/s`` (``Band.gap``), which ``ring_radii`` stores to
+    8e-8 at ``s ≥ 10¹⁰``."""
+    ring_radii(s)
+    return 1.0 / s
+
+
 def case3(s: float = CASE3_S) -> Domain:
     """EABE eq. 37–39, or eq. 40 at any ``s``: the insulating ring and cooling circle.
 
@@ -929,7 +1134,9 @@ def case3(s: float = CASE3_S) -> Domain:
     ``1/1500 + (1/3000) sin 2πx sin 2πy`` on ``0.349 ≤ r ≤ 0.35`` at the
     default ``s = 1000``. The rows straddle the ring's midline, since at
     every count of Fig. 14 the ring is thinner than the spacing; the circle
-    ``r = 0.05`` is a Dirichlet row and its inside is cut out.
+    ``r = 0.05`` is a Dirichlet row and its inside is cut out. The band
+    carries the ring's exact width ``1/s`` as its ``gap`` (E4.8), which only
+    the seeds and the smooth ring read.
     """
     inner, outer = ring_radii(s)
     band = Band(
@@ -937,6 +1144,7 @@ def case3(s: float = CASE3_S) -> Domain:
         Circle(outer),
         SineProduct(1.0 / (1.5 * s), 1.0 / (3.0 * s)),
         Constant2D(1.0),
+        gap=ring_gap(s),
     )
     cooling = Circle(COOLING_RADIUS)
     return Domain(band, (Circle(outer - 0.5 / s),), (*STRIP, cooling), (cooling,))
@@ -945,17 +1153,20 @@ def case3(s: float = CASE3_S) -> Domain:
 CASES = {1: case1, 2: case2, 3: case3}
 
 
-def with_smooth_edges(domain: Domain, delta: float) -> Domain:
+def with_smooth_edges(
+    domain: Domain, delta: float, composition: str = "fold"
+) -> Domain:
     """``domain`` with its band's interfaces tanh edges of width ``delta``.
 
     The material becomes ``SmoothBand`` over the domain's jump band (its
-    own band if it is smooth already, so δ is replaced, not compounded); the
-    geometry is untouched, so the straddling rows, Dirichlet rows and holes
-    stay where the jump put them and ``build_node_set`` makes the same nodes.
+    own band if it is smooth already, so δ is replaced, not compounded),
+    composed as ``composition`` says; the geometry is untouched, so the
+    straddling rows, Dirichlet rows and holes stay where the jump put them
+    and ``build_node_set`` makes the same nodes.
     """
     material = domain.material
     band = material.band if isinstance(material, SmoothBand) else material
-    return replace(domain, material=SmoothBand(band, delta))
+    return replace(domain, material=SmoothBand(band, delta, composition))
 
 
 # --- node sets --------------------------------------------------------------

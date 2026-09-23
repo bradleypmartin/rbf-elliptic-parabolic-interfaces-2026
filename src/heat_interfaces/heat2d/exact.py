@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import scipy.sparse as sp
+from scipy.integrate import solve_ivp
 from scipy.sparse.linalg import spsolve
 
 from ..heat1d.domain import (
@@ -61,11 +62,13 @@ from .domain import (
     Y_MAX,
     Y_MIN,
     Band,
+    Circle,
     Constant2D,
     FlatLine,
     SineGraph,
     SmoothBand,
     case1,
+    ring_gap,
     ring_radii,
 )
 
@@ -654,11 +657,14 @@ class RingMode:
     scale_radius: float = 0.5
     cx: float = 0.5
     cy: float = 0.5
+    widths: tuple[float, ...] | None = None
     _coefficients: np.ndarray = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if len(self.radii) != len(self.alphas) - 1:
             raise ValueError("one radius fewer than rings is needed")
+        if self.widths is not None and len(self.widths) != len(self.radii) - 1:
+            raise ValueError("one width between each pair of radii is needed")
         if any(a <= 0.0 for a in self.alphas):
             raise ValueError("every ring needs a positive α")
         if self.mode < 1:
@@ -676,7 +682,9 @@ class RingMode:
         # expm1 / log1p: on a ring 1/s thick at α ~ 1/s (EABE eq. 40) the
         # pair (a, b) is O(s) and evaluating a r^m + b r^-m at the outer
         # radius would cancel two O(s) terms to an O(1) climb, losing
-        # log10(s) digits; the increments are O(1) each.
+        # log10(s) digits; the increments are O(1) each. With ``widths`` the
+        # rings' widths are those, not the stored radii's differences (a
+        # ``Band.gap``, E4.8).
         m = self.mode
         coef = np.zeros((len(self.alphas), 2))
         coef[0] = [1.0, 0.0]
@@ -686,7 +694,8 @@ class RingMode:
             a, b = coef[k]
             if k > 0:
                 below = self.radii[k - 1]
-                step = m * np.log1p((r - below) / below)
+                width = r - below if self.widths is None else self.widths[k - 1]
+                step = m * np.log1p(width / below)
                 rise = a * below**m * np.expm1(step)
                 fall = b * below**-m * np.expm1(-step)
                 value = value + rise + fall
@@ -722,13 +731,227 @@ class RingMode:
         return self.radial(np.hypot(dx, dy)) * np.cos(self.mode * np.arctan2(dy, dx))
 
 
-def ring_exact(mode: int = 2, s: float = CASE3_S) -> RingMode:
+def ring_exact(mode: int = 2, s: float = CASE3_S, gap: bool = False) -> RingMode:
     """Case 3's ring at its constant part: ``1/(1.5 s)`` on ``0.35 − 1/s ≤ r ≤ 0.35``.
 
     ``1/1500`` on ``0.349 ≤ r ≤ 0.35`` at the default ``s``; EABE eq. 40's
     ring at any other. ``u = r^m cos mθ`` scaled inside, 1 at ``(0.5, θ = 0)``;
     nearly all of the change is across the ring, as in case 3 itself, and
     the climb tends to ``1.5 × α R'`` as ``s`` grows (the ring's resistance
-    ``(1/s) / (1/(1.5 s))`` is 1.5 at every ``s``).
+    ``(1/s) / (1/(1.5 s))`` is 1.5 at every ``s``). ``gap=True`` climbs across
+    the exact width ``1/s`` (``Band.gap``, the seeds' ring, E4.8) rather than
+    the stored radii's, which is the jump-aware stencils' (E2.9).
     """
-    return RingMode(ring_radii(s), (1.0, 1.0 / (1.5 * s), 1.0), mode)
+    widths = (ring_gap(s),) if gap else None
+    return RingMode(ring_radii(s), (1.0, 1.0 / (1.5 * s), 1.0), mode, widths=widths)
+
+
+RING_REACH = 40.0
+"""Edge widths from either circle beyond which a resistance-composed ring is its
+pieces to rounding (``SmoothRingMode``, ``matched_radial``).
+
+The resistivity blend's tail carries the ring's contrast (``SmoothBand``'s
+``composition="resistance"``): beyond a circle it is ``(ρ_in − ρ_out)
+(1 − e^{−2w/δ}) e^{−2z}``, at most ``1.5/δ · e^{−2z}`` on EABE eq. 40's ring,
+which ``TANH_REACH``'s 20 leaves at 1e-12 relative for δ = 1e-5 and 40 at
+1e-30.
+"""
+
+RING_CUTS = (0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0)
+"""Element cuts at ``± RING_CUTS δ`` about each circle of a smooth ring."""
+
+
+def _radial_medium(
+    medium: Band | SmoothBand,
+) -> tuple[float, float, float, Callable, Callable]:
+    """``(inner, outer, gap, α(r), α′(r))`` along a radius of a concentric ring.
+
+    The ring must be radial (constant pieces about one centre); alpha and its
+    radial derivative are the medium's own on the ray ``θ = 0``.
+    """
+    band = medium.band if isinstance(medium, SmoothBand) else medium
+    if not all(isinstance(c, Circle) for c in band.interfaces) or not all(
+        isinstance(p, Constant2D) for p in band.pieces
+    ):
+        raise ValueError("a radial ring needs concentric circles and constant pieces")
+    inner, outer = band.lower, band.upper
+    if (inner.cx, inner.cy) != (outer.cx, outer.cy):
+        raise ValueError("the ring's circles must share a centre")
+    gap = band.gap if band.gap is not None else outer.radius - inner.radius
+    cx, cy = outer.cx, outer.cy
+
+    def alpha(r: np.ndarray) -> np.ndarray:
+        r = np.asarray(r, dtype=float)
+        return medium.alpha(cx + r, np.full_like(r, cy))
+
+    def slope(r: np.ndarray) -> np.ndarray:
+        r = np.asarray(r, dtype=float)
+        return medium.gradient(cx + r, np.full_like(r, cy))[0]
+
+    return outer.radius - gap, outer.radius, gap, alpha, slope
+
+
+def radial_elements(medium: SmoothBand) -> np.ndarray:
+    """Element edges across a smooth ring: ``± RING_CUTS δ`` about both circles.
+
+    Within ``RING_REACH δ`` of the circles; cuts closer than δ/8 are one.
+    """
+    inner, outer, _, _, _ = _radial_medium(medium)
+    delta = medium.delta
+    lo, hi = inner - RING_REACH * delta, outer + RING_REACH * delta
+    cuts = [lo, hi]
+    for centre in (inner, outer):
+        for c in RING_CUTS:
+            cuts.extend((centre - c * delta, centre + c * delta))
+    kept: list[float] = []
+    for c in sorted(v for v in cuts if lo <= v <= hi):
+        if not kept or c - kept[-1] > delta / 8.0:
+            kept.append(c)
+    kept[-1] = hi
+    return np.array(kept)
+
+
+RADIAL_RTOL, RADIAL_ATOL = 1e-13, 1e-16
+"""DOP853's tolerances for ``SmoothRingMode``'s radial march (R and F are O(1)).
+
+A Chebyshev collocation of the same equation on ``radial_elements`` sat on a
+rounding floor of 1e-10 to 1e-8 whatever its order (the δ-wide elements put
+``p D²`` at 1e17, equilibrated or not; 2026-09-23), which the probe's weights,
+summing to ~1e4, would read as truncation. The march in flux form at
+``rtol`` 1e-12 agrees with this one to 3e-12 or better on EABE eq. 40's ring
+at s = 10³ and 10¹¹, δ from 1e-5 to 1e-3 (``tests/heat2d/test_exact.py``).
+"""
+
+
+@dataclass(frozen=True)
+class SmoothRingMode:
+    """``u = R(r) cos(mθ)`` through a smooth concentric ring (E4.8, #39).
+
+    ``RingMode``'s twin for a ``SmoothBand`` ring of constant pieces at any
+    δ > 0 (either composition): ``(r α R′)′ = m² α R / r`` in flux form,
+    ``R′ = F/(r α)``, ``F′ = m² α R / r``, marched by DOP853 at
+    ``RADIAL_RTOL`` from ``R = r^m`` below the ring, where alpha is its piece,
+    restarting at every cut of ``radial_elements``, to ``a r^m + b r^{−m}``
+    above it; scaled so that ``u = 1`` at ``(scale_radius, 0)``. It solves
+    ``∇·(α∇u) = 0`` through the smooth ring with nothing shared with the
+    seeds' chain but the medium's alpha, so each row applied to it is that
+    row's truncation error (the probe, stiff note §4.8).
+    """
+
+    medium: SmoothBand
+    mode: int = 2
+    scale_radius: float = 0.5
+    rtol: float = RADIAL_RTOL
+    _solution: tuple = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if not (isinstance(self.medium, SmoothBand) and self.medium.delta > 0.0):
+            raise ValueError("a smooth ring needs a SmoothBand with delta > 0")
+        _, _, _, alpha, _ = _radial_medium(self.medium)
+        edges = radial_elements(self.medium)
+        hi = float(edges[-1])
+        (top,) = self._march(edges, alpha, np.array([hi]))
+        rise = hi * top[1] / (hi * float(alpha(np.array([hi]))[0]) * self.mode)
+        m = self.mode
+        outside = ((top[0] + rise) / (2 * hi**m), (top[0] - rise) * hi**m / 2)
+        a, b = outside
+        norm = a * self.scale_radius**m + b * self.scale_radius**-m
+        if self.scale_radius < hi:
+            raise ValueError("scale_radius must lie beyond the smooth ring")
+        object.__setattr__(self, "_solution", (edges, alpha, outside, norm))
+
+    def _march(
+        self, edges: np.ndarray, alpha: Callable, targets: np.ndarray
+    ) -> np.ndarray:
+        """``(R, F)`` at the sorted ``targets`` in ``[edges[0], edges[-1]]``."""
+        m = self.mode
+
+        def rate(r: float, y: np.ndarray) -> np.ndarray:
+            a = float(alpha(np.array([r]))[0])
+            return np.array([y[1] / (r * a), m * m * a * y[0] / r])
+
+        lo = float(edges[0])
+        y = np.array([lo**m, m * float(alpha(np.array([lo]))[0]) * lo**m])
+        out = np.empty((targets.size, 2))
+        out[targets == lo] = y
+        for a, b in zip(edges[:-1], edges[1:], strict=True):
+            inside = (targets > a) & (targets <= b)
+            here = targets[inside]
+            stops = here if here.size and here[-1] == b else np.append(here, b)
+            sol = solve_ivp(
+                rate,
+                (a, b),
+                y,
+                method="DOP853",
+                t_eval=stops,
+                rtol=self.rtol,
+                atol=RADIAL_ATOL,
+            )
+            if not sol.success:
+                raise RuntimeError(f"the radial march failed: {sol.message}")
+            out[inside] = sol.y[:, : here.size].T
+            y = sol.y[:, -1]
+        return out
+
+    def radial(self, r: np.ndarray) -> np.ndarray:
+        edges, alpha, (a, b), norm = self._solution
+        r = np.asarray(r, dtype=float)
+        flat = r.ravel()
+        m = self.mode
+        out = np.where(flat < edges[0], flat**m, a * flat**m + b * flat**-m)
+        inside = (flat >= edges[0]) & (flat <= edges[-1])
+        if inside.any():
+            targets, where = np.unique(flat[inside], return_inverse=True)
+            out[inside] = self._march(edges, alpha, targets)[where, 0]
+        return (out / norm).reshape(r.shape)
+
+    def __call__(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        band = self.medium.band
+        x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        dx, dy = x - band.upper.cx, y - band.upper.cy
+        return self.radial(np.hypot(dx, dy)) * np.cos(self.mode * np.arctan2(dy, dx))
+
+
+def matched_radial(
+    medium: Band | SmoothBand, r: np.ndarray, n_gauss: int = 32
+) -> np.ndarray:
+    """The matched radial profile through a ring: ``∇·(α∇u) = 4``, ``u = r²`` inside.
+
+    Stiff note §3.6: regular at the centre, ``u′ = 2r/α(r)`` and
+    ``u = ∫ 2r/α dr``. At δ = 0 it is E2.9's ``r²``, ``r²/α + b₁``, ``r² + b₂``
+    with the climb formed from the ring's ``gap`` when it has one (the stored
+    radii's otherwise, E2.9's); at δ > 0 the integral is Gauss–Legendre on
+    ``radial_elements`` split at every ``r``, below which alpha is its piece.
+    """
+    r = np.asarray(r, dtype=float)
+    inner, outer, gap, alpha, _ = _radial_medium(medium)
+    smooth = isinstance(medium, SmoothBand) and medium.delta > 0.0
+    if not smooth:
+        band = medium.band if isinstance(medium, SmoothBand) else medium
+        ring, out = band.inside.value, band.outside.value
+        climb = gap * (inner + outer) * (1.0 / ring - 1.0 / out)
+        on_ring = r * r / ring - inner * inner * (1.0 / ring - 1.0 / out)
+        return np.where(
+            r < inner,
+            r * r / out,
+            np.where(r <= outer, on_ring, r * r / out + climb),
+        )
+    edges = radial_elements(medium)
+    lo, hi = edges[0], edges[-1]
+    flat = r.ravel()
+    cuts = np.unique(np.concatenate([edges, np.clip(flat, lo, hi)]))
+    nodes, weights = np.polynomial.legendre.leggauss(n_gauss)
+    mid, half = (cuts[:-1] + cuts[1:]) / 2, (cuts[1:] - cuts[:-1]) / 2
+    samples = mid[:, None] + half[:, None] * nodes[None, :]
+    integrand = 2.0 * samples / alpha(samples.ravel()).reshape(samples.shape)
+    at_cuts = lo * lo / float(alpha(np.array([lo]))[0]) + np.concatenate(
+        [[0.0], np.cumsum(half * (integrand @ weights))]
+    )
+    inside = at_cuts[np.searchsorted(cuts, np.clip(flat, lo, hi))]
+    out_piece = float(alpha(np.array([hi]))[0])
+    value = np.where(
+        flat < lo,
+        flat * flat / float(alpha(np.array([lo]))[0]),
+        np.where(flat > hi, inside + (flat * flat - hi * hi) / out_piece, inside),
+    )
+    return value.reshape(r.shape)

@@ -51,6 +51,12 @@ them (``coupled_chain``, 75 levels, 150 states). That is what route (a)'s
 frozen profile cannot carry on a curved or tangentially varying edge
 (§4.6); on a flat edge with alpha a function of the normal alone the extra
 levels stay zero and the seeds are the ones above.
+
+On EABE eq. 40's ring (a ``Band`` with a ``gap``, E4.8, #39) the march runs
+in the offset from the outer circle, so the ring it crosses is the gap's
+width to rounding at any s (stiff note §3.6's widths rule), and the series
+along its segments come from a checked piecewise Chebyshev interpolant in η
+(``RING_POINTS``), which keeps the contrast's rounding out of the step control.
 """
 
 from __future__ import annotations
@@ -387,31 +393,48 @@ def _march(
 
     One ``solve_ivp`` per segment between consecutive targets (the points,
     exact, and the profile's stops within reach), ``rate_of(segment)`` the
-    system on each; either chain's march.
+    system on each; either chain's march. On a profile with ``offsets`` (a
+    ring with a ``gap``, E4.8) the march runs in the offset ``τ = η −
+    origin`` from the outer crossing, so that the segment across the ring is
+    the gap to rounding (``SmoothBand._gap_line``); elsewhere ``τ`` is ``η``.
     """
+    origin = profile.origin
+    if profile.offsets is None:
+        tau, offsets, anchor = eta, profile.stops, 0.0
+    else:
+        tau, offsets, anchor = eta - origin, profile.offsets, -origin
     out = np.empty((y0.size, eta.size))
     out[:, eta == 0.0] = y0[:, None]
     for side in (-1.0, 1.0):
         ahead = side * eta > 0.0
         if not ahead.any():
             continue
-        far = np.max(side * eta[ahead])
-        stops = side * profile.stops
-        inside = stops[(stops > MERGE_TOL) & (stops < far)]
-        y, t0 = y0, 0.0
-        for t in march_targets(side * eta[ahead], inside):
+        far = np.max(side * tau[ahead])
+        stops = side * offsets
+        inside = stops[(stops > side * anchor + MERGE_TOL) & (stops < far)]
+        y, t0 = y0, anchor
+        for t in march_targets(side * tau[ahead], inside):
             t1 = side * t
-            segment = int(profile.segment(0.5 * (t0 + t1)))
+            segment = int(profile.segment(0.5 * (t0 + t1) + origin))
             rate = rate_of(segment)
+            if profile.offsets is not None:
+                rate = _shifted(rate, origin)
             sol = solve_ivp(rate, (t0, t1), y, method="DOP853", rtol=rtol, atol=atol)
             if not sol.success:
                 raise RuntimeError(
-                    f"the seed march failed at eta = {t1}: {sol.message}"
+                    f"the seed march failed at eta = {t1 + origin}: {sol.message}"
                 )
             y, t0 = sol.y[:, -1], t1
-            hit = ahead & np.isclose(eta, t1, rtol=0.0, atol=MERGE_TOL)
+            hit = ahead & np.isclose(tau, t1, rtol=0.0, atol=MERGE_TOL)
             out[:, hit] = y[:, None]
     return out
+
+
+def _shifted(
+    rate: Callable[[float, np.ndarray], np.ndarray], origin: float
+) -> Callable[[float, np.ndarray], np.ndarray]:
+    """``rate`` in the offset ``τ = η − origin``: the medium only sees ``η``."""
+    return lambda tau, y: rate(tau + origin, y)
 
 
 @dataclass(frozen=True)
@@ -533,10 +556,22 @@ def _other_edge(
     the lines' ends; each line is straight in η), and a signed distance moves
     by at most the distance moved, so beyond ``TANH_REACH δ + reach`` the other
     edge's blend is its piece to ``e^{−40}`` times the contrast at every
-    sample. Otherwise ``η ↦`` the distance at the 11 samples, interpolated on
-    ``FAR_POINTS`` Chebyshev points of each line over the march's range (§3.10).
+    sample (the fold only). Otherwise ``η ↦`` the distance at the 11 samples,
+    interpolated on ``FAR_POINTS`` Chebyshev points of each line over the
+    march's range (§3.10); on a ring with a ``gap``, the foot distance shifted
+    by the gap, exact.
     """
     other = medium.interfaces[1 - coords.interface]
+    if medium.gap is not None:
+        # Concentric circles: the other is the foot circle's coordinate line
+        # ``d ∓ gap``, exactly (§3.6's widths from the outer radius).
+        shift = -medium.gap if coords.interface == 0 else medium.gap
+        count = coords.px.size
+
+        def parallel(eta: float) -> np.ndarray:
+            return np.full(count, coords.d_e + coords.scale * eta + shift)
+
+        return parallel
     ax, ay = coords.points(0.0)
     ax, ay = float(ax[SAMPLE_HALF]), float(ay[SAMPLE_HALF])
     lo, hi = min(0.0, float(eta.min())), max(0.0, float(eta.max()))
@@ -545,7 +580,10 @@ def _other_edge(
         px, py = coords.points(t)
         reach = max(reach, float(np.hypot(periodic_dx(px - ax), py - ay).max()))
     d0 = other.signed_distance_at(ax, ay)
-    if abs(d0) - reach >= TANH_REACH * medium.delta:
+    # The fold's far edge is its piece beyond TANH_REACH δ; the resistance
+    # composition's tail carries the band's contrast and is always sampled.
+    saturated = abs(d0) - reach >= TANH_REACH * medium.delta
+    if saturated and medium.composition == "fold":
         return copysign(inf, d0)
     theta = np.pi * (np.arange(FAR_POINTS) + 0.5) / FAR_POINTS
     t = 0.5 * (lo + hi) + 0.5 * (hi - lo) * np.cos(theta)
@@ -663,6 +701,96 @@ def tangential_profiles(
     return _tangential_march(coords, profile, eta, far, alpha_e, degree, rtol, atol)
 
 
+RING_POINTS, RING_TOL, RING_NOISE, RING_DEPTH = 9, 1e-13, 1e-11, 14
+"""On a ring with a ``gap`` (E4.8) the series along each segment of the march are
+read from a piecewise Chebyshev interpolant in η, ``RING_POINTS`` points a piece,
+each piece halved until it matches the sampled series at two points off its nodes
+to ``RING_TOL`` of their largest coefficient, or until halving no longer helps
+(``_ring_coefficients``).
+
+The series sampled at every stage carry the Fornberg weights' rounding, a few
+hundred ulps of the samples, and on the insulating ring ``1/(α m̂)`` multiplies
+it by the contrast: 1.5 s across the jump ring's gap (δ = 0) and ~1500 on the
+smooth ring's plateau and tails. The small tangential levels of the η-seeds,
+driven by those coefficients, then carried more noise than DOP853's absolute
+tolerance, and it took up to 150,000 rate evaluations a row (170–240 ms a row
+at every s ≥ 10⁵ at δ = 0, a median 90 ms and 5 s at worst at δ = 0.001,
+2026-09-23). The interpolant is one polynomial for each piece, so the stages
+see a smooth function, and its error is checked; elsewhere (no gap) the series
+are sampled at every stage as §3.10 decided.
+"""
+
+
+def _chebyshev_piece(
+    coefficients: Callable[[float], tuple[np.ndarray, np.ndarray, np.ndarray]],
+    lo: float,
+    hi: float,
+) -> tuple[list[np.ndarray], float, float]:
+    """``coefficients``' Chebyshev tables on ``[lo, hi]``, with its middle and half."""
+    middle, half = 0.5 * (lo + hi), 0.5 * (hi - lo)
+    theta = np.pi * (np.arange(RING_POINTS) + 0.5) / RING_POINTS
+    samples = [coefficients(middle + half * t) for t in np.cos(theta)]
+    basis = (2.0 / RING_POINTS) * np.cos(np.outer(np.arange(RING_POINTS), theta))
+    basis[0] *= 0.5
+    return (
+        [basis @ np.stack(parts) for parts in zip(*samples, strict=True)],
+        middle,
+        half,
+    )
+
+
+def _chebyshev_value(
+    tables: list[np.ndarray], middle: float, half: float, eta: float
+) -> tuple[np.ndarray, ...]:
+    t = min(1.0, max(-1.0, (eta - middle) / half))
+    chebyshev = np.cos(np.arange(RING_POINTS) * acos(t))
+    return tuple(chebyshev @ table for table in tables)
+
+
+def _ring_coefficients(
+    coefficients: Callable[[float], tuple[np.ndarray, np.ndarray, np.ndarray]],
+    lo: float,
+    hi: float,
+) -> Callable[[float], tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """``coefficients`` on ``[lo, hi]`` as ``RING_POINTS``-point Chebyshev pieces.
+
+    A piece is halved while its check misses ``RING_TOL``, unless it is below
+    ``RING_NOISE`` and the last halving gained less than 4×: a nine-point
+    interpolant of a smooth function gains ~500× a halving once resolved, and
+    one that stalls there is at the sampled series' own rounding, which no
+    halving removes (5e-14 on the smooth ring). A piece still above
+    ``RING_NOISE`` after ``RING_DEPTH`` halvings is sampled directly.
+    """
+    pieces: list[tuple[float, float, tuple | None]] = []
+    stack: list[tuple[float, float, int, float]] = [(lo, hi, 0, inf)]
+    while stack:
+        a, b, depth, parent = stack.pop()
+        piece = _chebyshev_piece(coefficients, a, b)
+        error = 0.0
+        for offset in (-0.3, 0.3):
+            eta = piece[1] + offset * piece[2]
+            got, want = _chebyshev_value(*piece, eta), coefficients(eta)
+            for g, w in zip(got, want, strict=True):
+                size = float(np.abs(w).max())
+                error = max(error, float(np.abs(g - w).max()) / size if size else 0.0)
+        helps = error > RING_NOISE or error < 0.25 * parent
+        if error > RING_TOL and depth < RING_DEPTH and helps:
+            middle = 0.5 * (a + b)
+            stack.extend([(middle, b, depth + 1, error), (a, middle, depth + 1, error)])
+            continue
+        pieces.append((a, b, piece if error <= RING_NOISE else None))
+    pieces.sort(key=lambda p: p[0])
+    starts = np.array([p[0] for p in pieces[1:]])
+
+    def model(eta: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        _, _, piece = pieces[int(np.searchsorted(starts, eta, side="right"))]
+        if piece is None:
+            return coefficients(eta)
+        return _chebyshev_value(*piece, eta)
+
+    return model
+
+
 def _tangential_march(
     coords: FootCoordinates,
     profile: NormalProfile,
@@ -675,10 +803,23 @@ def _tangential_march(
 ) -> SeedProfiles:
     """``tangential_profiles`` with the far edge already built (``_other_edge``)."""
     ch = coupled_chain(degree)
+    ring = profile.offsets is not None
+    lo, hi = min(0.0, float(eta.min())), max(0.0, float(eta.max()))
+    models: dict[int, Callable] = {}
 
     def rate_of(segment: int) -> Callable[[float, np.ndarray], np.ndarray]:
-        alpha = _alpha_series(coords, profile.pieces[segment], far)
-        return ch.rate(alpha_e, _coefficients(coords, alpha))
+        if segment not in models:
+            alpha = _alpha_series(coords, profile.pieces[segment], far)
+            coefficients = _coefficients(coords, alpha)
+            if ring:
+                # The segment's extent within the march (RING_POINTS).
+                below = profile.stops[segment - 1] if segment > 0 else -inf
+                above = profile.stops[segment] if segment < profile.stops.size else inf
+                a, b = max(lo, float(below)), min(hi, float(above))
+                if b > a:
+                    coefficients = _ring_coefficients(coefficients, a, b)
+            models[segment] = coefficients
+        return ch.rate(alpha_e, models[segment])
 
     out = _march(ch.initial(alpha_e), eta, profile, rate_of, rtol, atol)
     return SeedProfiles(eta, out[: ch.size], out[ch.size :], alpha_e, ch)
@@ -989,10 +1130,7 @@ def weights_of(
     sb: SeedBasis | TangentialBasis, shape: float = GA_SHAPE, warp: bool = True
 ) -> np.ndarray:
     """``seed_weights`` on a basis already marched (the ablations' entry)."""
-    xi, eta = seed_coordinates(sb, warp)
-    x, y = sb.xy[:, 0], sb.xy[:, 1]
-    r = np.hypot(periodic_dx(x - x[0]), y - y[0])
-    eps = shape * sb.scale / float(np.where(r > 0.0, r, np.inf).min())
+    xi, eta, eps = _gaussian_coordinates(sb, shape, warp)
     a_e = sb.alpha_e
     g_xi, g_eta = sb.gradient
     ch = sb.profiles.chain
@@ -1026,6 +1164,31 @@ def weights_of(
         block[None], sb.block[None], b_rbf[None, :, None], sb.rhs[None, :, None]
     )
     return w[0, :, 0] / sb.scale**2
+
+
+def _gaussian_coordinates(
+    sb: SeedBasis | TangentialBasis, shape: float, warp: bool
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """The Gaussian block's coordinates (``seed_coordinates``) and its ``ε``."""
+    xi, eta = seed_coordinates(sb, warp)
+    x, y = sb.xy[:, 0], sb.xy[:, 1]
+    r = np.hypot(periodic_dx(x - x[0]), y - y[0])
+    eps = shape * sb.scale / float(np.where(r > 0.0, r, np.inf).min())
+    return xi, eta, eps
+
+
+def saddle_system(
+    sb: SeedBasis | TangentialBasis, shape: float = GA_SHAPE, warp: bool = True
+) -> np.ndarray:
+    """EABE eq. 2's matrix ``[[A, S], [Sᵀ, 0]]`` of ``weights_of``'s solve.
+
+    The Gaussians in ``seed_coordinates``' coordinates and the seed block;
+    for the conditioning tables (E4.8), the solve itself is ``weights_of``'s.
+    """
+    xi, eta, eps = _gaussian_coordinates(sb, shape, warp)
+    block = gaussian(xi[:, None] - xi[None, :], eta[:, None] - eta[None, :], eps)
+    q = sb.block.shape[1]
+    return np.block([[block, sb.block], [sb.block.T, np.zeros((q, q))]])
 
 
 def block_condition(block: np.ndarray) -> tuple[float, float]:
