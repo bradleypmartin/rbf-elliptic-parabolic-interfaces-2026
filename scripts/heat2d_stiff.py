@@ -115,8 +115,9 @@ are the same rows on flat lines), and the figure is
 ``--mode tangential`` prints the chain's own tables: H14, the crossing rows'
 truncation on ``RingMode`` through two concentric circles (E2.3, route (a),
 tangential, from 2500 nodes), H15's distance between the tangential span and
-E2.3's translated basis on case 2 at δ = 0, and H6's twin on case 2, the seed
-operators' interior spectra at 1600 nodes per δ.
+E2.3's translated basis on case 2 at δ = 0, H6's twin on case 2 (the seed
+operators' interior spectra at 1600 nodes per δ), and H17's timing (the median
+``seed_basis`` of 400 seeded rows per δ at 10,000 nodes, both chains).
 
     uv run python scripts/heat2d_stiff.py              # 2.5 min cold, 21 s cached
     uv run python scripts/heat2d_stiff.py --mode naive \
@@ -2539,6 +2540,49 @@ def spectrum_rows(seed: int, iterations: int) -> list[dict]:
     return rows
 
 
+TANGENTIAL_TIMING = (10000, 400)
+"""H17's timing: the node set and how many seeded rows per width, E4.7's (§4.6)."""
+
+
+def timing_table(seed: int, iterations: int) -> list[dict]:
+    """H17: the median ``seed_basis`` per width on case 2, route (a) and tangential.
+
+    Evenly spaced rows among those the rule seeds at each δ, each basis built
+    once per chain; times on a quiet machine are what the notes quote (§4.6's
+    lesson: concurrent runs inflate them).
+    """
+    n, count = TANGENTIAL_TIMING
+    domain = case2()
+    nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
+    rows = []
+    for delta in CURVED_DELTAS:
+        medium = SmoothBand(domain.material, delta)
+        stencils = build_stencils(
+            nodes,
+            replace(domain, material=medium),
+            interface=BOUNDARY,
+            reach=TANH_REACH,
+        )
+        (group,) = [g for g in stencils.groups if g.kind == INTERFACE_KIND]
+        index = group.index[seeded_rows(nodes, medium, group.index, TANH_REACH)]
+        index = index[:: max(1, len(index) // count)][:count]
+        times: dict[bool, list[float]] = {False: [], True: []}
+        for idx in index:
+            for chain in (False, True):
+                t0 = time.perf_counter()
+                seed_basis(nodes.xy[idx], medium, tangential=chain)
+                times[chain].append(1e3 * (time.perf_counter() - t0))
+        rows.append(
+            {
+                "delta": delta,
+                "rows": len(index),
+                "flat_ms": float(np.median(times[False])),
+                "tangential_ms": float(np.median(times[True])),
+            }
+        )
+    return rows
+
+
 def print_tangential(tables: dict) -> None:
     rows = tables["circles"]
     print(
@@ -2581,6 +2625,17 @@ def print_tangential(tables: dict) -> None:
             f"  {r['delta']:6.4f}  {r['operator']:<17} | {r['max_re']:8.3f}"
             f" {r['min_re_h2']:11.2f} {r['max_im_h2']:13.3f} {r['positive']:8d}"
         )
+    n, _ = TANGENTIAL_TIMING
+    print(
+        f"\nH17 on case 2, {n} nodes: the median seed_basis per seeded row (ms),"
+        " route (a) and tangential (quote only from a quiet machine)"
+    )
+    print("       δ   rows |  route (a)  tangential   ratio")
+    for r in tables["timing"]:
+        print(
+            f"  {r['delta']:6.4f} {r['rows']:6d} | {r['flat_ms']:9.1f}"
+            f" {r['tangential_ms']:11.1f} {r['tangential_ms'] / r['flat_ms']:7.1f}"
+        )
 
 
 def run_tangential(args) -> dict:
@@ -2590,6 +2645,7 @@ def run_tangential(args) -> dict:
         "circles": circle_probe_rows(args.counts, args.seed, args.iterations),
         "span": span_rows(args.counts, args.seed, args.iterations),
         "spectra": spectrum_rows(args.seed, args.iterations),
+        "timing": timing_table(args.seed, args.iterations),
     }
     print_tangential(tables)
     print(f"\ntangential tables {time.perf_counter() - t0:.1f} s")

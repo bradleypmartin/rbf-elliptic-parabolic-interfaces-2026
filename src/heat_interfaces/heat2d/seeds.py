@@ -47,7 +47,8 @@ rows into the global matrix on the stencils that see an edge.
 curve's own coordinates, ``x = γ(σ) + d n(σ)``, where the edge is a
 coordinate line at every ξ: the seeds keep every level ``j ≤ 4 − b``, and
 alpha's and the metric's variation along the curve, expanded in ξ, couples
-them (``coupled_chain``, 55 levels, 110 states). That is what route (a)'s
+them (``coupled_chain``, every seed to level 4: 75 levels, 150 states). That
+is what route (a)'s
 frozen profile cannot carry on a curved or tangentially varying edge
 (§4.6); on a flat edge with alpha a function of the normal alone the extra
 levels stay zero and the seeds are the ones above.
@@ -107,8 +108,8 @@ SERIES_DEGREE = 4
 """The tangential chain's series in ξ (§3.10): ``α/m̂``, ``α m̂`` and ``m̂`` to ``ξ⁴``.
 
 Level ``j`` of seed ``(a, b)`` is ``O(h^{j−a})`` above its top and the
-series' terms ``O(h^k)``, so what the truncation drops is ``O(h⁵)`` in u, an
-order beyond the rows' local ``O(h³)``.
+series' terms ``O(h^k)``; ``A_5`` would enter only levels that the order
+count already drops, as ``O(h⁶)`` in u.
 """
 
 SAMPLE_HALF, SAMPLE_STEP = 5, 0.2
@@ -198,8 +199,13 @@ def chain(degree: int = SEED_DEGREE) -> Chain:
 class CoupledChain:
     """The level bookkeeping of §3.10: every level of every seed, coupled in ξ.
 
-    ``levels[l] = (a, b, j)`` for ``j = degree − b`` down to 0, seeds in
-    ``polynomial_exponents`` order: 55 levels at degree 4. With the series in
+    ``levels[l] = (a, b, j)`` for ``j = degree`` down to 0 for every seed, in
+    ``polynomial_exponents`` order: 75 levels at degree 4. Every seed keeps
+    the stencil's degree in ξ, whatever b: across a jump the far side of the
+    seed of ``ξᵃ ηᵇ`` carries the flux ratio to the power ``⌈b/2⌉``, so the
+    η-seeds' tangential levels are not small in practice although they are
+    of high order in h (§3.10: cutting at ``degree − b`` left rows 4–6× E2.3's
+    above case 2's upper curve at 40,000 nodes). With the series in
     ξ of ``m̂``, ``α/m̂`` and ``1/(α m̂)`` (``M_k``, ``A_k``, ``(1/B)_k``) the
     level fluxes ``ψ_i = Σ_k B_k g′_{i−k}`` and the values ``g`` march as
 
@@ -267,9 +273,9 @@ class CoupledChain:
 def coupled_chain(
     degree: int = SEED_DEGREE, series: int = SERIES_DEGREE
 ) -> CoupledChain:
-    """The ``CoupledChain`` of degree ≤ ``degree`` (55 levels at degree 4)."""
+    """The ``CoupledChain`` of degree ≤ ``degree`` (75 levels at degree 4)."""
     exponents = [tuple(int(v) for v in e) for e in polynomial_exponents(degree)]
-    levels = tuple((a, b, j) for a, b in exponents for j in range(degree - b, -1, -1))
+    levels = tuple((a, b, j) for a, b in exponents for j in range(degree, -1, -1))
     where = {state: m for m, state in enumerate(levels)}
     n, q = len(levels), series + 1
     shift, along = np.zeros((q, n, n)), np.zeros((q, n, n))
@@ -712,7 +718,7 @@ class TangentialBasis:
 
     ``coordinates`` takes the frame's place and ``xi, eta`` are the nodes'
     normal coordinates in it; ``profile`` is the normal line ``ξ = 0``
-    (route (a)'s, unchanged) and ``profiles`` the 110 states of
+    (route (a)'s, unchanged) and ``profiles`` the 150 states of
     ``coupled_chain`` on it. ``block`` and ``rhs`` are ``SeedBasis``'s, the
     right-hand side ``2 α_e`` on the two quadratics and nothing else, since
     the chain holds on the whole line ``ξ = 0``. ``gradient`` is the

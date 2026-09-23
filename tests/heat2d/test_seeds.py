@@ -570,14 +570,15 @@ def test_the_seed_frame_is_e23s_on_every_crossing_stencil_of_case2(curved_nodes,
 # --- E4.11: the tangential chain (§3.10) ---------------------------------------------
 
 
-def test_the_coupled_chain_is_55_levels_and_the_flat_chain_without_coupling():
-    # §3.10: every level j ≤ 4 − b of every seed, (5 − b)² levels per b; with
-    # the series constant in ξ (a flat line, α of the normal alone) the rate is
-    # §3.2's on the flat chain's levels and zero on the others.
+def test_the_coupled_chain_is_75_levels_and_the_flat_chain_without_coupling():
+    # §3.10: every seed to level 4, whatever b (the η-seeds' tangential levels
+    # carry the flux ratio's powers across a jump); with the series constant in
+    # ξ (a flat line, α of the normal alone) the rate is §3.2's on the flat
+    # chain's levels and zero on the others.
     ch = coupled_chain(4)
-    assert ch.size == 55 and ch.series == 4
+    assert ch.size == 75 and ch.series == 4
     counts = [sum(1 for _, b, _ in ch.levels if b == k) for k in range(5)]
-    assert counts == [25, 16, 9, 4, 1]
+    assert counts == [25, 20, 15, 10, 5]
     flat = chain(4)
     where = [ch.index(*level) for level in flat.levels]
     rng = np.random.default_rng(5)
@@ -607,7 +608,7 @@ def test_the_coupled_chain_is_55_levels_and_the_flat_chain_without_coupling():
 @pytest.mark.parametrize("y", (0.5896, 0.6104))
 def test_on_case1_the_tangential_seeds_are_the_flat_seeds(nodes, ratio, y):
     # H13's flat limit: nothing varies along a flat line on case 1, so every
-    # coupling is exactly zero and the 110 states march §3.2's 44 (the rest stay
+    # coupling is exactly zero and the 150 states march §3.2's 44 (the rest stay
     # zero); what differs is DOP853's error norm over more states.
     xy = stencil(nodes, y)
     medium = SmoothBand(case1().material, ratio * H)
@@ -639,9 +640,9 @@ def test_the_tangential_chain_holds_on_the_normal_line_and_off_it_to_its_order()
     # H13: the true curvilinear L (the metric and α at the physical points,
     # twelfth-order differences in both directions, nothing shared with the
     # march) on the marched seeds: L φ_e − α_e (S φ)_e is at rounding on ξ = 0
-    # for all 15 seeds and grows like |ξ|^(J_b + 1) off it (2026-09-22: slopes
-    # 4.1, 4.1, 5.0, 4.0, 3.0, 5.0, 4.0, 3.0, 2.0, 5.0, 4.1, 3.1, 2.1, 1.1 on
-    # seeds 1…14; φ₁₀'s 4 is the dropped A₅).
+    # for all 15 seeds and grows like |ξ|⁵ off it, the first level each seed
+    # drops (2026-09-22: slopes 4.9–5.1 on seeds 2…14; φ₁₀'s 4.2 is the
+    # dropped A₅).
     medium = smooth_sine_medium()
     curve = medium.interfaces[1]
     x0, y0, h = 0.3, 0.82, 0.05
@@ -688,9 +689,9 @@ def test_the_tangential_chain_holds_on_the_normal_line_and_off_it_to_its_order()
             np.nanmax(residual[np.abs(np.abs(xi) - t) < 1e-9][:, rows])
             for t in (0.1, 0.2, 0.4)
         ]
-        # J_b + 1 = 5 − b, but no more than 4: A₅ is dropped from the series.
+        # Level 5 is the first dropped; φ₁₀ also misses A₅ (the series stop at 4).
         slope = np.log(at[-1] / at[0]) / np.log(4.0)
-        assert slope > min(5 - b, 4) - 0.2, (a, b, slope)
+        assert slope > (4.0 if (a, b) == (1, 0) else 5.0) - 0.2, (a, b, slope)
 
 
 def test_the_tangential_right_hand_side_and_the_warp_at_the_anchor(curved_nodes):

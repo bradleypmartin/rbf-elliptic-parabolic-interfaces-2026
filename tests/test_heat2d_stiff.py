@@ -455,10 +455,10 @@ def test_the_curved_sweep_at_the_two_smallest_counts(tmp_path, capsys):
 def test_the_tangential_line_on_the_curved_sweep(tmp_path, capsys):
     # E4.11 (#81), stiff note §3.10 and §4.7: the tangential chain as the
     # sweep's main line, beside route (a). At 1250 nodes it is the coarsest
-    # point of its line (2.83e-4 at δ = 0, 9× E2.3's, §3.10's space constant);
-    # what the test pins is the probe: its crossing rows converge between 900
-    # and 1250 nodes where route (a)'s stall, and its figure and labels are its
-    # own, E4.7's untouched.
+    # point of its line (1.25e-4 at δ = 0, 4× E2.3's); what the test pins is
+    # the probe: its crossing rows converge between 900 and 1250 nodes where
+    # route (a)'s stall, and its figure and labels are its own, E4.7's
+    # untouched.
     argv = [
         "--mode",
         "seeds",
@@ -486,7 +486,7 @@ def test_the_tangential_line_on_the_curved_sweep(tmp_path, capsys):
     assert not (tmp_path / "heat2d_stiff_seeds_a0.02_sine.png").exists()
     elliptic = tables["sweep"]["elliptic"]
     jump = {r["n"]: r for r in elliptic[0.0]}
-    assert jump[1250]["tangential/rms"] == pytest.approx(2.833e-4, rel=1e-3)
+    assert jump[1250]["tangential/rms"] == pytest.approx(1.253e-4, rel=1e-3)
     assert jump[1250]["seeds/rms"] == pytest.approx(3.804e-4, rel=1e-3)
     for delta in (0.0, 0.0025):
         rows = elliptic[delta]
@@ -508,6 +508,7 @@ def test_the_tangential_tables(capsys, monkeypatch):
     import heat2d_stiff
 
     monkeypatch.setattr(heat2d_stiff, "TANGENTIAL_SPECTRUM_N", 900)
+    monkeypatch.setattr(heat2d_stiff, "TANGENTIAL_TIMING", (1250, 10))
     monkeypatch.setattr(heat2d_stiff, "CURVED_DELTAS", (0.0, 0.0025))
     tables = main(["--mode", "tangential", "--counts", "1250", "2500"])["tangential"]
     out = capsys.readouterr().out
@@ -527,6 +528,8 @@ def test_the_tangential_tables(capsys, monkeypatch):
         assert at_zero[label]["max_re"] == pytest.approx(
             at_zero["construction"]["max_re"], abs=0.01
         )
+    assert [r["rows"] for r in tables["timing"]] == [10, 10]
+    assert all(r["tangential_ms"] > 0 for r in tables["timing"])
 
 
 def test_the_curved_reference_table(tmp_path, capsys):
