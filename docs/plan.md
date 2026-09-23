@@ -209,7 +209,13 @@ otherwise. `CLAUDE.md` carries the working set.
   *Revised in E4.7 (#38, Brad, 2026-09-22):* the product grid serves case 2 at
   every δ, the jump included, in sheared coordinates that make both sine
   curves coordinate lines (stiff note §4.6); the 160,000-node run is its
-  cross-check and is 4.3e-9 RMS from it.
+  cross-check and is 4.3e-9 RMS from it. *Revised in E4.8 (#39, Brad,
+  2026-09-23):* case 3's smooth ring (δ > 0) has no independent reference; its
+  evidence is reference-free (the matched radial profile and the truncation
+  probe on an exact radial mode through the ring, `heat2d.exact`) and a
+  self-convergence line against a 160,000-node seed run read away from the
+  ring (stiff note §3.11, §4.8). The smooth ring is the resistivity blended by
+  the difference of its edges, which keeps its contact resistance at every δ.
 - **D5 Time integration** is BD4 with dt ∝ h and one sparse LU per operator,
   as in the dissertation, for every parabolic run that is compared with 2016.
   Stiff-edge parabolic studies may add an SDIRK or Crank–Nicolson line only if
@@ -279,6 +285,14 @@ otherwise. `CLAUDE.md` carries the working set.
   case 2 and on both of E4.7's split geometries at every δ, within a small
   factor of the flat seeds from 5000 nodes on, so the seeds are not scoped;
   the ring (E4.8) inherits it.*
+- **R8 A thin resistive layer needs the flux one degree higher** (found by
+  E4.8, stiff note §3.11). Across a layer thinner than the stencil with a
+  contact resistance of O(1), EABE eq. 40's ring, the far side's values carry
+  the flux at the layer with no factor of its distance, and the degree-4 seeds
+  lost an order at fine counts (Fig. 19's twin fell at 2.3–2.9, 7.7–11.7×
+  E2.3's at 80,000 nodes). *Answered in E4.8:* on a ring the block adds the
+  five degree-5 seeds that carry a flux (20 on the 30 nodes), and the seeds
+  are fourth order at or below E2.3's line (§4.8).
 
 ## 6. Epics and tickets
 
@@ -794,6 +808,23 @@ the breakdown move, and is the seeds' march conditioning the new limit?
 
 **Done when**
 - The Fig. 19–20 twins with a seeds line; the notes state where each construction fails and why.
+
+### E4.12 stiff 2-D: the Gaussians on rows anchored inside a smooth resistive layer (#84)
+Labels: enhancement
+Size: M
+Depends on: E4.8
+
+Found by E4.8 (stiff note §3.11, §4.8): on the smooth ring the rows anchored
+in the layer's tail (α_e a third of the pieces') have warped and plain
+Gaussian weights 100 % apart, and at δ = 0.001 on 20,000 nodes the far-field
+error jumps to 6.2e-5 between 2.6e-5 and 1.9e-6; plain Gaussians give 8.1e-6
+there, while elsewhere at δ > 0 the warp wins by 1.2–1.8×. Design a rule (plain
+Gaussians inside the layer, or a warp that does not compress the neighbours
+by α_e/α) and rerun the ring's δ > 0 sweep with it. Numbered after E4.11
+because the plan's ticket ids are numeric.
+
+**Done when**
+- The δ = 0.001 outlier is gone or explained, the δ > 0 lines of §4.8 are rerun with the rule, and the note says where the warp helps on a smooth resistive layer.
 
 ### E4.9 stiff 2-D: coefficient treatments on scattered nodes (#40)
 Labels: enhancement

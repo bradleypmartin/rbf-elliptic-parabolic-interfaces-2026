@@ -13,7 +13,8 @@ through it (E4.3, #34, §4.2), the scalar seeds on one stencil (E4.4,
 #35, §4.3) and in the matrix (E4.5, #36, §4.4), the flat δ sweep
 (E4.6, #37, §4.5) and the curved feature (E4.7, #38, §4.6), on to E4.10
 (#41); §3.10 designs the tangential chain that E4.7 asked for (E4.11,
-#81), and §4.7 holds its results. The port
+#81), and §4.7 holds its results; §3.11 is what EABE eq. 40's ring needed
+beyond it (E4.8, #39), and §4.8 holds the ring's results. The port
 of the 2016 methods this builds on is in
 `docs/port-notes.md`.
 
@@ -2011,7 +2012,12 @@ circles the normal is radial and the crossings are exact; the seeds'
 march parameters are carried as *widths* `(w, δ)` from the outer radius,
 never as two absolute radii, because `Circle(0.35 − 1/s)` stores the
 ring's width to only 8e-8 relative at `s ≥ 10¹⁰` (E2.9's breadcrumb on
-#39, item 3).
+#39, item 3). *E4.8 (§4.8) found the rule has teeth for a second reason: the
+march's stops are two O(1) numbers in stencil units `w/h_s` apart, so however
+the radii are stored the ring the march crosses is its width only to
+`ulp(1)/(w/h_s)`, 1e-7 in the median and 6e-7 at worst over stencils at
+s = 10¹¹. `Band.gap` carries `1/s` and the march runs in the offset from the
+outer crossing (`SmoothBand._gap_line`, `seeds._march`).*
 
 **The smooth ring.** With δ of the order of `w` or above, §3.1's product
 profile `α_out + (α_in − α_out) s(d₁/δ) (1 − s(d₂/δ))` never reaches the
@@ -2021,6 +2027,13 @@ tends to a quarter of the contrast, not to zero, as `w/δ → 0` (corrected
 by E4.2, §4.1: the first version of this sentence gave `tanh(w/2δ)`, the
 peak of the *difference* of the two edges `s(d₁/δ) − s(d₂/δ)`, which is
 another composition; which one the smooth ring should use is E4.8's call).
+*Decided on #39 (Brad, 2026-09-23): neither. Both lose the ring's contact
+resistance, the fold keeping 0.41 of the jump's 1.5 at δ = w/10 and 0.01 at
+w/4 (s = 10³) and about `0.6 δ` at every s ≥ 10⁸, the difference about `w`.
+The smooth ring blends the resistivity by the difference of the edges,
+`1/α = 1/α_out + (1/α_in − 1/α_out)[s(d₁/δ) − s(d₂/δ)]`
+(`SmoothBand(…, composition="resistance")`), whose excess resistance is the
+jump's at every (s, δ) (§4.8).*
 That is a different problem from the jump ring, on purpose (it is what a
 sub-grid smooth layer *is*), and the notes must say at each δ what the
 bump's contact resistance `∫ dr/α` across it is, since that, not the
@@ -2041,6 +2054,10 @@ i.e. `O(s w / h_s)` in stencil units (about `2e9` at `s = 10¹¹`), in one
 column of `S`, and the seeds built on it (`φ₁₁`, `φ₂₁`, `φ₀₃`, …) the
 same. So the seed block's raw condition number should grow like
 `s w / h_s`, a *column* scaling, and be O(1) column-equilibrated (H11);
+*corrected by E4.8 (§4.8): eq. 40's ring is `w = 1/s` wide, so `s w = 1` and
+the climb is `1.5 α_e / h_s`, about 30 stencil radii, at every s (the `2e9`
+took case 3's `w = 0.001` at s = 10¹¹); the seed block's condition number is
+flat in s, the resistance being what eq. 40 holds fixed;*
 the march itself is exact in the `(g, ψ)` form, `ψ` continuous and
 `g′ = s ψ` a scale, not a stiffness; and the number to report is E2.9's
 own, the worst and median relative residual of the seed weights on the
@@ -2065,7 +2082,13 @@ if the fine run is too costly the ticket scales back to the δ = 0 sweep
 with seeds plus the residual at every `(s, δ)`, which already answers
 "does the breakdown move and is the march the new limit". Brad decides
 at E4.8; the plan's "Fig. 19–20 twins with a seeds line" reads as
-"Fig. 20's twin at every δ, Fig. 19's at δ = 0" until then.
+"Fig. 20's twin at every δ, Fig. 19's at δ = 0" until then. *Decided on #39
+(Brad, 2026-09-23): the matched radial residual and the truncation probe on an
+exact radial mode through the smooth ring (`SmoothRingMode`), both
+reference-free, at every (s, δ) and for every construction, and a
+self-convergence line against a 160,000-node seed run read only where its
+own stencils see no edge (its standard interpolant; no seed-aware
+resampling), §4.8.*
 
 ### 3.7 Hypotheses for E4.4–E4.9, with the experiment that tests each
 
@@ -2087,7 +2110,7 @@ radial quadratic on the ring.
 | H8 | **The rule needs no δ**: seeded rows are those that see the edge (reach 20δ), the seed operator needs no threshold to be switched off, and the resolved-edge penalty at δ = 0.04 (every row seeded) is ≤ 1.2× the direct operator's error (P4: the seed weights tend to the standard ones as δ/h grows; §1.4's different-space remark bounds the rest). | the δ = 0.04 column of the flat sweep, seeded vs direct | E4.6 |
 | H9 | **Route (a) reproduces the flat numbers** at δ ≥ 0.005 for n ≥ 5000 and shows its geometric floor `κ r²/2` (§3.5's table) at δ = 0.0025 on the coarse sets as a factor ≤ 1.5 above the flat line; the seed rows' residual on the true curved solution (E4.7's probe) converges at the bulk rows' rate; the tangential-α term of case 2's inside piece changes the constant, not the order. Route (a′) is built only if the probe's residual stalls. *Fails (§4.6): the probe stalls on both terms; E4.11. Answered by E4.11 (§3.10, §4.7): the tangential chain reproduces the flat numbers within 1.4–3.9× from 5000 nodes at every δ, and its probe converges at 2.7–3.6.* | the curved sweep against the flat one at equal δ; the residual probe | E4.7 |
 | H10 | **The 2-D knee** (P2's twin, measured first): naive `Dx A Dx + Dy A Dy` on scattered nodes is first order while `h ≳ δ` and fourth order once `h ≲ δ`, elliptic and parabolic; the δ = 0 construction sits on an O(δ) floor (the two references' difference, exact from the separable solves) for `h ≳ 2δ` and grows once the grid resolves the edge (§2.2); what separates resolved from unresolved most sharply is the flux jump across the edge read from the discrete solution. Watch the naive operator's coarse-set growing mode (+847 at 900 nodes, +17.7 at 1250) before quoting a parabolic naive number. | the naive and construction lines of the flat sweep | E4.3, E4.6 |
-| H11 | **The ring**: the seed march through both edges reproduces E2.9's s = 10³ line at δ = 0 (the Fig. 19 twin) and the matched radial residual stays at or below port notes §2.9's worst-stencil line at every s (the fit `1.5e-18 s`, not the single s = 10¹¹ point 1.4e-7), with no `O(s κ² scale)` term; the raw seed block conditions like `s w/h_s` (one column) and O(1) column-scaled; the march floor of §3.3 is the first limit to appear, at the largest s and smallest δ, and the stored width's 8e-8 the second. | `matched_residual` per (s, δ); Fig. 20's twin with a seeds line | E4.8 |
+| H11 | **The ring**: the seed march through both edges reproduces E2.9's s = 10³ line at δ = 0 (the Fig. 19 twin) and the matched radial residual stays at or below port notes §2.9's worst-stencil line at every s (the fit `1.5e-18 s`, not the single s = 10¹¹ point 1.4e-7), with no `O(s κ² scale)` term; the raw seed block conditions like `s w/h_s` (one column) and O(1) column-scaled; the march floor of §3.3 is the first limit to appear, at the largest s and smallest δ, and the stored width's 8e-8 the second. *Answered by E4.8 (§3.11, §4.8): the seeds are exact on the matched profile to rounding at every s (1.3–2.1e-15 at 10,000 nodes, E2.3 1.36e-7 at 10¹¹), their block and system condition independently of s (`s w = 1` on eq. 40: the `s w/h_s` above took w = 0.001), no march floor appears, and the stored width floors nothing once the ring carries its `gap` (without it the stops lose digits like s, 1.2e-10 at 10¹¹). Fig. 19's twin needed the flux seeds and φ₀₁'s level 0 as the warp, and is then fourth order at every s, 0.48–0.97× E2.3 from 5000 nodes.* | `matched_residual` per (s, δ); Fig. 20's twin with a seeds line | E4.8 |
 | H12 | **The comparators** (P10's twin): the disc harmonic and arithmetic means and the widened edge cap the naive operator at second order once `h ≲ δ/4` and are first order while the edge is unresolved; T0 is the worst, sitting on the widened floor; there is no conservative scheme on scattered nodes, so T1-FV has no twin and the strongest low-order comparator is the two-cell disc harmonic mean; the seeds are 3–4 orders below every treatment at δ ≤ h/4 on the parabolic problem. The ranking is quoted in the RMS norm with the max norm beside it. | the comparator tables per δ, elliptic and parabolic | E4.9 |
 
 ### 3.8 For the implementer of E4.2–E4.10
@@ -2147,9 +2170,12 @@ package code exists, and #35's "milliseconds" is met with a margin.
    the 30 nodes; the interface group: the same rule on the 42 nodes.
 7. Curved edges take route (a) with the anchor correction, and (a′)
    before (b) if H9 fails (§3.5). The ring: widths, not radii; both
-   circles as stops of one march (§3.6).
+   circles as stops of one march (§3.6). *E4.8 (§3.11): the widths are
+   `Band.gap` and the march's offset from the outer circle; the ring also
+   needed its own series, the flux seeds and a warped ε.*
 8. E4.8's δ > 0 evidence is the matched radial residual first; the
-   self-convergence reference is Brad's call (§3.6).
+   self-convergence reference is Brad's call (§3.6). *Decided on #39:
+   residual and probe first, a far-field self-convergence line second.*
 
 **Traps carried over from §2 and the port, in the order they will bite.**
 
@@ -2196,7 +2222,7 @@ package code exists, and #35's "milliseconds" is met with a margin.
 | `seed_weights`, the `φ₀₁` warp, `build_operators(mode="seeds")` and the seeded-row rule, DDR / iteration / spectrum tables | `heat2d/seeds.py`, `heat2d/operators.py`, `scripts/heat2d_stiff_eigenvalues.py` | E4.5 (#36) |
 | the flat sweep, cached operators, the rule and the resolved-edge penalty | `scripts/heat2d_stiff.py --mode seeds` | E4.6 (#37) |
 | route (a) profiles by Newton on the sine curves, the product-grid reference for δ > 0, `--amplitude` | `heat2d/seeds.py`, `heat2d/exact.py`, the driver | E4.7 (#38) |
-| the smooth ring, widths from the outer radius, `matched_residual` through smooth α, the s-sweep with seeds, `--ring` | `heat2d/domain.py`, `scripts/heat2d_extremes.py` | E4.8 (#39) |
+| the smooth ring, widths from the outer radius, `matched_residual` through smooth α, the s-sweep with seeds, `--ring` *(E4.8 put its driver in `scripts/heat2d_ring.py`, reusing E2.9's references and helpers; the radial references are in `heat2d/exact.py`)* | `heat2d/domain.py`, `scripts/heat2d_extremes.py` | E4.8 (#39) |
 | disc harmonic / arithmetic means (radius h/2, h), the widened edge, band-limited α if E5.2 keeps it | `heat2d/treatments.py` | E4.9 (#40) |
 | the figures, §4–5 of this note, `--data-dir` and `ResultsCache` as in `heat1d_stiff.py` | `scripts/heat2d_stiff.py`, `docs/figures/` | E4.10 (#41) |
 
@@ -2523,6 +2549,113 @@ curve is beyond 20 δ, which is every case-2 row at δ ≤ 0.005.
 | `seed_operator(tangential=)` | `heat2d/operators.py` |
 | the two lines on the curved sweep, the probe (already there), a span table | `scripts/heat2d_stiff.py` |
 | H13–H17 answered | §4.7 |
+
+### 3.11 A thin resistive layer: the ring's exact width, its smooth form, and the flux seeds (E4.8, #39)
+
+Written after the fact, as §3.10 was not: E4.8 set out to run §3.6 on the
+tangential chain of §3.10 and found three things the ring needs that no
+earlier feature did. Each is a switch that only a ring turns on (a `Band`
+with a `gap`), so E4.4–E4.11's numbers are the same to the bit (checked on
+case 1 and case 2 rows, flat and tangential, both warps, δ = 0 and 0.0025).
+§4.8 holds the measurements.
+
+**The width.** EABE eq. 40's ring is `w = 1/s` wide at a radius of 0.35.
+`Circle(0.35 − 1/s)` stores it to 8e-8 at `s ≥ 10¹⁰` (port notes §2.9), and
+worse, the march's stops are two O(1) numbers in stencil units `w/h_s` apart,
+so the segment it crosses is the width only to `ulp(1)/(w/h_s)`: 1e-7 in the
+median and 6e-7 at worst at s = 10¹¹, different on every row. `Band.gap`
+carries `1/s` exactly (`case3(s)` sets it), `SmoothBand.normal_profile` gives
+the ring's stops as offsets from the outer circle's crossing
+(`NormalProfile.origin`, `.offsets`), and `seeds._march` runs in that offset,
+so the ring's segment is `gap/h_s` to rounding. The other circle is the foot
+circle's coordinate line `d ∓ gap`, exact, and its edge is never saturated.
+
+**The ring's series.** Across the ring `1/(α m̂)` is `1.5 s` at δ = 0 and
+about 1500 on the smooth ring's plateau, and it multiplies the rounding of
+the Fornberg series (a few hundred ulps of the samples, resampled at every
+stage) into the η-seeds' small tangential levels, past DOP853's absolute
+tolerance: rows took up to 150,000 rate evaluations (170–240 ms a row at
+every `s ≥ 10⁵` at δ = 0; a median 90 ms and 5 s at worst at δ = 0.001). On a
+ring every segment's series come from a piecewise Chebyshev interpolant in η
+(`RING_POINTS`, nine points a piece, halved until it matches the sampled
+series to 1e-13 of their largest coefficient or stops improving at their own
+rounding), one polynomial a piece, so the stages see a smooth function.
+
+**The smooth ring** (the decision on #39, 2026-09-23). §3.6's fold keeps
+0.41 of the ring's contact resistance at δ = w/10 and 0.01 at w/4 (s = 10³),
+and about `0.6 δ` at every s ≥ 10⁸; the difference of the edges in α keeps
+about `w`. So the smooth ring blends the resistivity,
+
+    1/α = 1/α_out + (1/α_in − 1/α_out) [s(d₁/δ) − s(d₂/δ)],
+
+`SmoothBand(…, composition="resistance")`, whose excess resistance
+`∫ (1/α − 1/α_out) dn` is the jump's `w (1/α_in − 1/α_out)` at every (s, δ).
+The share `s(a) − s(b)` is formed without cancelling the two logistics
+(`layer_share`), from `d₁ = d₂ + gap`: at s = 10¹¹ and δ = 1e-3 it is 1e-8 of
+each. As s → ∞ at fixed δ the ring tends to a layer of peak resistivity
+`0.75/δ` that no longer depends on s, as the jump ring tends to a contact
+resistance. Its tail carries the contrast (`(1.5/δ) e^{−2z}` beyond the
+ring), so the fold's saturation shortcut is not used for it.
+
+**The flux seeds.** With the 15 seeds of §3.10 the ring's rows next to the
+ring stalled at fine counts (§4.8: Fig. 19's twin fell at 2.3–2.9 from
+10,000 to 80,000 nodes). Fitted by least squares to the exact mode through
+the ring at its constant part, the seed span is O(h⁵) on the near side alone,
+7× below E2.3's basis, but O(h⁴) on the rows with 10–12 of their 30 nodes
+across the ring, where E2.3's is O(h⁵). A kink carries the flux into the far
+side's values times the distance beyond it; a thin resistive layer carries
+it with no such factor, `[u] = R F` with `R = 1.5` the contact resistance and
+`F` the flux at the ring. The degree-4 seeds carry a flux in those with
+`b ≥ 1`, and their flux at the ring is a polynomial of degree 3 in the
+tangential and normal offsets; the true flux differs from that by O(h⁴), which
+`R` turns into an O(h⁴) error in the far side's values, O(h²) in the rows that
+read many of them. So on a ring the block adds the five seeds of degree 5
+with a flux, `ξ⁴η, ξ³η², ξ²η³, ξη⁴, η⁵` (`seeds.flux_exponents`; the chain of
+degree 5 is marched, every seed to level 5): 20 seeds on the 30 nodes. Their
+moment conditions vanish at the anchor (the right-hand side of the chain is
+zero there for each), so `rhs` is still `2 α_e` on the two quadratics. `φ₄₁`
+alone gained 1.5× in the fit; all five make it O(h⁵) (§4.8). Why E2.3's
+translated basis, whose continuity rows also carry the flux to degree 3
+along the curve, fits at O(h⁵) with 15 functions is not established here;
+its Cartesian frame couples the circle's curvature into the flux of its
+degree-4 monomials, which is the likely source.
+
+**The Gaussians on a ring.** Two changes to §3.10's Gaussians, both found
+on the ring and measured there. First, the warp is `φ₀₁`'s level 0 alone,
+`g₀(η)`, not the whole seed: its higher levels carry the ring's resistance
+along ξ (case 3's piece varies 3 : 1 around the ring) into the far side's
+warped coordinate, a shear of about 4 per stencil radius at every h, and the
+Gaussians on it put a floor under the case-3 line (3.3e-6 at 80,000 nodes,
+11× E2.3's; the seeds at 40,000, 80,000 and 160,000 all about 3e-6 apart
+where E2.3's converged). Level 0 alone gives 2.3e-7 at 80,000 and moves the
+s = 10¹¹ line by 3–5 %; its flux and derivative at the anchor are the full
+seed's, so the right-hand side is unchanged. §3.10 kept every level on case 2
+for want of a measured winner (±11 %); the ring is one. Second, `ε`: an anchor
+inside the smooth ring has `α_e` a twentieth of the pieces' or less, and
+`g₀ = ∫ α_e/α` compresses its neighbours by that factor in η̃; Gaussians
+shaped on the physical spacing are too flat in the coordinate they live in
+(the seed system's condition number reached 1e8). On a ring `ε = shape / d`
+takes `d` from the nodes in `(ξ, g₀)`. Elsewhere both are §3.4's and §3.10's.
+
+**Decisions (E4.8).**
+
+1. The ring carries its width (`Band.gap`); the stored radii stay the jump's
+   (E2.9's numbers are unchanged).
+2. The smooth ring is the resistance composition.
+3. On a ring the tangential series are the piecewise interpolant, the block
+   has the 20 flux seeds (`flux=True`, the default there; `flux=False` is the
+   ablation, the 15), the warp is `φ₀₁`'s level 0 and the Gaussians' ε is the
+   warped spacing's.
+4. The evidence at δ > 0 is reference-free first (the matched radial profile,
+   `heat2d.exact.matched_radial`; the truncation probe on the exact mode,
+   `SmoothRingMode`, the radial equation in flux form by DOP853 at 1e-13) and a
+   self-convergence line second, against a 160,000-node seed run read only
+   where its own stencils see no edge (`far_read`).
+5. The seeds' scope stays §3.10's `FOOT_CURVATURE`: on the ring at δ > 0 the
+   reach rule seeds rows whose normal lines come nearer the circle's centre,
+   so the coarsest count grows with δ (1250 at δ = 0; at 1250 ten rows are
+   refused at δ = 0.001, none at 2500 for any width run); the driver names
+   the refusal.
 
 ## 4. Results in 2-D (E4.2–E4.10)
 
@@ -4626,3 +4759,288 @@ the tangential operator equals the seed operator on case 1 to 1e-10.
 `tests/test_heat2d_stiff.py`: the labels and `flat_twin`, the curved sweep with the
 tangential lines at 900 and 1250 nodes (the probe converging where route (a)'s stalls,
 the figure its own, the cache round trip), and `--mode tangential`'s tables.
+
+### 4.8 EABE eq. 40's ring with seeds: the Fig. 19–20 twins and the smooth ring (E4.8, #39)
+
+![the Fig. 19 twin with seeds](figures/heat2d_ring_convergence.png)
+
+§3.6's design on §3.10's chain, with what §3.11 found the ring needs: its exact
+width, its own tangential series, the flux seeds (20 on the 30 nodes), and the
+Gaussians on `φ₀₁`'s level 0 with `ε` from the warped spacing. The driver is
+`scripts/heat2d_ring.py`, four parts over one cache (`heat2d_ring.json`,
+version 3): Fig. 19's twin at δ = 0 against E2.9's cached 160,000-node
+references; Fig. 20's twin, the matched radial profile and the conditioning at
+every (s, δ); the spectrum and the DDR; and the smooth ring, the probe on its
+exact radial mode and a far-field self-convergence line. E2.3 is the papers'
+operator (E2.9's "curved"); "seeds (15)" is the chain without the flux seeds,
+the ablation. Seed 0, 100 repulsion iterations; the runs of 2026-09-23 went as
+up to 16 concurrent processes on the M4 Pro, so their times are inflated.
+
+**H11, Fig. 20's twin: the seeds are exact on the matched profile at every s.**
+10,000 nodes, the 1254 rows the seeds rebuild, the ring at its constant part
+(the matched profile `u = ∫ 2r/α dr` is in every construction's span); the worst
+relative residual of the weights, and mean 2-norm condition numbers:
+
+| s | seeds | median | seeds (15) | seeds, stored radii | E2.3 | median | seed block raw / scaled | seed system | E2.3 P | E2.3 system |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 10³ | 1.55e-15 | 8.1e-17 | 1.54e-15 | 3.02e-16 | 2.10e-14 | 1.3e-16 | 2.8e4 / 1.3e4 | 4.8e6 | 2.1e3 | 1.4e6 |
+| 10⁴ | 1.71e-15 | 7.1e-17 | 1.64e-15 | 3.16e-16 | 3.83e-14 | 1.2e-16 | 8.5e3 / 5.6e3 | 1.3e6 | 4.9e3 | 2.8e6 |
+| 10⁵ | 1.27e-15 | 7.7e-17 | 1.31e-15 | 2.89e-16 | 1.73e-13 | 4.3e-16 | 7.2e3 / 5.1e3 | 1.1e6 | 4.6e4 | 2.7e7 |
+| 10⁶ | 1.40e-15 | 7.3e-17 | 1.48e-15 | 1.42e-15 | 1.53e-12 | 3.7e-15 | 7.1e3 / 5.1e3 | 1.0e6 | 4.6e5 | 2.7e8 |
+| 10⁷ | 1.75e-15 | 7.4e-17 | 1.58e-15 | 1.51e-14 | 1.30e-11 | 4.2e-14 | 7.1e3 / 5.1e3 | 1.0e6 | 4.6e6 | 2.7e9 |
+| 10⁸ | 1.82e-15 | 7.5e-17 | 1.81e-15 | 1.58e-13 | 1.17e-10 | 4.2e-13 | 7.1e3 / 5.0e3 | 1.1e6 | 4.6e7 | 2.7e10 |
+| 10⁹ | 1.84e-15 | 7.3e-17 | 1.87e-15 | 1.90e-12 | 1.56e-09 | 4.1e-12 | 7.1e3 / 5.0e3 | 1.0e6 | 4.6e8 | 2.7e11 |
+| 10¹⁰ | 1.92e-15 | 6.9e-17 | 1.93e-15 | 1.22e-11 | 2.24e-08 | 4.4e-11 | 7.1e3 / 5.0e3 | 1.0e6 | 4.6e9 | 2.7e12 |
+| 10¹¹ | 2.14e-15 | 7.4e-17 | 1.97e-15 | 1.16e-10 | 1.36e-07 | 4.4e-10 | 7.1e3 / 5.0e3 | 1.0e6 | 4.6e10 | 2.7e13 |
+
+- *The seeds are at rounding at every s*: worst 1.3–2.1e-15, median 7e-17, from
+  s = 10³ to 10¹¹, eight orders below E2.3's 1.36e-7 at 10¹¹. E2.3 is E2.9's line
+  again (2.10e-14 to 1.36e-7, growing like s from 10⁵; port notes §2.9's fit
+  `1.5e-18 s`), the far side's translated basis losing its digits to the
+  curvature. H11's "no `O(s κ² scale)` term" holds with room.
+- *On the stored radii the seeds lose digits like s too*, 3e-16 to 1.16e-10 from
+  10⁶, for another reason: the march's stops, two O(1) numbers in stencil units,
+  carry the ring's width to `ulp(1)/(w/h_s)` whatever the radii (§3.11). That is
+  what H11 called "the stored width, the second floor"; with `Band.gap` and the
+  march in the offset from the outer circle, it is not a floor at all.
+- *The seeds' conditioning does not see s*: block 7.1e3 raw and 5.0e3
+  column-scaled, system 1.0e6, the same from 10⁵ to 10¹¹, where E2.3's
+  polynomial block and system grow like s (4.6e10 and 2.7e13 at 10¹¹). §3.6
+  predicted `s w/h_s`, about 2e9, from case 3's `w = 0.001`; eq. 40 has
+  `s w = 1`, and the ring's resistance, which is what the seeds carry, is the
+  same at every s (§3.6 corrected). At 10³ the block is 2.8e4, the ring being 0.1
+  stencil radii wide there. The five flux seeds raise the block's number (1.6e3
+  for the 15) and leave the system's (1.4e6).
+- *No march floor either*: §3.3's floor at δ ≲ h/40 does not show at δ = 0 in the
+  offset coordinate, and at δ > 0 the residual is the march's tolerance (below).
+
+![the conditioning against s](figures/heat2d_ring_conditioning.png)
+
+**Fig. 19's twin: fourth order at every s, at or below E2.3 from 5000 nodes.**
+The papers' problem at δ = 0, RMS error over all nodes against E2.9's 160,000-node
+reference at the same s, read through its stencils (EABE Fig. 19's markers are
+E2.9's table; E2.3's line here is E2.9's to the digit):
+
+| n | s = 10³: E2.3 | seeds | seeds (15) | s = 10¹¹: E2.3 | seeds | seeds (15) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1250 | 1.580e-03 | 2.106e-03 | 4.176e-03 | 1.544e-03 | 2.094e-03 | 2.379e-03 |
+| 2500 | 4.695e-04 | 4.839e-04 | 7.294e-04 | 4.072e-04 | 5.953e-04 | 9.738e-04 |
+| 5000 | 1.128e-04 | 1.098e-04 | 1.918e-04 | 1.303e-04 | 1.168e-04 | 1.553e-04 |
+| 10000 | 3.018e-05 | 2.249e-05 | 6.355e-05 | 2.396e-05 | 1.971e-05 | 5.343e-05 |
+| 20000 | 6.025e-06 | 5.314e-06 | 2.493e-05 | 6.236e-06 | 4.386e-06 | 1.157e-05 |
+| 40000 | 1.388e-06 | 1.025e-06 | 1.138e-05 | 1.285e-06 | 6.877e-07 | 2.809e-06 |
+| 80000 | 3.019e-07 | 2.323e-07 | 3.576e-06 | 2.956e-07 | 1.421e-07 | 9.435e-07 |
+| fit | 4.17 | 4.42 | 3.27 | 4.17 | 4.73 | 3.92 |
+
+| seeds ÷ E2.3 | 1250 | 2500 | 5000 | 10000 | 20000 | 40000 | 80000 | fit (E2.3, seeds) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| s = 10³ | 1.33 | 1.03 | 0.97 | 0.75 | 0.88 | 0.74 | 0.77 | 4.17, 4.42 |
+| 10⁸ | 1.34 | 1.34 | 0.88 | 0.84 | 0.77 | 0.56 | 0.57 | 4.18, 4.64 |
+| 10⁹ | 1.24 | 1.27 | 0.89 | 0.79 | 0.69 | 0.52 | 0.54 | 4.17, 4.64 |
+| 10¹⁰ | 1.43 | 1.27 | 0.87 | 0.76 | 0.70 | 0.54 | 0.48 | 4.13, 4.66 |
+| 10¹¹ | 1.36 | 1.46 | 0.90 | 0.82 | 0.70 | 0.54 | 0.48 | 4.17, 4.73 |
+
+- *Fourth order at every s, at or below E2.3 from 5000 nodes*: 0.74–0.97× at
+  s = 10³ and 0.48–0.90× at s ≥ 10⁸, fits 4.42 and 4.64–4.73 against E2.3's
+  4.13–4.18. The coarsest two counts sit 1.24–1.46× above E2.3, §4.7's
+  coarse-set constant of the tangential chain.
+- *The s ≥ 10⁸ lines are one line*: each within 0.88–1.13× of the s = 10¹¹ line
+  at every count, the thin-layer limit (E2.9 found the same of E2.3). The
+  s = 10³ line is 0.81–1.63× that line, its 0.001-wide ring a different problem
+  by `O(w)`, as E2.9's references are 5.3e-6 apart.
+- *Without the flux seeds the line stalls*: seeds (15) fall at 2.25–3.33 per
+  halving at s = 10³ from 10,000 nodes and end 3.2–11.8× E2.3 at 40,000–80,000
+  nodes (8.2 and 11.8× at s = 10³); §3.11's mechanism. The first run of this
+  sweep, with the flux seeds but `φ₀₁`'s every level as the warp, fell back from
+  1.37e-6 at 40,000 to 3.30e-6 at 80,000 at s = 10³, with a 160,000-node seed run
+  3.0e-6 from E2.9's reference and every seed count about 3e-6 from every other;
+  level 0 alone removed it (§3.11).
+- *The far read is the full read here*: away from the ring, where the
+  reference's own stencils are standard, the seeds' error is 0.90–1.01 of the
+  full error at every (s, n) (0.96–1.00 of the nodes read), which is what the
+  smooth ring's self-convergence line leans on below.
+- *Fig. 19's breakdown stays unreproduced*, now with seeds: every s is fourth
+  order to the reference's floor (E2.9's "about 1e-7" at 160,000 nodes; the
+  seeds' 1.4e-7 at 80,000 is within a factor of two of it at s ≥ 10⁸).
+
+**The probe at δ = 0.** Each row applied to the exact mode `R(r) cos 2θ` through
+the ring at its constant part (`RingMode` with the gap), RMS over the rows the
+seeds rebuild (the crossing rows at δ = 0), fits over 2500–40,000:
+
+| n | s = 10³: E2.3 | seeds | seeds (15) | s = 10¹¹: E2.3 | seeds | seeds (15) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2500 | 3.20e-02 | 5.99e-04 | 1.45e-02 | 3.03e-02 | 6.32e-04 | 1.36e-02 |
+| 5000 | 1.38e-02 | 2.20e-04 | 6.25e-03 | 1.35e-02 | 3.14e-04 | 6.11e-03 |
+| 10000 | 5.31e-03 | 6.63e-05 | 2.65e-03 | 5.45e-03 | 6.69e-05 | 2.64e-03 |
+| 20000 | 2.06e-03 | 2.45e-05 | 1.26e-03 | 2.23e-03 | 2.07e-05 | 1.24e-03 |
+| 40000 | 7.21e-04 | 9.90e-06 | 8.35e-04 | 9.42e-04 | 6.52e-06 | 5.72e-04 |
+| fit | 2.75 | 3.02 | 2.12 | 2.54 | 3.45 | 2.30 |
+
+The seeds' rows are 43–144× below E2.3's and converge at 3.0–3.5, the crossing
+rows' rate for fourth order globally (§4.6); without the flux seeds they slow to
+1.2–2.2 at 20,000–40,000. The naive and direct rows, which see no ring at δ = 0,
+diverge like `h⁻²` (5.3e2 to 7.6e3 and 1.0e3 to 1.6e4), the jump across the
+ring read as a derivative.
+
+**The spectrum and the DDR.** Interior eigenvalues of the seed operator on eq. 40
+at 5000 nodes, warped (φ₀₁'s level 0) and plain; the reduced system's diagonal
+dominance, least and median over the seeded rows (the median over all rows is
+0.608–0.623 throughout):
+
+| s | δ | operator | positive | max Re | h² min Re | h² max \|Im\| | DDR least / median |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 10³ | 0 | seeds | 0 | −14.316 | −13.58 | 0.434 | 0.093 / 0.660 |
+| 10³ | 0 | plain | 0 | −14.316 | −13.58 | 0.854 | 0.121 / 0.666 |
+| 10⁸–10¹¹ | 0 | seeds | 0 | −14.301 | −13.48 … −13.71 | 0.27–0.44 | 0.069–0.084 / 0.674–0.678 |
+| 10⁸–10¹¹ | 0 | plain | 0 | −14.301 | −13.48 … −13.71 | 0.74–0.99 | 0.090–0.099 / 0.681–0.684 |
+| 10³, 10¹¹ | 0.0025 | seeds | 0 | −14.158, −14.140 | −13.62, −13.50 | 0.28, 0.38 | 0.052, 0.044 / 0.676, 0.675 |
+| 10³, 10¹¹ | 0.0025 | plain | 0 | −14.158, −14.140 | −25.5, −26.5 | 2.06, 1.87 | 0.040, 0.012 / 0.674, 0.675 |
+| 10³, 10¹¹ | 0.001 | seeds | 0 | −14.251, −14.232 | −13.60, −13.52 | 0.78, 0.74 | 0.088, 0.071 / 0.667, 0.644 |
+| 10³, 10¹¹ | 0.00025 | seeds | 0 | −14.299, −14.281 | −13.58, −13.57 | 0.57, 0.50 | 0.093, 0.072 / 0.653, 0.661 |
+
+No eigenvalue right of the axis at any (s, δ), warped or plain; the slowest mode
+is the physical −14.1 to −14.3 (E2.9's −14.3 for E2.3); the warped operator's
+spectrum is the jump-aware one's to the digit at every s. E2.9 found the *plain*
+E2.3 operator with 53–60 positive eigenvalues on the ring; the plain seeds have
+none, but at δ = 0.0025 they carry a mode twice as stiff (`h² min Re` −26) and a
+wider imaginary spread (2.1), where the warped seeds stay at E2.3's −13.6 and 0.3.
+The seeded rows' least DDR, 0.04–0.09 warped, is E2.8's 0.08 on case 3; it does
+not see s.
+
+![the smooth ring](figures/heat2d_ring_smooth.png)
+
+**The smooth ring.** `SmoothBand(…, "resistance")` at δ = 0.0025, 0.001 and
+0.00025 (2.5, 1 and 1/4 of case 3's ring), s = 10³ and 10¹¹, 2500–40,000 nodes.
+Its contact resistance is the jump's 1.5 at every (s, δ) (§3.11; a test checks
+it by quadrature). The probe is each row on the exact radial mode through the
+ring at its constant part (`SmoothRingMode`); the error is the RMS on eq. 40
+itself against a 160,000-node seed run at the same (s, δ), read at the 75–96 %
+of the nodes whose nearest fine node's stencil is unseeded (`far_read`; at
+δ = 0 that read is the full one to 0.90–1.01, above).
+
+| δ | s | n | seeds: probe | error | E2.3: error | naive: error | direct: error |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.0025 | 10³ | 2500 | 5.21e-04 | 8.16e-04 | 6.62e-04 | 2.71e-03 | 3.83e-02 |
+| | | 5000 | 1.75e-04 | 1.98e-04 | 6.55e-04 | 1.58e-03 | 5.01e-03 |
+| | | 10000 | 6.04e-05 | 2.07e-05 | 6.55e-04 | 8.07e-04 | 5.24e-03 |
+| | | 20000 | 3.53e-05 | 6.85e-06 | 6.71e-04 | 2.71e-04 | 6.77e-02 |
+| | | 40000 | 1.68e-05 | 1.26e-06 | 6.67e-04 | 6.75e-04 | 1.97e-03 |
+| 0.0025 | 10¹¹ | 40000 | 1.72e-05 | 1.49e-06 | 7.03e-04 | 1.22e-04 | 2.08e-03 |
+| 0.001 | 10³ | 2500 | 4.86e-04 | 5.15e-04 | 4.76e-04 | 4.12e-03 | 4.08e-03 |
+| | | 5000 | 1.69e-04 | 1.13e-04 | 3.71e-04 | 4.38e-03 | 4.35e-03 |
+| | | 10000 | 4.54e-05 | 2.57e-05 | 3.94e-04 | 4.17e-03 | 1.04e-02 |
+| | | 20000 | 1.38e-05 | **6.19e-05** | 4.11e-04 | 3.33e-03 | 5.12e-03 |
+| | | 40000 | 7.91e-06 | 1.85e-06 | 4.13e-04 | 1.53e-03 | 5.18e-03 |
+| 0.001 | 10¹¹ | 20000 | 1.45e-05 | **4.89e-05** | 4.61e-04 | 3.49e-03 | 5.60e-03 |
+| | | 40000 | 7.28e-06 | 3.01e-06 | 4.66e-04 | 1.69e-03 | 5.03e-03 |
+| 0.00025 | 10³ | 2500 | 5.87e-04 | 4.89e-04 | 4.33e-04 | 4.71e-03 | 4.68e-03 |
+| | | 5000 | 2.16e-04 | 1.07e-04 | 1.14e-04 | 5.12e-03 | 5.11e-03 |
+| | | 10000 | 5.60e-05 | 2.19e-05 | 1.16e-04 | 5.39e-03 | 5.39e-03 |
+| | | 20000 | 2.02e-05 | 5.46e-06 | 1.22e-04 | 5.16e-03 | 5.15e-03 |
+| | | 40000 | 7.14e-06 | 1.67e-06 | 1.26e-04 | 5.13e-03 | 5.13e-03 |
+| 0.00025 | 10¹¹ | 40000 | 6.25e-06 | 3.76e-06 | 1.61e-04 | 5.16e-03 | 5.16e-03 |
+
+(Every count at both s is in `heat2d_ring_results.json`; the s = 10¹¹ errors
+are 0.67–2.26× the s = 10³ ones at every count, the largest at 40,000 nodes and
+δ = 0.00025, where both sit at the fine runs' floor.)
+
+- *The seeds are fourth order through a sub-grid smooth resistive layer.* Error
+  fits over 2500–40,000 (s = 10³, 10¹¹): 4.74 and 4.87 at δ = 0.0025, 4.16 and
+  3.75 at 0.00025, 3.45 and 3.30 at 0.001 (the outlier below). The last counts sit at the fine
+  run's own floor: the fine runs with the full and the level-0 warp, which are
+  on the same 160,000 nodes, differ by 1.3–1.8e-6 away from the ring at δ ≤ 0.001
+  (3e-10 at 0.0025), so 1.3–3.8e-6 at 40,000 is where this line can go.
+- *The probe agrees, reference-free*: the seeds' rows converge at 2–4 per halving
+  at every (s, δ) (fits 2.46–3.48), slowest at δ = 0.0025 between 10,000 and
+  40,000 (1.6, 2.1),
+  where the grid passes `h ≈ 4δ` to `2δ`, the transition §4.5–§4.7 saw at 5 : 1.
+- *E2.3 reads the smooth ring as a jump* and sits on an O(1) floor: its error is
+  1.1–7.2e-4 at every count, the difference between the smooth ring and its jump
+  (larger at the wider δ), and its rows diverge on the probe (0.1 to 830, fits
+  −1 to −5), inconsistent at O(1) and worse as h shrinks against δ.
+- *The naive and direct stencils do not see the ring* until the grid samples it:
+  about 5e-3, FD4's no-ring floor of §2.7, at δ = 0.00025 (both) and 0.001 (the
+  direct stencil), their probe 10²–10⁴. The naive product starts to move at
+  δ = 0.001 (1.5–1.7e-3 at 40,000) and at 0.0025 (1.2–6.8e-4 at 40,000,
+  erratic), where its `Dx A Dx` reaches the layer's samples; the direct stencil
+  does not (2e-3 to 7e-2).
+- *One outlier: δ = 0.001 at 20,000 nodes*, 6.2e-5 and 4.9e-5 between 2.6e-5 and
+  1.9e-6, at both s, where the probe keeps falling (1.4e-5). The rows anchored in
+  the ring's resistive tail (α_e 0.27–0.41 against 1, 3.75δ from its middle on
+  this count) have warped and plain weights 100 % apart (median 2 %); plain
+  Gaussians everywhere give 8.1e-6 there, and plain on the 50 most different
+  rows 1.1e-5. Elsewhere at δ > 0 the warp beats plain by 1.2–1.8× (δ = 0.0025:
+  2.07e-5 against 2.31e-5 at 10,000, 6.85e-6 against 1.22e-5 at 20,000;
+  δ = 0.00025: 1.67e-6 against 2.45e-6 at 40,000; δ = 0.001 at 40,000: 1.85e-6
+  against 1.89e-6). E4.6's warp turned at `h ≈ 2δ` at 5 : 1; at 1500 : 1 the
+  resistivity tail reaches several δ further. The rule for anchors inside a
+  smooth resistive layer is E4.12 (#84, Brad's decision on #39).
+
+**Cost.** One tangential row with the flux seeds: 24–42 ms at δ = 0 and 40–233 ms
+at δ > 0 (slowest at δ = 0.00025, where the edges are narrowest against the
+stencil), under up to 16 concurrent runs; about 15 ms at δ = 0 on a quiet
+machine (12 without the flux seeds; the degree-5 chain marches 252 states). The
+160,000-node seed runs seeded 8,163–40,265 rows and took 21–30 min each, of
+which the solve 30–45 s; the Fig. 19 sweep 10–12 min per s, Fig. 20 at 10,000
+nodes 5 min for three s at δ = 0 and 25 min per s over the three widths, the
+spectra 2–4 min per (s, δ), each smooth (s, δ) sweep with its fine run about
+70 min; everything is seconds from `heat2d_ring.json`. Three rounds of the sweep
+were run (the 15 seeds, the full warp, the final construction); the first two
+rounds' fine runs are kept under `outputs/heat2d_ring_seeds15/` and
+`outputs/heat2d_ring_fullwarp/`.
+
+**H11 and where each construction fails, and why.**
+
+- *E2.3* is exact on the matched profile only to `1.5e-18 s` (seven digits at
+  s = 10¹¹): its far side's translated basis carries `O(s κ² scale)` through the
+  curvature (E2.9). It stays fourth order on Fig. 19 because that loss is below
+  the discretisation error at every count run. On a smooth ring it is
+  O(1)-inconsistent (it reads the edges as jumps) and floors at 1–7e-4.
+- *The naive product and the direct stencil* never see an unresolved ring: their
+  rows are O(h⁻²) on the probe and their error is the no-ring floor.
+- *The seeds* are exact on the matched profile to rounding at every s (1.3–2.1e-15)
+  and condition independently of s, because they carry the ring's resistance,
+  which eq. 40 holds fixed. They needed four things E4.4–E4.11 did not
+  (§3.11): the width as `gap` (on the stored radii and absolute stops they lose
+  digits like s, 1.2e-10 at 10¹¹); the ring's own series (without it the march
+  took up to 150,000 steps a row); the flux seeds (without them the case-3 line
+  stalls at 2.3–3.3 and ends 12× E2.3's); and, on a ring, `φ₀₁`'s level 0 as the
+  warp (with every level, a 3e-6 floor at s = 10³). With them they are fourth
+  order at every s, 0.48–0.97× E2.3 from 5000 nodes, and fourth order through a
+  smooth resistive layer, except where the warp misbehaves on anchors inside
+  the layer (E4.12). What limits them is not s and not the march: it is
+  `FOOT_CURVATURE` on the coarsest sets at δ > 0 and the Gaussians inside a
+  smooth resistive layer.
+- *Fig. 19's breakdown near s = 10¹¹* is not reproduced by either construction;
+  the seeds do not move it, because it is not there to move (port notes §2.9).
+
+**What E4.9, E4.10 and E4.12 inherit.**
+
+- *E4.9 (#40)*: the smooth ring is a natural home for the treatments, the
+  resistance composition being a harmonic blend already; `heat2d_ring.py`'s part
+  4 gives any operator a probe and a far-field line on it.
+- *E4.10 (#41)*: the ring has its own driver (`scripts/heat2d_ring.py`, not a
+  `--ring` flag on `heat2d_stiff.py`), its cache `heat2d_ring.json` (version 3;
+  bump it after any change to the chains, their series, the ring's switches or
+  the composition), its results file `heat2d_ring_results.json` (with
+  `--data-dir`), and the figures `heat2d_ring_convergence.png`,
+  `heat2d_ring_conditioning.png` and `heat2d_ring_smooth.png`. The regeneration
+  commands are in the driver's docstring.
+- *E4.12 (#84)*: the δ = 0.001 outlier above, the diagnosis and the cached lines
+  to rerun.
+
+**Tests.** `tests/heat2d/test_ring.py`: the gap's validation and `case3(s)`'s;
+the stops as exact offsets from the outer circle; `layer_share` against the tanh
+difference and at a width of 1e-8; the resistance composition's contact
+resistance by quadrature against the fold's; its paths (`alpha`, `alpha_at`
+with and without a known distance, `alpha_given`) and its gradient by
+differences; the seeds exact on the matched profile at s = 10³ and 10¹¹, with the
+stored radii and E2.3 losing digits; the march from the outer circle equal to
+the absolute one at s = 10³; the seed block's conditioning flat in s;
+`saddle_system`; the ring's series cost and interpolant; the far edge `d ∓ gap`;
+`RingMode(widths=)`; `SmoothRingMode` against itself and without a ring;
+`matched_radial`; `radial_elements`; the flux seeds' exponents, default and
+block; the flux seeds' O(h⁵) fit against the 15's O(h⁴); the warped ε; the
+level-0 warp on the ring and every level on case 2. `tests/test_heat2d_ring.py`:
+the ring domains, the far read, the four parts and the cache round trip at small
+counts, and the refusals.
