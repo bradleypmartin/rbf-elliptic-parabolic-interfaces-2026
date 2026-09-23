@@ -273,7 +273,12 @@ otherwise. `CLAUDE.md` carries the working set.
   profile is O(1)-inconsistent and route (a) is first order: at δ = 0 it is
   EABE Fig. 10's flat-interface line. E4.11 builds the tangential chain; if
   it does not restore the order, the manuscript scopes the 2-D seeds to
-  features whose α varies along the normal alone and says so.
+  features whose α varies along the normal alone and says so. *Answered by
+  E4.11 (#81, stiff note §3.10, §4.7): the tangential chain, in the foot
+  curve's own coordinates with every seed to level 4, is fourth order on
+  case 2 and on both of E4.7's split geometries at every δ, within a small
+  factor of the flat seeds from 5000 nodes on, so the seeds are not scoped;
+  the ring (E4.8) inherits it.*
 
 ## 6. Epics and tickets
 

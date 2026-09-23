@@ -204,8 +204,9 @@ class CoupledChain:
     the stencil's degree in ξ, whatever b: across a jump the far side of the
     seed of ``ξᵃ ηᵇ`` carries the flux ratio to the power ``⌈b/2⌉``, so the
     η-seeds' tangential levels are not small in practice although they are
-    of high order in h (§3.10: cutting at ``degree − b`` left rows 4–6× E2.3's
-    above case 2's upper curve at 40,000 nodes). With the series in
+    of high order in h (§3.10: cutting at ``degree − b`` left case 2's error
+    at 40,000 nodes 5× what every level gives, set by the rows above its
+    upper curve where the band's piece is smallest). With the series in
     ξ of ``m̂``, ``α/m̂`` and ``1/(α m̂)`` (``M_k``, ``A_k``, ``(1/B)_k``) the
     level fluxes ``ψ_i = Σ_k B_k g′_{i−k}`` and the values ``g`` march as
 

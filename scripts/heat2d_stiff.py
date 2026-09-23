@@ -144,6 +144,15 @@ operators' interior spectra at 1600 nodes per δ), and H17's timing (the median
         --operators naive construction direct direct-reach seeds seeds-plain \
         tangential tangential-plain \
         --counts 1250 2500 5000 10000 20000 40000               # E4.11 on case 2
+    uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
+        --inside constant --deltas 0 0.0025 --operators naive construction seeds \
+        tangential tangential-plain --counts 1250 2500 5000 10000 20000 40000
+    uv run python scripts/heat2d_stiff.py --mode seeds --inside sine \
+        --deltas 0 0.0025 --operators naive construction seeds tangential \
+        tangential-plain --counts 1250 2500 5000 10000 20000 40000   # E4.11's A, B
+    uv run python scripts/heat2d_stiff.py --mode seeds --inside sine --deltas 0 \
+        --operators naive construction seeds tangential tangential-plain \
+        --counts 1250 2500 5000 10000 20000 40000 80000 160000  # B's δ = 0, 23 min
     uv run python scripts/heat2d_stiff.py --mode tangential \
         --counts 1250 2500 5000 10000 20000 40000               # H14, H15, spectra
 """
