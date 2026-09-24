@@ -3768,20 +3768,409 @@ $y = 0.980$, not in the band.
 \section{Discussion}
 \label{sec:discussion}
 % TRACE: stiff 2.5 (the 1-D limitations), 5.5 (limitations), 5.6 (the
-% roundtable's deferred runs); plan D10 (the corner); LITERATURE.md 6b
-% (#43) for the conclusions, verbatim. Drafted by #50.
+% roundtable's deferred runs); plan D10 and E2.10 (#24, closed won't-do: the
+% corner goes to separate work); LITERATURE.md 1c (unswept), 1a K1 and K10
+% (the comparator not built), 6b (#43) for the conclusions, verbatim;
+% paper/data/README.md ("What the gate does not prove"). Drafted by #50.
+% Every cache-backed number is a check in scripts/paper_numbers.py whose
+% `where` names a "§7.x"; timings and scratch runs trace to the notes. The
+% sections' own statements of each limitation are pointed to, not restated:
+% 3.1 (the march floor), 4.4 (the time error, the reach), 4.5 (the
+% sinusoidal medium), 5.3 (the guard), 5.4 (the rule, the O(h^5) question),
+% 6 intro (node sets, the short parabolic test), 6.3, 6.4, 6.5, 6.6, 6.7.
 \subsection{Limitations}
 \label{sec:limitations}
-\stub{\#50: corners, extreme contrasts, the cost in three dimensions, what
-the experiments leave open}
+Section~\ref{sec:scope} lists what the implementation leaves out of the
+2016--2017 methods, and Sections~\ref{sec:seeds1d} to~\ref{sec:results2d}
+state each restriction of the experiments where it arises. This section
+gathers them.
+
+% TRACE: sec:scope (stiff 5.5, "what is not covered"; E2.10, #24, closed
+% won't-do, plan D10); LITERATURE.md 1c's own exclusions (three dimensions;
+% corners and triple junctions; anisotropic alpha; alpha depending on u;
+% time-dependent media; edges meeting a Dirichlet boundary; profiles other
+% than tanh); the tanh blend of alpha on the bands, of 1/alpha on the smooth
+% ring (eq:edge, eq:smoothring); the degrees, stiff 3.4 and 5.5 (30 / 4
+% seeded rows in a 42 / 5 bulk; FD4's five-point rows in 1-D), and the bulk
+% passing the seeds on a resolved edge, stiff 5.3 (4) and sec:flat2d.
+\para{Scope}
+Every medium here is isotropic, independent of $u$ and of time, and at most
+two-dimensional. The cornered interface of \cite[Sec.~5.4.5]{Martin2016}
+and triple junctions are left to separate work, and no edge meets the
+boundary of the domain: every two-dimensional edge is a curve periodic in
+$x$ or a circle, clear of the Dirichlet boundaries. Every smooth edge is a
+$\tanh$ blend of $\alpha$, except the smooth ring's, which blends
+$1/\alpha$ (Section~\ref{sec:ring}). The seeds were run at one degree:
+fourth-order stencils in one dimension, and in two, degree-four stencils of
+$30$ nodes, to which the ring adds five seeds of degree five, inside a bulk
+of degree five whose higher degree passes them on finer node sets once the
+grid resolves an edge (Section~\ref{sec:flat2d}). Nothing here says what
+the seeds do at another order.
+
+% TRACE: sec:scope's contrasts (stiff 1.1, 3.1); the ring's contrast large
+% only at a fixed resistance s w = 1, which the seeds carry, its per-stencil
+% conditioning flat in s, stiff 5.3 (9) and 5.5, sec:ring2d; the far side's
+% seeds carry the flux ratio to the power ceil(b/2), at most 2 at degree 4,
+% sec:curved (stiff 3.10); the seed blocks' conditioning at 5 : 1, stiff 4.3
+% H3, sec:assembly2d; the tail rows' instability, looked for off the ring at
+% 5 : 1 alone, stiff 5.5 and 4.10, sec:ring.
+\para{Contrast}
+Each case has one contrast (Section~\ref{sec:scope}). The large contrasts
+are the ring's, and they come with a fixed resistance, $s w = 1$, which the
+seeds carry, so that their per-stencil systems condition independently of
+$s$ (Section~\ref{sec:ring2d}). A large contrast across a single edge was
+not run: there the seeds' values beyond the edge carry powers of the flux
+ratio up to its square (Section~\ref{sec:curved}), and their blocks'
+conditioning was measured at the contrasts above only
+(Sections~\ref{sec:chain} and~\ref{sec:assembly2d}). The instability of
+rows anchored in a layer's tail (Section~\ref{sec:ring}) was looked for off
+the ring at $5 : 1$ alone.
+
+% TRACE: sec:results2d's intro and sec:setting2d (one node set per count,
+% from a fixed random seed; the naive error's spread over three node sets at
+% one count and width, up to 2.0: paper_numbers "§6, §6.2, §7.1; stiff §4.2
+% H10"); stiff 5.5 (every set keeps E2.1's straddling rows, unmoved by the
+% seed; robustness to arbitrary node placement near an edge untested; a
+% shifted-row layout, stiff 5.6's deferred runs); stiff 5.3 (4) ("no
+% deterioration as delta -> 0 on these grids, not a proven delta-uniform
+% constant: one node set per count, and each line holds delta fixed while h
+% falls, so none holds h / delta fixed"); the norms, sec:problem and stiff
+% 5.5; the smooth ring's far field, 74-96 % of the nodes, paper_numbers
+% "§6.6, §7.1; stiff §5.3 (9)"; no ring line with a max-norm error, stiff
+% 5.5 (the ring driver's max is max |u|).
+\para{Node sets and norms}
+Each node count has one node set, and at one count the naive operator's
+error moves by up to a factor of $2.0$ between node sets
+(Section~\ref{sec:naive2d}). Every node set keeps the six rows that
+straddle each curve (Section~\ref{sec:setting2d}) and moves only the rest,
+so the seeds were never run with nodes placed freely beside an edge, nor on
+rows shifted against it. Each convergence line holds $\delta$ fixed while
+$h$ falls, and none holds $h / \delta$ fixed, so that the widths' lines lie
+within a small factor of one another shows no deterioration as
+$\delta \to 0$ on these node sets and proves no $\delta$-uniform constant.
+The two-dimensional errors are RMS errors over all nodes, except the smooth ring's, which are
+taken over the $74$ to $96\%$ of the nodes away from it; the error near a
+smooth ring, and any ring's error in the maximum norm, were not measured.
+
+% TRACE: sec:seedrates1d (the ramp errors fully discrete at dt = h; BD4's
+% share about half at 100 nodes and a quarter from 200: E4.10's roundtable
+% scratch, stiff 5.6 and 2.5 (2), notes only); sec:results2d's intro (3-19
+% BD4 steps, t = 0.1 over h at 1250 and 40,000, arithmetic; stiff 5.5);
+% rem:elliptic1d and sec:elliptic1d (the 1-D equilibrium on constant pieces
+% ranks nothing, plan 3.2); sec:seedrates1d and sec:treatments1d (the
+% sinusoidal medium: the standard rows' pre-asymptotic line; T1-FV ahead at
+% delta = 0 below 801 nodes, paper_numbers "abstract, §1, §4.5, §7.1, §7.3;
+% stiff §2.5 (3)"); the reach of 20 delta the operator's one parameter,
+% never varied, sec:seedrates1d and sec:flat2d (stiff 5.5).
+\para{The test problems}
+The seeds' one-dimensional parabolic errors are those of the fully discrete
+scheme at $\Delta t = h$, of which BD4's share is about half at $100$ nodes
+and a quarter from $200$ (Section~\ref{sec:seedrates1d}). The parabolic
+problem of case 1 is $3$ to $19$ BD4 steps of one separable mode from its
+analytic history, which tests the operators' spectra under BD4 more than a
+transient through the edge. The one-dimensional equilibrium ranks nothing on constant
+pieces (Remark~\ref{rem:elliptic1d}), and on the sinusoidal medium the
+seeds' line at $\delta = 0$ and $0.0025$ is the pre-asymptotic error of the
+standard rows inside the layer, which puts the conservative scheme ahead of
+them at $\delta = 0$ below $801$ nodes (Section~\ref{sec:treatments1d}). The reach of
+$20\delta$ that decides which rows are seeded is the operator's one
+parameter, in either dimension, and it was never varied.
+
+% TRACE: LITERATURE.md 1a K10 (iii) and 6b (our implementations, one
+% contrast and one test problem per dimension); K10 (i) (the disc means: no
+% source found, "the natural scattered-node analogue", sec:treatments2d);
+% stiff 5.3 (10) and 5.5 (no conservative scattered-node scheme built); 1d
+% and sec:treatments1d (T3, the band-limited coefficient, not found in use
+% for diffusion and left out).
+\para{The comparison}
+The coefficient treatments are our implementations, each run on one contrast
+and one test problem per dimension, and in two dimensions the cell means
+are taken over discs about the nodes, a reading of the cell rule for
+scattered nodes for which we found no source
+(Section~\ref{sec:treatments2d}). No conservative scheme was built on the
+scattered nodes, so the strongest comparator of the one-dimensional study,
+the conservative scheme with exact face conductances, has no
+two-dimensional counterpart here; the band-limited coefficient of the
+seismic literature was left out in both dimensions
+(Section~\ref{sec:treatments1d}).
+The measurement licenses what Section~\ref{sec:priorwork} states and no
+more; it is not a ranking of the methods in general.
+
+% TRACE: sec:chain (the DOP853 floor at delta <~ h/40; collocation not built;
+% stiff 2.3 P6); stiff 5.5 (the floor not seen in 2-D, and why the 2-D tests
+% could not have seen it: 4.3's ladder measures distances to the jump's rows,
+% its residual by twelfth-order differences floors at 4e-11); stiff 5.5
+% (what the seeds need as input: alpha along each stencil's normal line at
+% arbitrary points; the chain's foot points and curvature; the ring's gap;
+% the naive product alpha at the nodes only); sec:curved (the guard
+% kappa_max (|d_e| + 2 h_s) < 0.8; at delta = 0 the other curve only as a
+% coordinate line of the foot curve's frame); stiff 5.5 (the guard refuses
+% the tightest curves' coarsest sets: the 0.25 circle below 2500 nodes, some
+% ring rows at 1250; two close non-concentric curved interfaces outside what
+% was run); stiff 3.5 (route (b), a local boundary-value problem per stencil
+% on a fine patch, named and not built); sec:curved2d (the chain 2.8-8.0
+% times the flat seeds at the two coarsest counts: paper_numbers "§6.5,
+% §7.1; stiff §5.3 (8)"); sec:flat2d (the warp loses once the edge is
+% resolved; stiff 5.3 (7)); sec:ring (the rule: the stronger diagonal, a
+% proxy, ring only; near-ties off the ring, stiff 5.2 and 5.5).
+\para{The construction as built}
+The march has a floor at $\delta \lesssim h/40$ in one dimension, which a
+collocation integration of the chain would remove
+(Section~\ref{sec:chain}). It was not seen in two dimensions, but the tests
+there compare the seeds with the jump's rows and take residuals by finite
+differences, and neither resolves a floor of that size. The seeds need a
+continuous description of the medium, since the march samples $\alpha$ at
+arbitrary points along each stencil's line; the tangential chain needs the
+curve's foot points and curvature as well, and the ring its gap. The
+standard stencils need $\alpha$ at the nodes only. The tangential chain
+refuses a stencil whose line comes near the focal distance of its curve
+(Section~\ref{sec:curved}), which excludes the coarsest node sets of the
+tightest curves run, and at $\delta = 0$ it admits a second curve only as a
+coordinate line of the first's frame, so that two close interfaces neither
+parallel nor concentric are outside what was run. A local boundary-value
+problem per stencil, in place of the march, was not built. On the two
+coarsest node sets the tangential chain's error is $2.8$ to $8.0$ times the
+flat seeds' (Section~\ref{sec:curved2d}). The warp
+is kept for the unresolved regime and loses to plain Gaussians once the
+grid resolves the edge (Section~\ref{sec:flat2d}). On the rows anchored in
+a ring's layer, the choice between the two Gaussian blocks by the stronger
+diagonal is a proxy for stability, and it is on for rings only
+(Section~\ref{sec:ring}).
+
+% TRACE: sec:spectra2d (H5 on case 1 only; the ring's iterative solves not
+% run; stiff 5.3 (6)); sec:ring2d (the ring's per-stencil conditioning flat
+% in s from 1e5 to 1e11, stiff 5.3 (9); the global matrix's conditioning not
+% measured; the smooth ring's reference a 160,000-node seed run on the far
+% field; one (s, delta) against a plain-built second fine run, the rule's
+% fine solution 3.55e-6 from it: paper_numbers "§6.6, §7.1; stiff §5.3
+% (9)"; the rule's convergence at s = 1e11, delta = 0.001 past 40,000
+% unresolved); sec:ring (the jump-aware basis's O(h^5) fit with fifteen
+% functions not established; twenty seeds with the flux seeds).
+\para{The matrices and the ring}
+Solvability was measured on case 1, where nothing breaks down as
+$\delta \to 0$ (Section~\ref{sec:spectra2d}). On the ring the per-stencil
+systems were measured at every $s$, but the global
+matrix's conditioning was not, and its iterative solves were not run. The
+smooth ring's reference is a fine run of the seeds themselves, read on the
+far field, and one $(s, \delta)$ was read against a second fine run built
+with plain Gaussians; there the rule's own fine solution is the discrepant
+one, $\sci{3.55}{-6}$ from the other, so the rule's convergence at
+$s = 10^{11}$ and $\delta = 0.001$ past $40{,}000$ nodes is unresolved
+(Section~\ref{sec:ring2d}). Why the jump-aware basis fits the ring's mode at
+$O(h^5)$ with fifteen functions, where the seeds need twenty, we have not
+established (Section~\ref{sec:ring}).
+
+% TRACE: timings, notes only. Stiff 4.5 and 5.5: a flat seeded row 1.3-4.4
+% ms, which sec:assembly2d quotes as "a few milliseconds"; the 40,000-node
+% operator at delta = 0.04, every row seeded, 167 s of marches against 2.6 s,
+% which sec:flat2d quotes as about 170 and under three. Stiff 4.7: a
+% tangential row 14.5-24.5 ms on a quiet machine (its table; 15-25 ms in
+% 5.5). Stiff 4.8: a ring row with the flux seeds 40-233 ms at delta > 0
+% under up to 16 concurrent runs. The seeded share settling to the strip
+% within 20 delta of a curve, sec:flat2d (stiff 5.5: O(N) marches). The 3-D
+% counts are arithmetic: monomials of degree at most four, 15 in two
+% variables and 35 in three; the ansatz, sec:straight and stiff 3.2.
+\para{Cost}
+The marches are the construction's cost. A flat seeded row takes a few
+milliseconds (Section~\ref{sec:assembly2d}), a row of the tangential chain
+$15$ to $25$\,ms on an idle machine, and a ring row with the flux seeds
+$40$ to $233$\,ms at $\delta > 0$ on a shared one; at $40{,}000$ nodes and
+$\delta = 0.04$, with every row seeded, the marches take about $170$ seconds
+against under three for the naive operator's assembly
+(Section~\ref{sec:flat2d}). At a fixed $\delta > 0$ the seeded rows are
+those within $20\delta$ of an edge, a fixed share of the nodes, so the
+number of marches grows like the node count. These are the costs of a
+reference implementation, and it is two-dimensional. In three dimensions
+the seeds of a straight feature would be polynomials in two tangential
+coordinates, $35$ of degree at most four against $15$, with coefficient
+functions marched along the one normal, and those of a curved feature
+would be marched in a surface's own coordinates; none of this was built,
+and its cost is not known.
+
+% TRACE: LITERATURE.md 1c (unswept: Russian- and Ukrainian-language
+% literature beyond the zbMATH reviews and one full text; the
+% neutron-diffusion analytic nodal and analytic coarse-mesh finite-difference
+% line, one paper seen and not entered; reservoir and groundwater upscaling
+% of thin barriers; discontinuous-coefficient conduction in DG,
+% lattice-Boltzmann and peridynamics; computational electromagnetics beyond
+% FLAME and CSEM; Chinese-language literature), 2 (the refuter-pass log).
+% No key is cited for them: the one paper seen is not in references.bib.
+\para{The literature search}
+The prior-work paragraph of Section~\ref{sec:priorwork} rests on a search
+logged in the repository's \texttt{LITERATURE.md}, which left areas
+unswept: the Russian- and Ukrainian-language literature on exact and
+truncated schemes beyond reviews and one full text, the analytic nodal
+methods of neutron diffusion, the upscaling of thin barriers in reservoir
+and groundwater models, discontinuous-coefficient conduction in
+discontinuous Galerkin, lattice-Boltzmann and peridynamic methods,
+computational electromagnetics beyond FLAME and controlled-source
+electromagnetics, and the Chinese-language literature. ``To our
+knowledge'' in this paper means that search.
+
+% TRACE: paper/data/README.md ("What the gate does not prove"): schema 2's
+% argv, git sha and dirty flag, tables_sha256; scripts/paper_data.py
+% --verify; scripts/paper_numbers.py; scripts/paper_figures.py --check (the
+% figures' arrays, .../curves, snapshot/field, spectra/figure,
+% stencils/seed_functions, covered by the checksum and the byte check only);
+% timings and scratch runs trace to the notes (E5.3's breadcrumb on #50):
+% the time error at dt = h/8 (sec:seedrates1d, stiff 5.6) and the naive
+% product on the seeds' 30 / 4 groups (sec:flat2d, stiff 5.6), both scratch.
+\para{The numbers}
+Every figure and table is drawn by a committed script from results files
+committed with the paper. Each file records the command that wrote it, the
+commit it ran at and a checksum of its tables, and a committed script
+recomputes from the tables every number the text quotes from them. That
+binds each number to a command and a commit. It does not re-derive the
+tables, which only rerunning the documented commands does; the checksum
+catches an edit that did not recompute it, not a deliberate one; and the
+arrays behind the figures are covered by the checksum and a byte-for-byte
+redraw of the figures, not recomputed. Run times, and the few scratch runs
+the text quotes, among them the time error of
+Section~\ref{sec:seedrates1d} and the naive operator on the seeds' own
+stencils in Section~\ref{sec:flat2d}, are recorded in the repository's notes
+and not in results files, and no script checks them.
 
 \subsection{Future work}
 \label{sec:future}
-\stub{\#50: in the order to do it}
+% TRACE, item by item. 1: stiff 5.6's runs proposed and left (second fine
+% runs at the other five (s, delta); the rule at 80,000 and 320,000 at
+% s = 1e11, delta = 0.001; the delta = 0.04 seed column to 160,000; node sets
+% 1 and 2 at 20,000; reach and contrast sweeps; a shifted-row layout; the
+% ring's iterative solves; a ring max norm) and 5.5; which need no code:
+% heat2d_ring.py --plain-fine, --fine-n, --counts; heat2d_stiff.py --counts,
+% --seed (the reach is heat1d.domain.TANH_REACH, not a flag). 2: stiff 5.3
+% (10) (control volumes with face conductances, T1-FV in 2-D, not built);
+% LITERATURE.md 1a K1 (Pan-Xu-Li: first order at a general interface in 2-D
+% and 3-D except where it is parallel to an axis) and #43's breadcrumb on
+% #50. 3: stiff 5.3 (4) and sec:flat2d (the bulk's degree passes the seeds;
+% the 30 / 4 naive control); sec:ring (the chain of degree five, the flux
+% seeds). 4: sec:chain (the floor; collocation), its size 1e-11 to 4e-11 in
+% the 1-D equilibrium solution. 5: stiff 3.5 (route (b)), sec:curved (the
+% guard, the coordinate-line restriction), sec:ring (the O(h^5) question,
+% the rule as a proxy). 6: sec:scope, LITERATURE.md 1c's own exclusions,
+% and the 3-D ansatz of the cost paragraph above.
+In the order we would do them.
+\begin{enumerate}
+\item \emph{The runs left open.} The drivers take these as they stand: a
+  second fine run of the smooth ring at each of the five $(s, \delta)$ read
+  against a single one, and the rule at $80{,}000$ and $320{,}000$ nodes at
+  $s = 10^{11}$ and $\delta = 0.001$; the seeds at $\delta = 0.04$ to
+  $160{,}000$ nodes, where the bulk's degree should pass them; and the seeds'
+  sweeps on the other two node sets to $20{,}000$ nodes. These need changes
+  to the drivers: the reach and the contrast swept, rows shifted against
+  the edges, the ring's iterative solves and global conditioning, and the
+  ring's error near the ring and in the maximum norm. Each sharpens a
+  statement of Section~\ref{sec:results2d}; none changes the construction.
+\item \emph{A conservative scheme on the scattered nodes.} Control volumes
+  about the nodes with the exact face conductances, the scattered-node
+  form of the one-dimensional conservative scheme, are the comparator
+  Section~\ref{sec:treatments2d} lacks. Pan, Xu and Li note that their
+  harmonic average method is first order at a general interface in two and
+  three dimensions, except where the interface is parallel to an axis
+  \cite{PanXuLi2026}; built on scattered nodes, it would show how far the
+  strongest low-order comparator gets through a sub-grid edge.
+\item \emph{Seeded rows at the bulk's degree.} On a resolved edge the naive
+  operator passes the seeds on finer node sets because its bulk rows have
+  degree five and the seeded rows degree four
+  (Section~\ref{sec:flat2d}). Seeded rows of degree five on the bulk's
+  $42$ nodes, from the chain of degree five that the ring's flux seeds
+  already march (Section~\ref{sec:ring}), should close that gap, which is
+  untested, and are the first step to the orders above four that were not
+  run.
+\item \emph{A collocation integrator for the chain}, which would remove the
+  march's floor at $\delta \lesssim h/40$ (Section~\ref{sec:chain}). The
+  floor is $10^{-11}$ to $\sci{4}{-11}$ in the one-dimensional equilibrium,
+  so it comes after the items above.
+\item \emph{The geometry the tangential chain refuses.} A local
+  boundary-value problem per stencil in place of the march along its
+  lines, for the curves the guard of Section~\ref{sec:curved} refuses and
+  for two close interfaces neither parallel nor concentric; and on the
+  ring, the question Section~\ref{sec:ring} leaves open, why fifteen
+  jump-aware functions fit its mode at $O(h^5)$, and a criterion other than
+  the diagonal share for the Gaussians of the rows anchored in a layer.
+\item \emph{Beyond the scope.} Edges that meet the boundary of the domain;
+  the cornered interface and triple junctions; profiles other than
+  $\tanh$, and large contrasts across a single edge; anisotropic,
+  solution-dependent and time-dependent coefficients; and three
+  dimensions, where a straight feature's seeds are polynomial in two
+  tangential coordinates with their coefficient functions marched along the
+  one normal, and a curved feature's are marched in a surface's own
+  coordinates.
+\end{enumerate}
 
 \subsection{Conclusions}
 \label{sec:conclusions}
-\stub{\#50: LITERATURE.md section 6b, verbatim}
+% TRACE: LITERATURE.md 6b (#43), each verbatim: the abstract-safe sentence
+% (the last two sentences of the first paragraph), the flux-seed sentence
+% (required wherever the flux seeds are named; K9, with section 1's
+% Lombard-Piraux cite) and the contributions / conclusions sentence (the
+% last two of the second), and the required caveat (the third paragraph
+% after its first sentence, the abstract's lead-in). The first two
+% sentences are the abstract's and section 1's framing: stiff 2.5 (1) and
+% 5.3 (2) (the knee), 2.5 (1) and 5.3 (3) (the construction's floor of
+% order delta and its switch-off). The numbers are section 6's, checks
+% where "§1, §6.x, §7.3; stiff ...": stiff 5.3 (4) (fits 4.23-4.48 at
+% delta = 0.04 ... 0.0025 over 1250-40,000; the five widths' spread 1.2-2.4
+% at every count, the jump included; 7.99e-9 against 8.36e-5 at 40,000 and
+% delta = 0.0025; "no deterioration ... on these node sets"), 5.3 (8)
+% (1.4-3.9 from 5000 nodes, RMS), 5.3 (9) (fits 4.43-4.71; 0.52-0.97 from
+% 5000 to 40,000; the five flux seeds; the smooth ring fourth order on the
+% far field). The caveat's 801, 1.75 and 2.3 to 4.7 orders: stiff 2.5 (3)
+% and 5.3 (10). The last sentence: the rule of sec:flat2d and sec:chain (seed
+% the rows within 20 delta of an edge; no threshold in delta) and the
+% input the construction paragraph of section 7.1 names.
+Between a coefficient that varies on the scale of the grid and one that
+jumps lies the smooth edge thinner than the node spacing. Through it the
+standard stencils that sample the coefficient are first order until the
+grid resolves the edge, and the interface-aware stencils of a jump, applied
+at the edge's centre, sit on a floor of order $\delta$ and must be switched
+off once the grid resolves the edge. The seeds are the profiles of
+solutions polynomial in time, continued through the edge by ordinary
+differential equations along the normal or along the edge's own
+coordinates; in one dimension they are the classical formal powers of the
+Sturm--Liouville operator, and as $\delta \to 0$ they reduce to the
+interface-aware stencils of a jump. On scattered nodes the resulting RBF-FD
+stencils are fourth order at every $\delta$ tested, elliptic and parabolic,
+with no switch between regimes.
+
+Through the flat band the seeds' elliptic fits at the four widths are
+$4.23$ to $4.48$ over $1250$ to $40{,}000$ nodes, and the errors at the five
+widths, the jump included, lie within factors of $1.2$ to $2.4$ of one
+another at each count, which is no deterioration as $\delta \to 0$ on these
+node sets, not a proven $\delta$-uniform constant; at $40{,}000$ nodes and $\delta = 0.0025$ their error is
+$\sci{7.99}{-9}$ against the naive operator's $\sci{8.36}{-5}$. Through the
+curved band the tangential chain is within $1.4$ to $3.9$ times of the flat
+seeds' RMS error from $5000$ nodes at every $\delta$. On the ring thinned at
+a fixed resistance, where the block adds five flux seeds, the seeds converge
+at fourth order at every $s$, with fits of $4.43$ to $4.71$, at $0.52$ to $0.97$ times
+the jump-aware operator's error from $5000$ to $40{,}000$ nodes, and
+through a smooth ring whose width and edges are both below $h$ they
+converge at fourth order on the nodes away from it. An imperfect contact
+costs strong-form schemes a derivative in the jump conditions, as Lombard
+and Piraux observed for elastic waves
+\cite{LombardPiraux2003,LombardPiraux2006}; the flux seeds add the functions
+of one degree higher that carry the flux, and nothing else. To our
+knowledge no earlier scheme builds the basis of stencils on an unchanged
+scattered node set through a smooth material edge thinner than the node
+spacing by marching ordinary differential equations; its ingredients (the
+exact face conductance, the formal powers, bases from local solutions of
+the equation) are each classical, and in one dimension so is the
+construction.
+
+We compared the seeds with the coefficient treatments of diffusion
+practice. The comparison is against coefficient sampling on the same nodes
+and against our implementation of the cell harmonic and arithmetic means, a
+widened edge and, in one dimension, the conservative scheme with exact face
+conductances, on one contrast and one test problem per dimension. Through an
+edge the grid does not resolve none of them is better than second order;
+the conservative scheme is exact at the one-dimensional equilibrium and, on
+the sinusoidal medium at $\delta = 0$, ahead of the seeds below 801 nodes,
+where the seeds' line is pre-asymptotic; on the scattered nodes none
+improves on sampling by more than a factor of 1.75 in the RMS norm, and the
+seeds lie 2.3 to 4.7 orders below the best of them over 1250 to 40,000
+nodes. What the seeds ask in return is a continuous description of the
+medium and a march for each row within $20\delta$ of an edge; they need no
+threshold on $h / \delta$.
 
 \section*{Acknowledgments}
 % Drafted by #52.
