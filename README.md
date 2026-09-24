@@ -81,7 +81,7 @@ reproduction tables are in `docs/port-notes.md` (§1.7 and §2.10). See
 | Path | Contents |
 | --- | --- |
 | `src/heat_interfaces/` | Library: `heat1d/` and `heat2d/` (domains, RBF-FD weights, interface-aware stencils, seeds, solvers, references, treatments), shared Fornberg weights, plotting style, results cache |
-| `scripts/` | Drivers for the figures; `publish_issues.py` |
+| `scripts/` | Drivers for the figures; the manuscript's `paper_data.py`, `paper_figures.py` (with `paper_tables.py`) and `paper_numbers.py`; `publish_issues.py` |
 | `tests/` | pytest suite (convergence orders and analytic comparisons) |
 | `docs/` | `plan.md`, `paper-index.md` (page ranges per PDF), `port-notes.md`, `stiff-diffusion.md`, `figures/` |
 | `papers/` | Index of reference PDFs with checksums and a fetch script; PDFs not committed |

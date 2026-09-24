@@ -42,8 +42,9 @@ has the checksums and `papers/fetch_papers.sh` verifies them.
 src/heat_interfaces/   library (filled in by the epics; module names are the plan's)
   fd_weights.py        Fornberg FD weights
   plotting.py          style; blue = interface-aware / seeds, orange = naive;
-                       use_print_style() for the manuscript
-  results_cache.py     JSON results cache the stiff drivers write (E5.3)
+                       use_print_style() and TEXTWIDTH for the manuscript
+  results_cache.py     the results files the stiff drivers write (schema 2: argv,
+                       git sha + dirty, tables); provenance, source_hash (E5.3)
   heat1d/              domain (grids; piecewise and smooth-edged media), interface
                        (continuity matrices, translated basis, stencil solve),
                        operators (naive Dx A Dx; jump-aware; seeds dispatch), solve,
@@ -61,8 +62,10 @@ src/heat_interfaces/   library (filled in by the epics; module names are the pla
                        fd4 (Cartesian Dx A Dx + Dy A Dy), resample (fine →
                        coarse through the fine stencils; cached references),
                        seeds (flat, tangential, the ring's flux seeds), treatments
-scripts/               drivers writing to outputs/; publish_issues.py;
-                       paper_figures.py and paper_numbers.py (E5.3)
+scripts/               drivers writing to outputs/; publish_issues.py; E5.3's
+                       paper_data.py (the documented runs → paper/data),
+                       paper_figures.py + paper_tables.py (paper/figures from
+                       paper/data), paper_numbers.py (the number check)
 tests/                 pytest; every numerical routine has one
 docs/                  plan.md, paper-index.md, port-notes.md (E1–E2 results and
                        decisions), stiff-diffusion.md (E3–E4, canonical for the
@@ -85,6 +88,9 @@ uv run ruff check . && uv run ruff format .
 uv run python scripts/publish_issues.py   # dry run of the tickets in docs/plan.md
 uv run python scripts/<driver>.py         # figures into outputs/ (defaults run in seconds;
                                           # sweeps sit behind flags and cache under outputs/)
+uv run python scripts/paper_data.py       # rerun the documented runs into paper/data (~10 min)
+uv run python scripts/paper_figures.py    # paper/figures from paper/data; --check for bytes
+uv run python scripts/paper_numbers.py    # every cache-backed number the text quotes
 (cd paper && SOURCE_DATE_EPOCH=0 tectonic main.tex)   # the manuscript, byte-stable
 (cd paper && uv run python make_arxiv.py)             # arXiv tarball; refuses drafts
 ```
