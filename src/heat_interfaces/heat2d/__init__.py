@@ -197,6 +197,7 @@ from .rbf import (
 )
 from .resample import Reference, reference_solution, resample
 from .seeds import (
+    PIECE_TOL,
     SAMPLE_HALF,
     SAMPLE_STEP,
     SEED_DEGREE,
@@ -211,9 +212,12 @@ from .seeds import (
     block_condition,
     chain,
     coupled_chain,
+    diagonal_share,
     flux_exponents,
     foot_coordinates,
+    gaussian_choice,
     nearest_interface,
+    on_piece,
     saddle_system,
     seed_basis,
     seed_coordinates,
@@ -399,6 +403,7 @@ __all__ = [
     "reduced_system",
     "solve_iterative",
     "OPERATOR_MODES",
+    "PIECE_TOL",
     "SAMPLE_HALF",
     "SAMPLE_STEP",
     "SEED_DEGREE",
@@ -426,6 +431,9 @@ __all__ = [
     "tangential_profiles",
     "seeded_rows",
     "weights_of",
+    "diagonal_share",
+    "gaussian_choice",
+    "on_piece",
     "DISC_GAUSS",
     "NodalAlpha2D",
     "arithmetic_discs",

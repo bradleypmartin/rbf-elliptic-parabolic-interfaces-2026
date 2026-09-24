@@ -1,5 +1,6 @@
 """The E4.8 driver: the ring's sweeps, their cache, the far read, the refusals."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
+import heat2d_ring  # noqa: E402
 from heat2d_ring import (  # noqa: E402
     CACHE,
     RESULTS,
@@ -19,11 +21,15 @@ from heat2d_ring import (  # noqa: E402
     without_gap,
 )
 from heat_interfaces.heat2d import (  # noqa: E402
+    INTERFACE_KIND,
+    PIECE_TOL,
     RingMode,
     SmoothBand,
     SmoothRingMode,
     build_node_set,
     case3,
+    operators,
+    seed_operator,
 )
 
 
@@ -97,6 +103,62 @@ def test_main_runs_the_four_parts_and_reuses_its_cache(tmp_path, capsys):
     assert again["conditioning"] == tables["conditioning"]
 
 
+def test_the_plain_built_fine_run_is_read_as_a_second_reference(
+    tmp_path, capsys, monkeypatch
+):
+    # One seeded row in 20 keeps the four fine and coarse builds to seconds; the
+    # rows themselves are pinned by the seed-variant test below.
+    every = operators.seeded_rows
+
+    def sparse(nodes_, material_, index, reach=operators.TANH_REACH):
+        seen = every(nodes_, material_, index, reach)
+        kept = np.zeros_like(seen)
+        kept[np.flatnonzero(seen)[::20]] = True
+        return kept
+
+    monkeypatch.setattr(heat2d_ring, "seeded_rows", sparse)
+    monkeypatch.setattr(operators, "seeded_rows", sparse)
+    argv = [
+        "--counts",
+        "--conditioning-n",
+        "0",
+        "--deltas",
+        "0.00025",
+        "--smooth-s",
+        "1e3",
+        "--probe-counts",
+        "1250",
+        "--fine-n",
+        "2500",
+        "--plain-fine",
+        "1e3:0.00025",
+        "--iterations",
+        "20",
+        "--outputs",
+        str(tmp_path),
+    ]
+    tables = main(argv)
+    out = capsys.readouterr().out
+    assert "error against the plain-built fine run" in out
+    assert "the two fine runs differ" in out
+    plain = heat2d_ring.reference_file(tmp_path, 1e3, 0.00025, 2500, 0, "seeds-plain")
+    assert plain.name.endswith("_seed0_plain.npz") and plain.exists()
+    (row,) = tables["smooth"]["1e3|0.00025"]
+    seeds, against = row["error-seeds"], row["error-seeds|seeds-plain"]
+    # One solve, two reads through the same fine nodes: the share is the same,
+    # the error is not.
+    assert against["far-share"] == seeds["far-share"]
+    assert against["far"] != seeds["far"]
+    gap = tables["fine-gap"]["1e3|0.00025"]
+    assert 0.0 < gap["rms"] <= gap["max"]
+    # The seeds' fine run keeps E4.8's key; the second one's is suffixed.
+    keys = json.loads((tmp_path / CACHE).read_text())["entries"]
+    assert "error|1000.0|0.00025|1250|seeds|2500|0|20" in keys
+    assert "error|1000.0|0.00025|1250|seeds|2500|0|20|seeds-plain" in keys
+    again = main(argv)
+    assert again["smooth"] == tables["smooth"]
+
+
 @pytest.mark.parametrize(
     "argv",
     [
@@ -107,6 +169,9 @@ def test_main_runs_the_four_parts_and_reuses_its_cache(tmp_path, capsys):
         ["--counts", "--probe-counts", "2500", "--fine-n", "2500"],
         ["--counts", "--conditioning-n", "900"],
         ["--counts", "--spectrum-n", "900"],
+        ["--counts", "--plain-fine", "1e3:0.001"],
+        ["--counts", "--fine-n", "5000", "--plain-fine", "1e11:0.001"],
+        ["--counts", "--fine-n", "5000", "--plain-fine", "1e3"],
     ],
 )
 def test_main_refuses_what_it_cannot_run(tmp_path, argv):
@@ -118,3 +183,44 @@ def test_main_refuses_what_it_cannot_run(tmp_path, argv):
 def test_the_driver_uses_case_3_bit_for_bit_at_s_1000():
     a, b = ring_domain(1e3, 0.0).material, case3().material
     assert a == b
+
+
+def test_the_seed_variants_are_seed_operators_rows_from_one_march(monkeypatch):
+    # E4.12: the seeds (the rule), E4.8's warp on every row and plain Gaussians
+    # from one march per row are seed_operator's three operators to the bit.
+    # Six rows of the δ = 0.0025 set are seeded (four anchored off their piece,
+    # two on it), so the check marches in seconds.
+    domain = ring_domain(1e3, 0.0025)
+    material = domain.material
+    nodes = build_node_set(domain, 2500, seed=0, iterations=20)
+    (group,) = [
+        g for g in reach_stencils(nodes, domain).groups if g.kind == INTERFACE_KIND
+    ]
+    seen = operators.seeded_rows(nodes, material, group.index)
+    anchors = group.index[:, 0]
+    np.testing.assert_array_equal(anchors, group.rows)
+    x, y = nodes.x[anchors], nodes.y[anchors]
+    off = np.abs(np.log(material.alpha(x, y) / material.band.alpha(x, y))) > PIECE_TOL
+    picked = np.concatenate(
+        [
+            anchors[seen & off][:: max(1, (seen & off).sum() // 4)][:4],
+            anchors[seen & ~off][:2],
+        ]
+    )
+
+    def few(nodes_, material_, index, reach=None):
+        return np.isin(index[:, 0], picked)
+
+    monkeypatch.setattr(heat2d_ring, "seeded_rows", few)
+    monkeypatch.setattr(operators, "seeded_rows", few)
+    built = heat2d_ring.seed_variants(tuple(heat2d_ring.SEED_VARIANTS), nodes, domain)
+    stencils = reach_stencils(nodes, domain)
+    for label, (warp, edge_rule) in heat2d_ring.SEED_VARIANTS.items():
+        op = seed_operator(
+            nodes, material, stencils, warp=warp, tangential=True, edge_rule=edge_rule
+        )
+        assert (built[label][0] != op).nnz == 0
+        assert built[label][1]["rows"] == 6
+    assert built["seeds"][1]["plain"] > 0
+    assert built["seeds-warp"][1]["plain"] == 0
+    assert built["seeds-plain"][1]["plain"] == 6
