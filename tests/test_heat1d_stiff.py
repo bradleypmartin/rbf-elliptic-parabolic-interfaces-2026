@@ -96,6 +96,10 @@ def test_main_builds_checks_and_then_reuses_the_references(tmp_path, capsys):
     assert set(picture["solutions"]) == set(SNAPSHOT_OPERATORS)
     assert len(picture["x"]) == len(picture["u"]) == 100
     assert len(picture["x_fine"]) == len(picture["u_fine"]) == 2001
+    seeds = {r["label"]: r for r in results["tables"]["snapshot"]["rows"]}["seeds"]
+    assert max(abs(e) for e in picture["errors"]["seeds"]) == pytest.approx(
+        seeds["max"], rel=1e-5
+    )
     assert len(results["tables"]["references"]) == 2
     for delta in (0.0, 0.0025):
         for n, w in ((N_CHEB, MAX_WIDTH), (CHECK_N_CHEB, CHECK_MAX_WIDTH)):

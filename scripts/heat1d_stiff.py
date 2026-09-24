@@ -1252,7 +1252,11 @@ def snapshot(
 
 
 def snapshot_curves(data: dict) -> dict:
-    """``snapshot``'s arrays to six figures: the manuscript's figure's (E5.3)."""
+    """``snapshot``'s arrays to six figures: the manuscript's figure's (E5.3).
+
+    The nodal errors are stored as well as the solutions: the seeds' 3e-8 is
+    below six figures of ``u``, so their difference would be rounding.
+    """
     return {
         "x": rounded(data["x"]),
         "u": rounded(data["u"]),
@@ -1261,6 +1265,7 @@ def snapshot_curves(data: dict) -> dict:
         "alpha_fine": rounded(data["alpha_fine"]),
         "centres": rounded(data["centres"]),
         "solutions": {k: rounded(u) for k, u in data["solutions"].items()},
+        "errors": {k: rounded(u - data["u"]) for k, u in data["solutions"].items()},
     }
 
 

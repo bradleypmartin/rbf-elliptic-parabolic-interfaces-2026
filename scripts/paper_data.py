@@ -51,9 +51,8 @@ COUNTS_40K = ("1250", "2500", "5000", "10000", "20000", "40000")
 COUNTS_160K = (*COUNTS_40K, "80000", "160000")
 SEED_COUNTS = ("1250", "2500", "5000", "10000", "20000")
 
-CODE = ("src/heat_interfaces", "scripts/heat*.py")
-"""What a results file's numbers are computed by: the package and the drivers
-(the ring's imports ``heat2d_extremes``'s). ``stale`` lists what moved."""
+IMPORTS = {"heat2d_ring.py": ("heat2d_extremes.py",)}
+"""The drivers a driver imports (``Run.code``)."""
 
 
 @dataclass(frozen=True)
@@ -68,6 +67,12 @@ class Run:
     @property
     def driver(self) -> str:
         return Path(self.script).stem
+
+    @property
+    def code(self) -> tuple[str, ...]:
+        """What the file's numbers are computed by: the package and its driver's."""
+        scripts = (self.script, *IMPORTS.get(self.script, ()))
+        return ("src/heat_interfaces", *(f"scripts/{s}" for s in scripts))
 
     def line(self) -> str:
         return " ".join(["scripts/" + self.script, *self.argv])
@@ -241,14 +246,20 @@ def verify(data_dir: Path = DATA, root: Path = ROOT) -> list[str]:
 
 
 def stale(data_dir: Path = DATA, root: Path = ROOT) -> dict[str, list[str]]:
-    """``{commit: files under CODE changed since it}`` for the files' commits."""
+    """``{file: its run's code changed since the file's commit}``, where any did.
+
+    Informational (``changed_since``): the working caches key on labels, so a
+    rerun after such a change may reprint the same numbers; the reader judges.
+    """
     out: dict[str, list[str]] = {}
-    for path in sorted(Path(data_dir).glob("*.json")):
+    for run in RUNS:
+        path = Path(data_dir) / run.results
+        if not path.exists():
+            continue
         sha = (read_results(path).get("git") or {}).get("sha")
-        if sha and sha not in out:
-            changed = changed_since(sha, CODE, root)
-            if changed:
-                out[sha] = changed
+        changed = changed_since(sha, run.code, root) if sha else []
+        if changed:
+            out[run.results] = changed
     return out
 
 

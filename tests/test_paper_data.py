@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from heat_interfaces.results_cache import SCHEMA, ResultsCache, git_state  # noqa: E402
-from paper_data import BY_NAME, ROOT, RUNS, main, verify  # noqa: E402
+from paper_data import BY_NAME, ROOT, RUNS, main, stale, verify  # noqa: E402
 
 
 def test_the_runs_are_the_notes_documented_commands():
@@ -94,3 +94,26 @@ def test_the_list_runs_from_the_command_line():
         check=True,
     ).stdout
     assert "heat2d_ring_results.json" in out
+
+
+def test_stale_names_each_files_changed_code(tmp_path):
+    # A file's run is computed by the package and its own driver (the ring's
+    # and heat2d_extremes'); another driver's change does not concern it.
+    ring = BY_NAME["heat2d_ring_results.json"]
+    assert ring.code == (
+        "src/heat_interfaces",
+        "scripts/heat2d_ring.py",
+        "scripts/heat2d_extremes.py",
+    )
+    head = git_state(ROOT)["sha"]
+    _file(tmp_path, ring, git={"sha": head, "dirty": False})
+    # At HEAD only uncommitted edits to the ring's own code could show.
+    assert all(f.startswith(ring.code) for f in stale(tmp_path).get(ring.results, []))
+    first = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-list", "--max-parents=0", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()[0]
+    _file(tmp_path, ring, git={"sha": first, "dirty": False})
+    assert "scripts/heat2d_ring.py" in stale(tmp_path)[ring.results]
