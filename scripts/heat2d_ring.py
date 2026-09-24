@@ -1268,7 +1268,7 @@ def main(argv: Sequence[str] | None = None) -> dict:
         parser.error("--plain-fine takes s:δ pairs that have a fine seed run")
     args.outputs.mkdir(parents=True, exist_ok=True)
     cache = load_cache(args.outputs)
-    results = ResultsCache("heat2d_ring", vars(args))
+    results = ResultsCache("heat2d_ring", vars(args), argv)
     tables: dict = {}
 
     if args.counts:

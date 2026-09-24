@@ -171,7 +171,17 @@ def test_the_spectra_at_900_nodes(tmp_path, capsys):
     assert (tmp_path / "heat2d_stiff_spectra_n900.png").exists()
     assert (tmp_path / "heat2d_stiff_eigenvalues_spectra_n900.json").exists()
     assert (tmp_path / "heat2d_stiff_spectra_n900_d0.005_i100_s0.npz").exists()
+    # E5.3: the command line, and the eigenvalues the manuscript's figure draws.
+    written = read_results(tmp_path / "heat2d_stiff_eigenvalues_spectra_n900.json")
+    assert written["argv"] == argv
+    figure = written["tables"]["spectra/figure"]
+    assert figure["delta"] == 0.005 and figure["n"] == 900
+    assert set(figure["eigenvalues"]) == set(LABELS)
     table = {(r["delta"], r["label"]): r for r in rows}
+    for label, lam in figure["eigenvalues"].items():
+        row = table[(0.005, label)]
+        assert len(lam["re"]) == len(lam["im"]) == row["count"]
+        assert max(lam["re"]) == pytest.approx(row["max_re"], rel=1e-5)
     for delta in (0.0, 0.005):
         naive, seeds = table[(delta, "naive")], table[(delta, "seeds")]
         assert naive["positive"] >= 1 and naive["max_re"] > 100
