@@ -85,7 +85,7 @@ def _prose(tex: str) -> str:
 
 def test_the_conclusions_quote_the_claim_sentences_verbatim():
     tex = (PAPER / "main.tex").read_text(encoding="utf-8")
-    conclusions = tex.split("\\subsection{Conclusions}", 1)[1].split("\\section*", 1)[0]
+    conclusions = tex.split("\\subsection{Conclusions}", 1)[1].split("\\appendix", 1)[0]
     sentences = _claim_sentences()
     assert len(sentences) == 4
     prose = _prose(conclusions)
@@ -108,4 +108,6 @@ def test_the_manuscript_avoids_the_wording_the_ledger_rules_out():
         "kapitza",
         "flux must be one degree higher",
     ]
-    assert [w for w in ruled_out if w in prose] == []
+    # Whole words: the disclosure's "claims novelty" names the author's role.
+    found = [w for w in ruled_out if re.search(rf"\b{re.escape(w)}\b", prose)]
+    assert found == []

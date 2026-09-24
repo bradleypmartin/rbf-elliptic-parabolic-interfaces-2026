@@ -34,7 +34,7 @@ Each check names where the quoted figure stands, ``stiff §5.3 (4)``: the notes
 section and statement, or for the construction's own tables that §3 of the
 manuscript quotes, the section and the prediction of the notes' §1.9 that the
 table answers (``stiff §2.3 P4``). The drafting tickets (E5.4–E5.9, #45–#50) prepend the
-manuscript section when the text quotes a number (``§6.4; stiff §5.3 (4)``)
+manuscript section when the text quotes a number (``§6.3; stiff §5.3 (4)``)
 and add a check for any cache-backed number the text quotes that is not here;
 numbers the notes take from elsewhere (scratch runs, the port notes, timings)
 are listed as skipped under each statement's block and carry their ``%
@@ -269,7 +269,7 @@ def one_d(f: Files, b: Book) -> None:
     # E5.6 (#47): §1 had "800 to 1000 times", a round range the ratios miss at
     # its low end; §1 and §4.2 now quote the measured ones.
     b.span(
-        cited(w, "§1"),
+        cited(w, "§4.2"),
         "the drop across the knee, eq. 75",
         [d for m, d in drops if m == "eq75"],
         "770",
@@ -376,7 +376,7 @@ def one_d(f: Files, b: Book) -> None:
         (0.04, "3", "5"),
     ):
         b.span(
-            cited(w, "§1", "§4.4"),
+            cited(w, "§1", "§4.4") if delta == 0.04 else cited(w, "§4.4"),
             f"seeds off the δ = 0 line, %, δ = {delta:g}, 50–400",
             [100 * abs(lines[delta][n] / lines[0.0][n] - 1) for n in MATLAB_COUNTS[:4]],
             low,
@@ -471,7 +471,7 @@ def one_d(f: Files, b: Book) -> None:
     )
     # δ = 0's is LITERATURE.md §6b's caveat, which the abstract and §1 quote.
     for delta, quoted, where in (
-        (0.0, "801", cited(w, "abstract", "§1", "§4.5", "§7.1", "§7.3")),
+        (0.0, "801", cited(w, "§1", "§4.5", "§7.1", "§7.3")),
         (0.0025, "201", cited(w, "§4.5")),
     ):
         rows = comparators_1d(f, "ramp", "eq75", delta)
@@ -1249,7 +1249,9 @@ def naive_knee(f: Files, b: Book) -> None:
         "0.37",
     )
     jump = column(ell[0.0], "naive/rms")
-    b.eq(w6, "the jump's RMS falls, 1250 → 160,000", jump[1250] / jump[160000], "20")
+    # E5.10: the flux stalls over 10,000–160,000, and the RMS falls 6× there (the
+    # notes' 20× was 1250 → 160,000).
+    b.eq(w6, "the jump's RMS falls, 10,000 → 160,000", jump[10000] / jump[160000], "6")
     # Corrected by E5.3: the notes had "4–5 %"; δ = 0.0025 at 160,000 is 3.5 %.
     b.span(
         w6,
@@ -1365,7 +1367,7 @@ def seeds_flat(f: Files, b: Book) -> None:
     30 / 4 groups (1.30e-6, 8.40e-6, 1.76e-7: §5.6's scratch).
     """
     w = "stiff §5.3 (4)"
-    w6 = cited(w, "§6.4")
+    w6 = cited(w, "§6.3")
     stencils = f(STENCILS, "stencils")
     (case1,) = [r for r in stencils["jump_limit"] if r["material"] == "case 1"]
     b.eq(
@@ -1387,7 +1389,7 @@ def seeds_flat(f: Files, b: Book) -> None:
         "4.77",
     )
     for problem, quoted, where in (
-        ("elliptic", ("4.23", "4.31", "4.23", "4.48"), cited(w, "§1", "§6.4", "§7.3")),
+        ("elliptic", ("4.23", "4.31", "4.23", "4.48"), cited(w, "§1", "§6.3")),
         ("parabolic", ("4.22", "4.28", "4.18", "4.44"), w6),
     ):
         b.each(
@@ -1427,7 +1429,7 @@ def seeds_flat(f: Files, b: Book) -> None:
             n: max(c[n] for c in lines) / min(c[n] for c in lines) for n in COUNTS_40K
         }
     b.span(
-        cited(w, "§1", "§6.4", "§7.3"),
+        cited(w, "§6.3"),
         "the five widths' spread at every count, elliptic",
         spreads["elliptic"].values(),
         "1.2",
@@ -1440,13 +1442,13 @@ def seeds_flat(f: Files, b: Book) -> None:
     )
     row = at(sweep(f, SEEDS, "elliptic", 0.0025), 40000)
     b.eq(
-        cited(w, "§1", "§6.4", "§7.3"),
+        cited(w, "§6.3"),
         "seeds at 40,000, δ = 0.0025",
         row["seeds/rms"],
         "7.99e-9",
     )
     b.eq(
-        cited(w, "§1", "§6.4", "§7.3"),
+        cited(w, "§6.3"),
         "naive at 40,000, δ = 0.0025",
         row["naive/rms"],
         "8.36e-5",
@@ -1475,7 +1477,7 @@ def seeds_flat(f: Files, b: Book) -> None:
     ):
         row = at(sweep(f, SEEDS, problem, 0.04), n)
         b.eq(
-            w6,
+            cited(w, "§5.2", "§6.3") if quoted == "1.15" else w6,
             f"seeds ÷ naive at δ = 0.04, {n}, {problem}",
             row["seeds/rms"] / row["naive/rms"],
             quoted,
@@ -1587,7 +1589,7 @@ def elliptic_ranks(f: Files, b: Book) -> None:
     b.eq(w, "2-D seeds at equilibrium, 1250", seeds[1250], "1.6e-5")
     b.eq(w, "2-D seeds at equilibrium, 40,000", seeds[40000], "5.3e-9")
     b.span(
-        cited(w, "§6.4"),
+        cited(w, "§6.3"),
         "parabolic ÷ elliptic at 40,000, every δ",
         [
             at(sweep(f, SEEDS, "parabolic", d), 40000)["seeds/rms"]
@@ -1600,7 +1602,7 @@ def elliptic_ranks(f: Files, b: Book) -> None:
     for delta, quoted in ((0.0, "2000"), (0.0025, "670")):
         flux = column(sweep(f, SEEDS, "elliptic", delta), "seeds/flux")
         b.eq(
-            cited(w, "§6.4"),
+            cited(w, "§6.3"),
             f"the seeds' flux reading falls, 1250 → 40,000, δ = {delta:g}",
             flux[1250] / flux[40000],
             quoted,
@@ -1611,7 +1613,7 @@ def solvability(f: Files, b: Book) -> None:
     """Statement (6): solvability and spectra (§4.4; H5, H6). Skipped: SuperLU's
     0.04–0.06 s (timings) and 'every solve converged' (not a number)."""
     w = "stiff §5.3 (6)"
-    w6 = cited(w, "§6.3")
+    w6 = cited(w, "§6.4")
     rows = {
         n: f(name, "rows")
         for n, name in (
@@ -1709,7 +1711,7 @@ def solvability(f: Files, b: Book) -> None:
 def warp(f: Files, b: Book) -> None:
     """Statement (7): the warp (§4.5–§4.7; H7)."""
     w = "stiff §5.3 (7)"
-    w6 = cited(w, "§6.4")
+    w6 = cited(w, "§6.3")
     ell = {d: sweep(f, SEEDS, "elliptic", d) for d in (0.0, *WIDTHS)}
     jump = column(ell[0.0], "seeds-plain/rms")
     seeds = column(ell[0.0], "seeds/rms")
@@ -1740,7 +1742,7 @@ def warp(f: Files, b: Book) -> None:
         "7.9",
     )
     b.le(
-        w6,
+        cited(w, "§5.2", "§6.3"),
         "warped ÷ plain where the warp loses, both problems",
         max(
             r["seeds/rms"] / r["seeds-plain/rms"]
@@ -1842,7 +1844,7 @@ def curved_feature(f: Files, b: Book) -> None:
         if r["n"] >= 5000 and r["problem"] == "elliptic"
     ]
     b.span(
-        cited(w, "§1", "§6.5", "§7.3"),
+        cited(w, "§1", "§6.5"),
         "the chain over the flat seeds from 5000, RMS",
         flat_ratio(chain, "tangential"),
         "1.4",
@@ -1951,7 +1953,7 @@ def ring(f: Files, b: Book) -> None:
     w6 = cited(w, "§6.6")
     zero = [r for r in f(RING, "conditioning") if r["delta"] == 0.0]
     b.span(
-        cited(w, "§1", "§6.6"),
+        cited(w, "§6.6"),
         "the seeds' worst residual on the matched profile, every s",
         [r["seeds-worst"] for r in zero],
         "1.3e-15",
@@ -1981,7 +1983,7 @@ def ring(f: Files, b: Book) -> None:
     b.eq(w6, "E2.3's system at s = 1e11", top["e23-system-mean"], "2.7e13")
     convergence = {float(s): rows for s, rows in f(RING, "convergence").items()}
     b.span(
-        cited(w, "§6.6", "§7.3"),
+        w6,
         "seeds ÷ E2.3, 5000–40,000, every s",
         [
             r["seeds"]["full"] / r["construction"]["full"]
@@ -1993,7 +1995,7 @@ def ring(f: Files, b: Book) -> None:
         "0.97",
     )
     for label, low, high, where in (
-        ("seeds", "4.43", "4.71", cited(w, "§1", "§6.6", "§7.3")),
+        ("seeds", "4.43", "4.71", cited(w, "§1", "§6.6")),
         ("construction", "4.08", "4.13", w6),
     ):
         b.span(
@@ -2172,7 +2174,7 @@ def treatments(f: Files, b: Book) -> None:
                     continue
                 gains.extend(1 / r[label] for label in TREATMENT_LABELS)
     b.le(
-        cited(w, "abstract", "§1", "§1.1", "§6.7", "§7.3"),
+        cited(w, "§1", "§1.1", "§6.7", "§7.3"),
         "the most a treatment beats sampling by, RMS, anywhere",
         max(gains),
         "1.75",
@@ -2274,16 +2276,27 @@ def treatments(f: Files, b: Book) -> None:
         if r["delta"] == 0.0
     }
     b.eq(
-        cited(w, "abstract", "§1", "§6.7", "§7.3"),
+        w6,
         "the seeds' lead over the best treatment at 1250, orders",
         orders[1250],
         "2.3",
     )
-    b.eq(
-        cited(w, "abstract", "§1", "§6.7", "§7.3"),
-        "… at 40,000",
-        orders[40000],
-        "4.7",
+    b.eq(w6, "… at 40,000", orders[40000], "4.7")
+    # E5.10 (#51): the caveat quoted case 1's parabolic line at the jump as the
+    # whole lead. Over both cases, both problems and every width H12 measures
+    # (the jump; δ = 0.005 and 0.0025 while h ≥ 4δ) it is 1.6 to 4.9.
+    leads = [
+        r["orders"]
+        for name in TREATMENTS.values()
+        for p in PROBLEMS
+        for r in f(name, f"h12/{p}/rms")
+    ]
+    b.span(
+        cited(w, "§1", "§6.7", "§7.3"),
+        "the seeds' lead over the best treatment, both cases and problems, orders",
+        leads,
+        "1.6",
+        "4.9",
     )
 
 
@@ -2400,9 +2413,9 @@ def results_2d(f: Files, b: Book) -> None:
         "0.89",
     )
 
-    # H5 and H6: the matrices (§6.3).
+    # H5 and H6: the matrices (§6.4).
     rows = f("heat2d_stiff_eigenvalues.json", "rows")
-    w = cited("stiff §4.4 H5", "§6.3")
+    w = cited("stiff §4.4 H5", "§6.4")
     for label, low, high in (
         ("construction", "1.3e4", "1.7e4"),
         ("naive", "2.0e4", "5.5e4"),
@@ -2437,7 +2450,7 @@ def results_2d(f: Files, b: Book) -> None:
         ),
         "0",
     )
-    w = cited("stiff §4.4 H6", "§6.3")
+    w = cited("stiff §4.4 H6", "§6.4")
     (naive,) = [
         r
         for r in f("heat2d_stiff_eigenvalues.json", "spectra")
@@ -2448,8 +2461,8 @@ def results_2d(f: Files, b: Book) -> None:
     )
     b.eq(w, "… and BD4's largest root there", naive["bd4"], "1.038")
 
-    # H4 and H8: the flat sweep (§6.4).
-    w = cited("stiff §4.5 H4", "§6.4")
+    # H4 and H8: the flat sweep (§6.3).
+    w = cited("stiff §4.5 H4", "§6.3")
     lines = {d: sweep(f, SEEDS, "elliptic", d) for d in (0.0, *WIDTHS)}
     b.span(
         w,
@@ -2473,7 +2486,7 @@ def results_2d(f: Files, b: Book) -> None:
                 fit(lines[delta], f"{label}/rms"),
                 quoted,
             )
-    w = cited("stiff §4.5 H8", "§6.4")
+    w = cited("stiff §4.5 H8", "§6.3")
     for delta, quoted in ((0.0, "6"), (0.0025, "25"), (0.01, "61"), (0.04, "100")):
         b.eq(
             w,

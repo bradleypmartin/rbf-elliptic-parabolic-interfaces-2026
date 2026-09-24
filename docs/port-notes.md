@@ -2160,7 +2160,9 @@ otherwise) and ours from the section's table.
 
 Every figure in the plan's list therefore has a regenerating twin except
 Fig. 5-22, which was taken out of scope; the lines that 2016 drew are all
-here at their 2016 rates or better, and the six places where the numbers
+here at their 2016 rates or better but one, Fig. 5-17's (2.83 against 3.1;
+*E5.10's audit: this had read "all"*; 5-9's FD4 at 1.34 against 1.37 and
+5-16 are within reading accuracy), and the six places where the numbers
 part company are listed next.
 
 **The 2016 discrepancies**, stated without a theory. The 2016 2-D code is

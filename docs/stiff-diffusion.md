@@ -830,7 +830,8 @@ Two regimes, and the prediction covered only the first:
   construction converges to the *jump's* solution, and its error is the
   distance between the two problems, first order in δ: the elliptic floor
   is 0.73–0.75 δ on the MATLAB medium (2.92e-2, 7.47e-3, 1.88e-3), the
-  ramp's at t = 2 is 0.28 δ (1.14e-2, 2.87e-3, 7.19e-4), the
+  ramp's at t = 2 is 0.29 δ (1.14e-2, 2.87e-3, 7.19e-4; *E5.10's audit: this
+  had read 0.28*), the
   "time-dependent constant" of §1.7 measured at one time. On eq. 75 the
   floors are 0.76 δ, 1.20 δ, 1.44 δ (elliptic) and 0.68 δ, 1.06 δ, 1.28 δ
   (ramp): not proportional to δ at these widths, for the reason the next
@@ -1119,7 +1120,9 @@ that section said the 800-node points would. The construction's δ =
 0.0025 line is on its floor (7e-4) to 400 nodes, seven orders above the
 seeds there and ten once h ≤ δ; the naive line crosses the seed line
 nowhere. On eq. 75 the
-reading of P6 repeats: δ = 0.04 (every row seeded) is the fourth-order
+reading of P6 repeats: δ = 0.04 (every row within 20δ = 0.8 of an edge
+seeded, all but those near x = −1, where α = 1; *E5.10's audit: this had
+read "every row seeded"*) is the fourth-order
 line 2.6e-8 → 2e-11 (4.09, 3.79, then the reference's 2–6e-11 floor), δ =
 0.01 has the plain rows' 1.4e-8 at 201 nodes (1.7e-9 with every row
 seeded) and is fourth order past it, δ = 0.0025 runs 2.7 → 4.0, and δ = 0
@@ -1286,7 +1289,8 @@ the direct solve's growth that the seed line shows too (§2.3); the
 discrete flux equals `equilibrium_flux` at every face to 2e-12
 (`test_the_face_conductance_scheme_is_exact_at_equilibrium`). Second order
 in the ramp problem at every δ with one constant: on the MATLAB medium the
-δ = 0, 0.01 and 0.0025 columns agree to 1 % at every count and the δ = 0.04
+δ = 0, 0.01 and 0.0025 columns agree to 1.2 % at every count (*E5.10's
+audit: this had read 1 %*) and the δ = 0.04
 one (1.40e-4 → 1.35e-7) sits 7 % above them; on eq. 75 the rate is 2.00
 at every δ from 401 nodes on but the constant moves with δ by up to 40 %
 (6.47e-8, 3.93e-8, 4.62e-8, 4.99e-8 at 1601 nodes for δ = 0, 0.04, 0.01,
@@ -1578,8 +1582,9 @@ their numbers and where they were measured:
    half the total at 100 nodes and a quarter from 200 (it is the 6.4). At
    equilibrium the seeds are exact to solver precision at every δ (P6:
    below 1e-12 to 400 nodes, then the direct solve's own growth). The
-   seeds are E1.2's operator at δ = 0 on constant pieces (2e-14 in the
-   weights, 3e-15 in the functions above) and need no δ to be switched
+   seeds are E1.2's operator at δ = 0 on constant pieces (7e-16 in the
+   weights on §1.4's window, P4; *E5.10's audit: this had read 2e-14*;
+   3e-15 in the functions above) and need no δ to be switched
    off: §2.2's `h ≲ 2δ` regime costs them nothing. On eq. 75 the seeded
    rows are exact where the reach covers the layer and the line is the
    plain rows' sinusoid line, still pre-asymptotic at these counts (rates
@@ -1890,7 +1895,7 @@ differences are in the bookkeeping of a scattered stencil.
 - **α on each segment from the smooth medium's normal profile**, and at
   δ = 0 from the piece of the region the segment lies in, so the
   evaluation is one-sided at a jump and the march reproduces E2.3's
-  algebra (H2) the way the 1-D march reproduced E1.2's to 2e-14 (§2.3).
+  algebra (H2) the way the 1-D march reproduced E1.2's to 7e-16 (§2.3, P4).
   The 2-D medium therefore needs the "smooth piece per region" contract
   of `Medium1D.elements`: `region_piece(j).alpha` on a segment, never the
   blend, when δ = 0.
@@ -2232,7 +2237,7 @@ radial quadratic on the ring.
 | H9 | **Route (a) reproduces the flat numbers** at δ ≥ 0.005 for n ≥ 5000 and shows its geometric floor `κ r²/2` (§3.5's table) at δ = 0.0025 on the coarse sets as a factor ≤ 1.5 above the flat line; the seed rows' residual on the true curved solution (E4.7's probe) converges at the bulk rows' rate; the tangential-α term of case 2's inside piece changes the constant, not the order. Route (a′) is built only if the probe's residual stalls. *Fails (§4.6): the probe stalls on both terms; E4.11. Answered by E4.11 (§3.10, §4.7): the tangential chain reproduces the flat numbers within 1.4–3.9× from 5000 nodes at every δ, and its probe converges at 2.7–3.6.* | the curved sweep against the flat one at equal δ; the residual probe | E4.7 |
 | H10 | **The 2-D knee** (P2's twin, measured first): naive `Dx A Dx + Dy A Dy` on scattered nodes is first order while `h ≳ δ` and fourth order once `h ≲ δ`, elliptic and parabolic; the δ = 0 construction sits on an O(δ) floor (the two references' difference, exact from the separable solves) for `h ≳ 2δ` and grows once the grid resolves the edge (§2.2); what separates resolved from unresolved most sharply is the flux jump across the edge read from the discrete solution. Watch the naive operator's coarse-set growing mode (+847 at 900 nodes, +17.7 at 1250) before quoting a parabolic naive number. | the naive and construction lines of the flat sweep | E4.3, E4.6 |
 | H11 | **The ring**: the seed march through both edges reproduces E2.9's s = 10³ line at δ = 0 (the Fig. 19 twin) and the matched radial residual stays at or below port notes §2.9's worst-stencil line at every s (the fit `1.5e-18 s`, not the single s = 10¹¹ point 1.4e-7), with no `O(s κ² scale)` term; the raw seed block conditions like `s w/h_s` (one column) and O(1) column-scaled; the march floor of §3.3 is the first limit to appear, at the largest s and smallest δ, and the stored width's 8e-8 the second. *Answered by E4.8 (§3.11, §4.8): the seeds are exact on the matched profile to rounding at every s (1.3–2.1e-15 at 10,000 nodes, E2.3 1.36e-7 at 10¹¹), their block and system condition independently of s (`s w = 1` on eq. 40: the `s w/h_s` above took w = 0.001), no march floor appears, and the stored width floors nothing once the ring carries its `gap` (without it the stops lose digits like s, 1.2e-10 at 10¹¹). Fig. 19's twin needed the flux seeds and φ₀₁'s level 0 as the warp, and is then fourth order at every s, 0.48–0.97× E2.3 from 5000 nodes.* | `matched_residual` per (s, δ); Fig. 20's twin with a seeds line | E4.8 |
-| H12 | **The comparators** (P10's twin): the disc harmonic and arithmetic means and the widened edge cap the naive operator at second order once `h ≲ δ/4` and are first order while the edge is unresolved; T0 is the worst, sitting on the widened floor; there is no conservative scheme on scattered nodes, so T1-FV has no twin and the strongest low-order comparator is the two-cell disc harmonic mean; the seeds are 3–4 orders below every treatment at δ ≤ h/4 on the parabolic problem. The ranking is quoted in the RMS norm with the max norm beside it. *Answered by E4.9 (§4.9): the disc means cap the naive product at second order once resolved (the r²/8 term, measured), and T0 is then the naive line; the radius-h means and T0 are first order while unresolved, T0 the worst on its own floor; but the two-cell disc harmonic mean is not the strongest comparator. It is 1.6–3.4× above plain sampling at the jump, and no treatment beats sampling by more than 1.75× anywhere; the half-spacing means help only while h ≳ 2–3δ. The seeds' lead over the best treatment grows from 2.3 to 4.7 orders over 1250–40,000 nodes.* | the comparator tables per δ, elliptic and parabolic | E4.9 |
+| H12 | **The comparators** (P10's twin): the disc harmonic and arithmetic means and the widened edge cap the naive operator at second order once `h ≲ δ/4` and are first order while the edge is unresolved; T0 is the worst, sitting on the widened floor; there is no conservative scheme on scattered nodes, so T1-FV has no twin and the strongest low-order comparator is the two-cell disc harmonic mean; the seeds are 3–4 orders below every treatment at δ ≤ h/4 on the parabolic problem. The ranking is quoted in the RMS norm with the max norm beside it. *Answered by E4.9 (§4.9): the disc means cap the naive product at second order once resolved (the r²/8 term, measured), and T0 is then the naive line; the radius-h means and T0 are first order while unresolved, T0 the worst on its own floor; but the two-cell disc harmonic mean is not the strongest comparator. It is 1.6–3.4× above plain sampling at the jump, and no treatment beats sampling by more than 1.75× anywhere, case 1's parabolic 1250-node set aside; the half-spacing means help only while h ≳ 2–3δ. The seeds' lead over the best treatment grows from 2.3 to 4.7 orders over 1250–40,000 nodes at the jump on case 1's parabolic problem, and is 1.6–4.9 orders over both cases, both problems and every width measured (E5.10's audit scoped the first range).* | the comparator tables per δ, elliptic and parabolic | E4.9 |
 
 ### 3.8 For the implementer of E4.2–E4.10
 
@@ -4845,7 +4850,7 @@ RMS of `L u` over E2.3's crossing rows on the equilibrium reference, fit over
 | B | 0.0025 | 8.50e-03 → 7.03e-05 | 4.25e-02 → 2.14e-02 | — | 2.71 / 0.38 / — |
 
 (E2.3's rows read a smooth edge as a jump and diverge at δ > 0, as §4.6 found.) The
-tangential rows converge at 2.7–3.6, E2.3's rate or better, on every geometry and width
+tangential rows converge at 2.7–3.6 on every geometry and width, at δ = 0 E2.3's rate or better (*E5.10's audit: B at δ = 0.0025 fits 2.71, below E2.3's 3.00 at the jump*),
 where route (a)'s stall at 0.2–0.6 (1.1–2.0 once the edge is resolved), and at δ = 0
 they end within 0.7–1.1× of E2.3's rows; on B to 160,000 nodes they are 4.78e-6 against
 E2.3's 4.34e-6. One thing slows: at δ = 0.0025 the tangential probe falls at only
@@ -6094,7 +6099,8 @@ halving of `h` from least-squares fits over the counts named (port notes
    55–250×. The flux on the first rows off the edge is a function of `h/δ`
    alone to 1.7×: off by 0.31–0.86 of itself while `h ≥ 4δ` at every count
    (on the jump it never converges, 0.34–0.37 from 10,000 to 160,000 nodes
-   while the RMS falls 20×), 3.5–5 % at `h = δ`, 1 % at `0.75δ`. The parabolic
+   while the RMS falls 6×; *E5.10's audit: this had read 20×, which is
+   1250 → 160,000*), 3.5–5 % at `h = δ`, 1 % at `0.75δ`. The parabolic
    table repeats the elliptic one (0.67–1.09×) from 2500 nodes; the 1250-node
    parabolic naive row carries the coarse set's growing mode (+14.8 to +25.1).
 3. **The δ = 0 construction on its floor (§4.2; H10).** E2.3's warped rows
@@ -6260,7 +6266,10 @@ halving of `h` from least-squares fits over the counts named (port notes
     in 2-D) was built, so the 2-D comparators are the naive product and the
     δ = 0 construction, and "the strongest low-order comparator" is a statement
     about these six. The seeds' lead over the best of them grows from 2.3 to 4.7
-    orders over 1250–40,000 nodes. At the jump the half-spacing disc is sampling
+    orders over 1250–40,000 nodes at the jump on case 1's parabolic problem;
+    over both cases, both problems, the jump and δ = 0.005 and 0.0025 while
+    `h ≥ 4δ` it is 1.6–4.9 orders (*E5.10's audit: this had read 2.3 to 4.7
+    unscoped, and so had LITERATURE.md §6b's caveat*). At the jump the half-spacing disc is sampling
     by construction on this node layout (E2.1's innermost rows sit exactly h/2
     off the curve), so "worse than sampling" there is a statement about the
     radius-h means and T0, not about averaging α as such.
