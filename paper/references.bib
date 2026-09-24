@@ -4,15 +4,24 @@
 % HOUSE RULE (CLAUDE.md, from the companion manuscript): no unverified
 % citation ships. Every entry carries, in the comment block directly above
 % it, a dated "VERIFIED YYYY-MM-DD" note naming the primary source fetched
-% for it (a Crossref or arXiv record, a zbMATH or archive.org record, the
-% paper's own PDF). Fields no fetch confirmed are left out and the comment
-% says so. The literature pass (E5.2, #43) writes those notes and logs its
-% queries in LITERATURE.md; make_arxiv.py refuses to package while any
-% entry lacks one or still carries TODO(verify).
+% for it (a Crossref, arXiv, zbMATH or OpenAlex record, a publisher or
+% repository page, the paper's own PDF). Fields no fetch confirmed are
+% left out and the comment says so. make_arxiv.py refuses to package while
+% any entry lacks the note or still carries TODO(verify).
 %
-% E5.1 (#42) seeded only the 2016-2017 sources and the companion preprint.
-% The other references of the stiff note (sections 1.10 and 3.9) enter
-% through E5.2's re-verification, as section 1.10 there says.
+% The literature pass (E5.2, #43, 2026-09-24) wrote these notes and logs
+% its queries in LITERATURE.md at the repository root: section 2 is the
+% refuter log per bucket, section 2 P6 the verification of this file. A
+% metadata record certifies an entry, not what the paper says; where the
+% manuscript leans on a paper's content, LITERATURE.md records how much of
+% it was read (abstract, first page, full text) and the manuscript quotes
+% content only from papers read at source.
+%
+% Crossref quirks met and resolved from the paper itself or a second
+% record are noted per entry (author order, HTML entities, issued years
+% that differ from the volume's). Accented surnames are UTF-8 (Pólya,
+% Babuška, Målqvist): the companion's tectonic 0.16.9 hung on a braced
+% accent inside a single author's amsalpha label (paper/README.md).
 %
 % Citation keys are stable once a section draft cites them.
 % =====================================================================
@@ -21,8 +30,12 @@
 % Own work: the construction ported here, and its wave-equation companion
 % ---------------------------------------------------------------------
 
-% TODO(verify, #43): against the PDF in papers/ (title page) and the
-% ProQuest record of papers/README.md, which was not fetched.
+% VERIFIED 2026-09-24 against the PDF in papers/ (title page: "Application
+% of RBF-FD to Wave and Heat Transport Problems in Domains with
+% Interfaces", B. P. Martin, Department of Applied Mathematics, University
+% of Colorado, 2016; committee Fornberg, Flyer, Julien, Martinsson, Meyer)
+% and the OpenAlex record W2595797237, whose locations are CU Scholar
+% (appm_gradetds/79) and ProQuest dispub=10151046, the number in the note.
 @phdthesis{Martin2016,
   author = {Martin, Bradley P.},
   title  = {Application of {RBF-FD} to Wave and Heat Transport Problems in
@@ -32,8 +45,9 @@
   note   = {ProQuest 10151046},
 }
 
-% TODO(verify, #43): the Crossref record of the DOI; the fields are those of
-% papers/README.md (E0.2, #9).
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.enganabound.2017.03.005
+% (Eng. Anal. Bound. Elem. 79, 38-48, issued June 2017); the author
+% post-print is in papers/ (E0.2, #9).
 @article{MartinFornberg2017heat,
   author  = {Martin, Bradley and Fornberg, Bengt},
   title   = {Using radial basis function-generated finite differences
@@ -46,8 +60,9 @@
   doi     = {10.1016/j.enganabound.2017.03.005},
 }
 
-% TODO(verify, #43): the Crossref record of the DOI. The wave-equation paper
-% of the same construction (dissertation ch. 2-3).
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2017.01.065
+% (J. Comput. Phys. 335, 828-845). The wave-equation paper of the same
+% construction (dissertation ch. 2-3).
 @article{MartinFornberg2017,
   author  = {Martin, Bradley and Fornberg, Bengt},
   title   = {Seismic modeling with radial basis function-generated finite
@@ -59,13 +74,1339 @@
   doi     = {10.1016/j.jcp.2017.01.065},
 }
 
-% TODO(verify, #43): the arXiv record, once announced; packaged 2026-09-20,
-% not yet submitted (stiff note 1.10). Cited as the preprint, never as the
-% companion repository's files (plan D2).
+% VERIFIED 2026-09-24: Crossref record of doi:10.1190/geo2014-0492.1
+% (Geophysics 80(4), T137-T146, 2015).
+@article{MartinFornbergStCyr2015,
+  author  = {Martin, Bradley and Fornberg, Bengt and St-Cyr, Amik},
+  title   = {Seismic modeling with radial-basis-function-generated finite
+             differences},
+  journal = {Geophysics},
+  volume  = {80},
+  number  = {4},
+  pages   = {T137--T146},
+  year    = {2015},
+  doi     = {10.1190/geo2014-0492.1},
+}
+
+% VERIFIED 2026-09-24 against the companion manuscript itself, the title
+% and author of ~/rbf-hyperbolic-interfaces-2026/paper/main.tex and
+% main.pdf (packaged for arXiv 2026-09-20, not yet submitted; its tracker
+% is rbf-hyperbolic-interfaces-2026#13). The arXiv identifier is added
+% when announced, before this manuscript is packaged (#52); until then the
+% entry says "manuscript". Cited as the preprint, never as the companion
+% repository's files (plan D2).
 @misc{Martin2026seeds,
   author = {Martin, Bradley P.},
   title  = {Seed stencils: high-order finite differences and {RBF-FD}
             through material edges too steep for the grid},
   year   = {2026},
-  note   = {arXiv preprint},
+  note   = {Manuscript},
+}
+
+% ---------------------------------------------------------------------
+% RBF-FD background
+% ---------------------------------------------------------------------
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1090/S0025-5718-1988-0935077-0
+% (Math. Comp. 51(184), 699-706).
+@article{Fornberg1988,
+  author  = {Fornberg, Bengt},
+  title   = {Generation of finite difference formulas on arbitrarily spaced
+             grids},
+  journal = {Mathematics of Computation},
+  volume  = {51},
+  number  = {184},
+  pages   = {699--706},
+  year    = {1988},
+  doi     = {10.1090/S0025-5718-1988-0935077-0},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/1.9781611974041
+% (SIAM, 2015; Crossref types it "edited-book"; the authors are Fornberg
+% and Flyer).
+@book{FornbergFlyer2015primer,
+  author    = {Fornberg, Bengt and Flyer, Natasha},
+  title     = {A Primer on Radial Basis Functions with Applications to the
+               Geosciences},
+  publisher = {Society for Industrial and Applied Mathematics},
+  address   = {Philadelphia},
+  year      = {2015},
+  doi       = {10.1137/1.9781611974041},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1017/S0962492914000130
+% (Acta Numer. 24, 215-258).
+@article{FornbergFlyer2015acta,
+  author  = {Fornberg, Bengt and Flyer, Natasha},
+  title   = {Solving {PDEs} with radial basis functions},
+  journal = {Acta Numerica},
+  volume  = {24},
+  pages   = {215--258},
+  year    = {2015},
+  doi     = {10.1017/S0962492914000130},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2016.05.026
+% (J. Comput. Phys. 321, 21-38).
+@article{FlyerFornbergBayonaBarnett2016,
+  author  = {Flyer, Natasha and Fornberg, Bengt and Bayona, Victor and
+             Barnett, Gregory A.},
+  title   = {On the role of polynomials in {RBF-FD} approximations: {I}.
+             {I}nterpolation and accuracy},
+  journal = {Journal of Computational Physics},
+  volume  = {321},
+  pages   = {21--38},
+  year    = {2016},
+  doi     = {10.1016/j.jcp.2016.05.026},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2016.12.008
+% (J. Comput. Phys. 332, 257-273). EABE 2017's ref. [21]: the plan's
+% "Bayona et al." bucket item is this elliptic RBF-FD paper, not an
+% interface method (LITERATURE.md P1).
+@article{BayonaFlyerFornbergBarnett2017,
+  author  = {Bayona, Victor and Flyer, Natasha and Fornberg, Bengt and
+             Barnett, Gregory A.},
+  title   = {On the role of polynomials in {RBF-FD} approximations: {II}.
+             {N}umerical solution of elliptic {PDEs}},
+  journal = {Journal of Computational Physics},
+  volume  = {332},
+  pages   = {257--273},
+  year    = {2017},
+  doi     = {10.1016/j.jcp.2016.12.008},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.enganabound.2016.01.013
+% (Eng. Anal. Bound. Elem. 66, 1-11). EABE 2017's ref. [20]; inhomogeneous
+% media, no interface (LITERATURE.md P1, P2).
+@article{Reutskiy2016,
+  author  = {Reutskiy, S. Y.},
+  title   = {A meshless radial basis function method for {2D} steady-state
+             heat conduction problems in anisotropic and inhomogeneous
+             media},
+  journal = {Engineering Analysis with Boundary Elements},
+  volume  = {66},
+  pages   = {1--11},
+  year    = {2016},
+  doi     = {10.1016/j.enganabound.2016.01.013},
+}
+
+% ---------------------------------------------------------------------
+% Elliptic and parabolic interface methods (a jump, taken as given)
+% ---------------------------------------------------------------------
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1007/bf02248021
+% (Computing 5(3), 207-213, 1970).
+@article{Babuska1970,
+  author  = {Babuška, Ivo},
+  title   = {The finite element method for elliptic equations with
+             discontinuous coefficients},
+  journal = {Computing},
+  volume  = {5},
+  number  = {3},
+  pages   = {207--213},
+  year    = {1970},
+  doi     = {10.1007/bf02248021},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/0731054
+% (SIAM J. Numer. Anal. 31(4), 1019-1044).
+@article{LeVequeLi1994,
+  author  = {LeVeque, Randall J. and Li, Zhilin},
+  title   = {The immersed interface method for elliptic equations with
+             discontinuous coefficients and singular sources},
+  journal = {SIAM Journal on Numerical Analysis},
+  volume  = {31},
+  number  = {4},
+  pages   = {1019--1044},
+  year    = {1994},
+  doi     = {10.1137/0731054},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1090/psapm/048/1314863
+% (Proc. Sympos. Appl. Math., pp. 311-315, 1994). Crossref gives no
+% volume field and no editors; the volume (48) is in the DOI only, so it
+% is left out.
+@inproceedings{LiMayo1994,
+  author    = {Li, Zhilin and Mayo, Anita},
+  title     = {{ADI} methods for heat equations with discontinuities along
+               an arbitrary interface},
+  booktitle = {Proceedings of Symposia in Applied Mathematics},
+  publisher = {American Mathematical Society},
+  pages     = {311--315},
+  year      = {1994},
+  doi       = {10.1090/psapm/048/1314863},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/1.9780898717464
+% (SIAM monograph, 2006).
+@book{LiIto2006,
+  author    = {Li, Zhilin and Ito, Kazufumi},
+  title     = {The Immersed Interface Method: Numerical Solutions of {PDEs}
+               Involving Interfaces and Irregular Domains},
+  publisher = {Society for Industrial and Applied Mathematics},
+  address   = {Philadelphia},
+  year      = {2006},
+  doi       = {10.1137/1.9780898717464},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1006/jcph.2000.6444
+% (J. Comput. Phys. 160(1), 151-178).
+@article{LiuFedkiwKang2000,
+  author  = {Liu, Xu-Dong and Fedkiw, Ronald P. and Kang, Myungjoo},
+  title   = {A boundary condition capturing method for {P}oisson's equation
+             on irregular domains},
+  journal = {Journal of Computational Physics},
+  volume  = {160},
+  number  = {1},
+  pages   = {151--178},
+  year    = {2000},
+  doi     = {10.1006/jcph.2000.6444},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/s0036142997328664
+% (SIAM J. Numer. Anal. 37(3), 827-862).
+@article{WiegmannBube2000,
+  author  = {Wiegmann, Andreas and Bube, Kenneth P.},
+  title   = {The explicit-jump immersed interface method: finite difference
+             methods for {PDEs} with piecewise smooth solutions},
+  journal = {SIAM Journal on Numerical Analysis},
+  volume  = {37},
+  number  = {3},
+  pages   = {827--862},
+  year    = {2000},
+  doi     = {10.1137/s0036142997328664},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2005.07.022
+% (J. Comput. Phys. 213(1), 1-30). The third author is Feig (Crossref).
+@article{ZhouZhaoFeigWei2006,
+  author  = {Zhou, Y. C. and Zhao, Shan and Feig, Michael and Wei, G. W.},
+  title   = {High order matched interface and boundary method for elliptic
+             equations with discontinuous coefficients and singular sources},
+  journal = {Journal of Computational Physics},
+  volume  = {213},
+  number  = {1},
+  pages   = {1--30},
+  year    = {2006},
+  doi     = {10.1016/j.jcp.2005.07.022},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2020.109677
+% (J. Comput. Phys. 419, article 109677).
+@article{FengZhao2020,
+  author  = {Feng, Hongsong and Zhao, Shan},
+  title   = {A fourth order finite difference method for solving elliptic
+             interface problems with the {FFT} acceleration},
+  journal = {Journal of Computational Physics},
+  volume  = {419},
+  pages   = {109677},
+  year    = {2020},
+  doi     = {10.1016/j.jcp.2020.109677},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2023.112635
+% (J. Comput. Phys. 497, article 112635, January 2024).
+@article{FengHanMinev2024,
+  author  = {Feng, Qiwei and Han, Bin and Minev, Peter},
+  title   = {Sixth-order hybrid finite difference methods for elliptic
+             interface problems with mixed boundary conditions},
+  journal = {Journal of Computational Physics},
+  volume  = {497},
+  pages   = {112635},
+  year    = {2024},
+  doi     = {10.1016/j.jcp.2023.112635},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2017.01.029
+% (J. Comput. Phys. 335, 497-515).
+@article{MarquesNaveRosales2017,
+  author  = {Marques, Alexandre Noll and Nave, Jean-Christophe and Rosales,
+             Rodolfo Ruben},
+  title   = {High order solution of {P}oisson problems with piecewise
+             constant coefficients and interface jumps},
+  journal = {Journal of Computational Physics},
+  volume  = {335},
+  pages   = {497--515},
+  year    = {2017},
+  doi     = {10.1016/j.jcp.2017.01.029},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.4208/cicp.oa-2022-0236
+% (Commun. Comput. Phys. 33(3), 764-794, 2023).
+@article{XieLiYing2023,
+  author  = {Xie, Yaning and Li, Shuwang and Ying, Wenjun},
+  title   = {A fourth-order kernel-free boundary integral method for
+             interface problems},
+  journal = {Communications in Computational Physics},
+  volume  = {33},
+  number  = {3},
+  pages   = {764--794},
+  year    = {2023},
+  doi     = {10.4208/cicp.oa-2022-0236},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2023.112351
+% (J. Comput. Phys. 491, article 112351).
+@article{ThacherJohansenMartin2023,
+  author  = {Thacher, Will and Johansen, Hans and Martin, Daniel},
+  title   = {A high order {C}artesian grid, finite volume method for
+             elliptic interface problems},
+  journal = {Journal of Computational Physics},
+  volume  = {491},
+  pages   = {112351},
+  year    = {2023},
+  doi     = {10.1016/j.jcp.2023.112351},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1093/imanum/9.2.243
+% (IMA J. Numer. Anal. 9(2), 243-260, 1989).
+@article{Gartland1989,
+  author  = {Gartland, Eugene C.},
+  title   = {Compact high-order finite differences for interface problems in
+             one dimension},
+  journal = {IMA Journal of Numerical Analysis},
+  volume  = {9},
+  number  = {2},
+  pages   = {243--260},
+  year    = {1989},
+  doi     = {10.1093/imanum/9.2.243},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1364/ol.35.004115
+% (Opt. Lett. 35(24), 4115, 2010; Crossref gives the first page only);
+% abstract read (OpenAlex): three-point weights from the Taylor series
+% carried across a step in the refractive index.
+@article{Sujecki2010,
+  author  = {Sujecki, Slawomir},
+  title   = {Arbitrary truncation order three-point finite difference method
+             for optical waveguides with stepwise refractive index
+             discontinuities},
+  journal = {Optics Letters},
+  volume  = {35},
+  number  = {24},
+  pages   = {4115},
+  year    = {2010},
+  doi     = {10.1364/ol.35.004115},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.2140/camcos.2006.1.91
+% (Commun. Appl. Math. Comput. Sci. 1(1), 91-119).
+@article{BealeLayton2006,
+  author  = {Beale, J. Thomas and Layton, Anita T.},
+  title   = {On the accuracy of finite difference methods for elliptic
+             problems with interfaces},
+  journal = {Communications in Applied Mathematics and Computational
+             Science},
+  volume  = {1},
+  number  = {1},
+  pages   = {91--119},
+  year    = {2006},
+  doi     = {10.2140/camcos.2006.1.91},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1007/s002110050336
+% (Numer. Math. 79(2), 175-202).
+@article{ChenZou1998,
+  author  = {Chen, Zhiming and Zou, Jun},
+  title   = {Finite element methods and their convergence for elliptic and
+             parabolic interface problems},
+  journal = {Numerische Mathematik},
+  volume  = {79},
+  number  = {2},
+  pages   = {175--202},
+  year    = {1998},
+  doi     = {10.1007/s002110050336},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/s0045-7825(02)00524-8
+% (Comput. Methods Appl. Mech. Engrg. 191(47-48), 5537-5552).
+@article{HansboHansbo2002,
+  author  = {Hansbo, Anita and Hansbo, Peter},
+  title   = {An unfitted finite element method, based on {N}itsche's method,
+             for elliptic interface problems},
+  journal = {Computer Methods in Applied Mechanics and Engineering},
+  volume  = {191},
+  number  = {47--48},
+  pages   = {5537--5552},
+  year    = {2002},
+  doi     = {10.1016/s0045-7825(02)00524-8},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1002/nme.4823
+% (Int. J. Numer. Methods Eng. 104(7), 472-501; Crossref's issued date is
+% the 2014 online one, the volume is 2015).
+@article{BurmanEtAl2015,
+  author  = {Burman, Erik and Claus, Susanne and Hansbo, Peter and Larson,
+             Mats G. and Massing, André},
+  title   = {{CutFEM}: {D}iscretizing geometry and partial differential
+             equations},
+  journal = {International Journal for Numerical Methods in Engineering},
+  volume  = {104},
+  number  = {7},
+  pages   = {472--501},
+  year    = {2015},
+  doi     = {10.1002/nme.4823},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.amc.2016.11.033
+% (Appl. Math. Comput. 299, 28-44).
+@article{LiZhao2017,
+  author  = {Li, Chuan and Zhao, Shan},
+  title   = {A matched {P}eaceman--{R}achford {ADI} method for solving
+             parabolic interface problems},
+  journal = {Applied Mathematics and Computation},
+  volume  = {299},
+  pages   = {28--44},
+  year    = {2017},
+  doi     = {10.1016/j.amc.2016.11.033},
+}
+
+% ---------------------------------------------------------------------
+% RBF, meshfree and particle methods at material interfaces
+% ---------------------------------------------------------------------
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1007/s10915-026-03330-8
+% (J. Sci. Comput. 108(1), article 8, 2026). Metadata only: the abstract
+% was not read at source (LITERATURE.md P2, section 4).
+@article{ChengJuZhang2026,
+  author  = {Cheng, Tao and Ju, Lili and Zhang, Xiaoping},
+  title   = {A high-order radial basis function finite difference method for
+             linear anisotropic elliptic interface problems},
+  journal = {Journal of Scientific Computing},
+  volume  = {108},
+  number  = {1},
+  pages   = {8},
+  year    = {2026},
+  doi     = {10.1007/s10915-026-03330-8},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.enganabound.2018.06.008
+% (Eng. Anal. Bound. Elem. 94, 134-152). Crossref has the second author's
+% name "Siraj-ul-Islam" in the family field with an empty given name.
+@article{AhmadSirajulIslam2018,
+  author  = {Ahmad, Masood and {Siraj-ul-Islam}},
+  title   = {Meshless analysis of parabolic interface problems},
+  journal = {Engineering Analysis with Boundary Elements},
+  volume  = {94},
+  pages   = {134--152},
+  year    = {2018},
+  doi     = {10.1016/j.enganabound.2018.06.008},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1115/1.2402181
+% (J. Heat Transfer 129(2), 124-136, February 2007).
+@article{DivoKassab2007,
+  author  = {Divo, Eduardo and Kassab, Alain J.},
+  title   = {An efficient localized radial basis function meshless method
+             for fluid flow and conjugate heat transfer},
+  journal = {Journal of Heat Transfer},
+  volume  = {129},
+  number  = {2},
+  pages   = {124--136},
+  year    = {2007},
+  doi     = {10.1115/1.2402181},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.amc.2023.128208
+% (Appl. Math. Comput. 457, article 128208).
+@article{BartwalEtAl2023,
+  author  = {Bartwal, Naman and Shahane, Shantanu and Roy, Somnath and
+             Vanka, Surya Pratap},
+  title   = {Simulation of heat conduction in complex domains of
+             multi-material composites using a meshless method},
+  journal = {Applied Mathematics and Computation},
+  volume  = {457},
+  pages   = {128208},
+  year    = {2023},
+  doi     = {10.1016/j.amc.2023.128208},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.apm.2022.08.002
+% (Appl. Math. Model. 113, 241-261, January 2023). Full text of the arXiv
+% version (2204.05191) read by the E5.2 pass: diffusivity smoothed by a
+% Gaussian-weighted convex combination over the neighbourhood, harmonic
+% means at the Voronoi faces (LITERATURE.md P4).
+@article{KrausEtAl2023,
+  author  = {Kraus, Heinrich and Kuhnert, Jörg and Meister, Andreas and
+             Suchde, Pratik},
+  title   = {A meshfree point collocation method for elliptic interface
+             problems},
+  journal = {Applied Mathematical Modelling},
+  volume  = {113},
+  pages   = {241--261},
+  year    = {2023},
+  doi     = {10.1016/j.apm.2022.08.002},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.camwa.2025.06.018
+% (Comput. Math. Appl. 194, 257-271, 2025).
+@article{KrausKuhnertSuchde2025,
+  author  = {Kraus, Heinrich and Kuhnert, Jörg and Suchde, Pratik},
+  title   = {Higher-order generalized finite differences for variable
+             coefficient diffusion operators},
+  journal = {Computers \& Mathematics with Applications},
+  volume  = {194},
+  pages   = {257--271},
+  year    = {2025},
+  doi     = {10.1016/j.camwa.2025.06.018},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1006/jcph.1998.6118
+% (J. Comput. Phys. 148(1), 227-264, January 1999). Its pairwise harmonic
+% mean of conductivities is quoted from Monaghan's 2005 review, sect. 7.1,
+% read in full by the E5.2 pass; this paper itself was not read.
+@article{ClearyMonaghan1999,
+  author  = {Cleary, Paul W. and Monaghan, Joseph J.},
+  title   = {Conduction modelling using smoothed particle hydrodynamics},
+  journal = {Journal of Computational Physics},
+  volume  = {148},
+  number  = {1},
+  pages   = {227--264},
+  year    = {1999},
+  doi     = {10.1006/jcph.1998.6118},
+}
+
+% ---------------------------------------------------------------------
+% Exact, truncated and fitted schemes; stencils exact on local solutions
+% ---------------------------------------------------------------------
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/0041-5553(62)90005-8
+% (USSR Comput. Math. Math. Phys. 1(1), 5-67, 1962; the translation of
+% Zh. Vychisl. Mat. Mat. Fiz. 1, 5-63 (1961), per zbMATH as reported by
+% the pass). Content not read at source (LITERATURE.md section 4).
+@article{TikhonovSamarskii1962,
+  author  = {Tikhonov, A. N. and Samarskii, A. A.},
+  title   = {Homogeneous difference schemes},
+  journal = {USSR Computational Mathematics and Mathematical Physics},
+  volume  = {1},
+  number  = {1},
+  pages   = {5--67},
+  year    = {1962},
+  doi     = {10.1016/0041-5553(62)90005-8},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1201/9780203908518
+% (CRC Press, 2001; Crossref type "reference-book"). No place of
+% publication in the record, so none is given.
+@book{Samarskii2001,
+  author    = {Samarskii, Alexander A.},
+  title     = {The Theory of Difference Schemes},
+  publisher = {CRC Press},
+  year      = {2001},
+  doi       = {10.1201/9780203908518},
+}
+
+% VERIFIED 2026-09-24: zbMATH Open record Zbl 0717.65052 (Sov. Math. Dokl.
+% 41(3), 463-467 (1990); translation of Dokl. Akad. Nauk SSSR 312(3),
+% 538-543). No DOI. zbMATH spells the first author "Samarskij"; the
+% transliteration of the 1962 entry is kept. Content: the zbMATH review
+% (LITERATURE.md P3).
+@article{SamarskiiMakarov1990,
+  author  = {Samarskii, A. A. and Makarov, V. L.},
+  title   = {On the realization of exact three-point difference schemes for
+             second-order ordinary differential equations with piecewise
+             smooth coefficients},
+  journal = {Soviet Mathematics. Doklady},
+  volume  = {41},
+  number  = {3},
+  pages   = {463--467},
+  year    = {1990},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1007/978-3-0348-0107-2 and
+% zbMATH Open record Zbl 1226.65066 (ISNM 159, Birkhäuser, Basel, 2011,
+% xi+247 pp.; the series and volume are zbMATH's).
+@book{GavrilyukEtAl2011,
+  author    = {Gavrilyuk, Ivan and Hermann, Martin and Makarov, Volodymyr and
+               Kutniv, Myroslav V.},
+  title     = {Exact and Truncated Difference Schemes for Boundary Value
+               {ODEs}},
+  series    = {International Series of Numerical Mathematics},
+  volume    = {159},
+  publisher = {Birkhäuser},
+  address   = {Basel},
+  year      = {2011},
+  doi       = {10.1007/978-3-0348-0107-2},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1090/s0025-5718-1980-0559190-8
+% (Math. Comp. 34(150), 333-372).
+@article{LynchRice1980,
+  author  = {Lynch, Robert E. and Rice, John R.},
+  title   = {A high-order difference method for differential equations},
+  journal = {Mathematics of Computation},
+  volume  = {34},
+  number  = {150},
+  pages   = {333--372},
+  year    = {1980},
+  doi     = {10.1090/s0025-5718-1980-0559190-8},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1093/qjmam/8.2.129
+% (Q. J. Mech. Appl. Math. 8(2), 129-145, 1955). Crossref lists the first
+% author as "De G. Allen"; the paper's usual citation form is kept.
+@article{AllenSouthwell1955,
+  author  = {Allen, D. N. de G. and Southwell, R. V.},
+  title   = {Relaxation methods applied to determine the motion, in two
+             dimensions, of a viscous fluid past a fixed cylinder},
+  journal = {The Quarterly Journal of Mechanics and Applied Mathematics},
+  volume  = {8},
+  number  = {2},
+  pages   = {129--145},
+  year    = {1955},
+  doi     = {10.1093/qjmam/8.2.129},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1007/BF01093706
+% (Math. Notes Acad. Sci. USSR 6(2), 596-602, 1969).
+@article{Ilin1969,
+  author  = {Il'in, A. M.},
+  title   = {Differencing scheme for a differential equation with a small
+             parameter affecting the highest derivative},
+  journal = {Mathematical Notes of the Academy of Sciences of the USSR},
+  volume  = {6},
+  number  = {2},
+  pages   = {596--602},
+  year    = {1969},
+  doi     = {10.1007/BF01093706},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1109/T-ED.1969.16566
+% (IEEE Trans. Electron Devices 16(1), 64-77).
+@article{ScharfetterGummel1969,
+  author  = {Scharfetter, D. L. and Gummel, H. K.},
+  title   = {Large-signal analysis of a silicon {R}ead diode oscillator},
+  journal = {IEEE Transactions on Electron Devices},
+  volume  = {16},
+  number  = {1},
+  pages   = {64--77},
+  year    = {1969},
+  doi     = {10.1109/T-ED.1969.16566},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1007/978-3-540-34467-4
+% (Springer, 2008; Crossref lists no authors or subtitle, so both are
+% from the companion's Charles University copy, as there, and the edition
+% and series volume are left out).
+@book{RoosStynesTobiska2008,
+  author    = {Roos, Hans-Görg and Stynes, Martin and Tobiska, Lutz},
+  title     = {Robust Numerical Methods for Singularly Perturbed Differential
+               Equations},
+  publisher = {Springer},
+  address   = {Berlin, Heidelberg},
+  year      = {2008},
+  doi       = {10.1007/978-3-540-34467-4},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1186/s13662-020-02957-7
+% (Adv. Differ. Equ. 2020, article 497). The names are the record's, which
+% carries no accents; the article itself was not opened.
+@article{VizvariEtAl2020,
+  author  = {Vizvari, Zoltan and Sari, Zoltan and Klincsik, Mihaly and
+             Odry, Peter},
+  title   = {Exact schemes for second-order linear differential equations in
+             self-adjoint cases},
+  journal = {Advances in Difference Equations},
+  volume  = {2020},
+  pages   = {497},
+  year    = {2020},
+  doi     = {10.1186/s13662-020-02957-7},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1007/BF02162033
+% (Numer. Math. 10(4), 345-369).
+@article{SchultzVarga1967,
+  author  = {Schultz, Martin H. and Varga, Richard S.},
+  title   = {{L}-splines},
+  journal = {Numerische Mathematik},
+  volume  = {10},
+  number  = {4},
+  pages   = {345--369},
+  year    = {1967},
+  doi     = {10.1007/BF02162033},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2005.06.011
+% (J. Comput. Phys. 211(2), 659-699, January 2006). Metadata only; the
+% method is quoted from the 2010 paper's arXiv text (LITERATURE.md P3).
+@article{Tsukerman2006,
+  author  = {Tsukerman, Igor},
+  title   = {A class of difference schemes with flexible local
+             approximation},
+  journal = {Journal of Computational Physics},
+  volume  = {211},
+  number  = {2},
+  pages   = {659--699},
+  year    = {2006},
+  doi     = {10.1016/j.jcp.2005.06.011},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2009.12.025
+% (J. Comput. Phys. 229(8), 2948-2963); abstract and introduction read in
+% the arXiv version 0906.1388v2.
+@article{Tsukerman2010,
+  author  = {Tsukerman, Igor},
+  title   = {Trefftz difference schemes on irregular stencils},
+  journal = {Journal of Computational Physics},
+  volume  = {229},
+  number  = {8},
+  pages   = {2948--2963},
+  year    = {2010},
+  doi     = {10.1016/j.jcp.2009.12.025},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.3934/nhm.2009.4.91
+% (Netw. Heterog. Media 4(1), 91-106). Crossref's second "author" is an
+% empty affiliation string; the paper is by Huang alone.
+@article{Huang2009,
+  author  = {Huang, Zhongyi},
+  title   = {Tailored finite point method for the interface problem},
+  journal = {Networks and Heterogeneous Media},
+  volume  = {4},
+  number  = {1},
+  pages   = {91--106},
+  year    = {2009},
+  doi     = {10.3934/nhm.2009.4.91},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.4310/cms.2012.v10.n3.a11
+% (Commun. Math. Sci. 10(3), 945-976).
+@article{HanZhang2012,
+  author  = {Han, Houde and Zhang, Zhiwen},
+  title   = {Multiscale tailored finite point method for second order
+             elliptic equations with rough or highly oscillatory
+             coefficients},
+  journal = {Communications in Mathematical Sciences},
+  volume  = {10},
+  number  = {3},
+  pages   = {945--976},
+  year    = {2012},
+  doi     = {10.4310/cms.2012.v10.n3.a11},
+}
+
+% ---------------------------------------------------------------------
+% Local-solve bases: special elements, multiscale methods, homogenization
+% ---------------------------------------------------------------------
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/0720034
+% (SIAM J. Numer. Anal. 20(3), 510-536).
+@article{BabuskaOsborn1983,
+  author  = {Babuška, Ivo and Osborn, John E.},
+  title   = {Generalized finite element methods: their performance and their
+             relation to mixed methods},
+  journal = {SIAM Journal on Numerical Analysis},
+  volume  = {20},
+  number  = {3},
+  pages   = {510--536},
+  year    = {1983},
+  doi     = {10.1137/0720034},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/0731051
+% (SIAM J. Numer. Anal. 31(4), 945-981).
+@article{BabuskaCalozOsborn1994,
+  author  = {Babuška, Ivo and Caloz, Gabriel and Osborn, John E.},
+  title   = {Special finite element methods for a class of second order
+             elliptic problems with rough coefficients},
+  journal = {SIAM Journal on Numerical Analysis},
+  volume  = {31},
+  number  = {4},
+  pages   = {945--981},
+  year    = {1994},
+  doi     = {10.1137/0731051},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1006/jcph.1997.5682
+% (J. Comput. Phys. 134(1), 169-189).
+@article{HouWu1997,
+  author  = {Hou, Thomas Y. and Wu, Xiao-Hui},
+  title   = {A multiscale finite element method for elliptic problems in
+             composite materials and porous media},
+  journal = {Journal of Computational Physics},
+  volume  = {134},
+  number  = {1},
+  pages   = {169--189},
+  year    = {1997},
+  doi     = {10.1006/jcph.1997.5682},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1090/s0025-5718-2010-02372-5
+% (Math. Comp. 79(272), 1915-1955; Crossref's issued date is the 2010
+% online one).
+@article{ChuGrahamHou2010,
+  author  = {Chu, C.-C. and Graham, I. G. and Hou, T.-Y.},
+  title   = {A new multiscale finite element method for high-contrast
+             elliptic interface problems},
+  journal = {Mathematics of Computation},
+  volume  = {79},
+  number  = {272},
+  pages   = {1915--1955},
+  year    = {2010},
+  doi     = {10.1090/s0025-5718-2010-02372-5},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/s0021-9991(03)00075-5
+% (J. Comput. Phys. 187(1), 47-67).
+@article{JennyLeeTchelepi2003,
+  author  = {Jenny, P. and Lee, S. H. and Tchelepi, H. A.},
+  title   = {Multi-scale finite-volume method for elliptic problems in
+             subsurface flow simulation},
+  journal = {Journal of Computational Physics},
+  volume  = {187},
+  number  = {1},
+  pages   = {47--67},
+  year    = {2003},
+  doi     = {10.1016/s0021-9991(03)00075-5},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1002/cpa.20163
+% (Comm. Pure Appl. Math. 60(5), 675-723).
+@article{OwhadiZhang2007,
+  author  = {Owhadi, Houman and Zhang, Lei},
+  title   = {Metric-based upscaling},
+  journal = {Communications on Pure and Applied Mathematics},
+  volume  = {60},
+  number  = {5},
+  pages   = {675--723},
+  year    = {2007},
+  doi     = {10.1002/cpa.20163},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1090/s0025-5718-2014-02868-8
+% (Math. Comp. 83(290), 2583-2603; Crossref's issued date is the 2014
+% online one).
+@article{MalqvistPeterseim2014,
+  author  = {Målqvist, Axel and Peterseim, Daniel},
+  title   = {Localization of elliptic multiscale problems},
+  journal = {Mathematics of Computation},
+  volume  = {83},
+  number  = {290},
+  pages   = {2583--2603},
+  year    = {2014},
+  doi     = {10.1090/s0025-5718-2014-02868-8},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/20m1364321
+% (SIAM J. Numer. Anal. 59(2), 1067-1089); abstract read (OpenAlex).
+@article{Maier2021,
+  author  = {Maier, Roland},
+  title   = {A high-order approach to elliptic multiscale problems with
+             general unstructured coefficients},
+  journal = {SIAM Journal on Numerical Analysis},
+  volume  = {59},
+  number  = {2},
+  pages   = {1067--1089},
+  year    = {2021},
+  doi     = {10.1137/20m1364321},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1090/mcom/3798
+% (Math. Comp. 92(341), 981-1003, 2023; Crossref's issued date is the
+% 2022 online one); abstract read (OpenAlex): "even for under-resolved
+% rough coefficients".
+@article{HauckPeterseim2023,
+  author  = {Hauck, Moritz and Peterseim, Daniel},
+  title   = {Super-localization of elliptic multiscale problems},
+  journal = {Mathematics of Computation},
+  volume  = {92},
+  number  = {341},
+  pages   = {981--1003},
+  year    = {2023},
+  doi     = {10.1090/mcom/3798},
+}
+
+% ---------------------------------------------------------------------
+% Solutions polynomial in time, formal powers, Trefftz spaces
+% ---------------------------------------------------------------------
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1090/s0002-9947-1959-0107118-2
+% (Trans. Amer. Math. Soc. 92(2), 220-266).
+@article{RosenbloomWidder1959,
+  author  = {Rosenbloom, P. C. and Widder, D. V.},
+  title   = {Expansions in terms of heat polynomials and associated
+             functions},
+  journal = {Transactions of the American Mathematical Society},
+  volume  = {92},
+  number  = {2},
+  pages   = {220--266},
+  year    = {1959},
+  doi     = {10.1090/s0002-9947-1959-0107118-2},
+}
+
+% VERIFIED 2026-09-24: zbMATH Open record Zbl 0322.35041 (Pure and Applied
+% Mathematics 67, Academic Press, New York, 1975, xiv+267 pp.). No DOI.
+@book{Widder1975,
+  author    = {Widder, D. V.},
+  title     = {The Heat Equation},
+  series    = {Pure and Applied Mathematics},
+  volume    = {67},
+  publisher = {Academic Press},
+  address   = {New York},
+  year      = {1975},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1080/17476930802102894
+% (Complex Var. Elliptic Equ. 53(8), 775-789); abstract read (OpenAlex).
+@article{Kravchenko2008,
+  author  = {Kravchenko, Vladislav V.},
+  title   = {A representation for solutions of the {S}turm--{L}iouville
+             equation},
+  journal = {Complex Variables and Elliptic Equations},
+  volume  = {53},
+  number  = {8},
+  pages   = {775--789},
+  year    = {2008},
+  doi     = {10.1080/17476930802102894},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1002/mma.1205
+% (Math. Methods Appl. Sci. 33(4), 459-468, 2010; online 2009) and the
+% arXiv record 0811.4488, whose journal_ref is the same; Theorem 1 and
+% Corollary 9 (the recursive integrals, eqs. 6-8) read in the arXiv PDF.
+@article{KravchenkoPorter2010,
+  author  = {Kravchenko, Vladislav V. and Porter, R. Michael},
+  title   = {Spectral parameter power series for {S}turm--{L}iouville
+             problems},
+  journal = {Mathematical Methods in the Applied Sciences},
+  volume  = {33},
+  number  = {4},
+  pages   = {459--468},
+  year    = {2010},
+  doi     = {10.1002/mma.1205},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1155/2017/2947275
+% (Adv. Math. Phys. 2017, pp. 1-5); abstract read (OpenAlex).
+@article{KravchenkoOteroTorba2017,
+  author  = {Kravchenko, Vladislav V. and Otero, Josafath A. and Torba,
+             Sergii M.},
+  title   = {Analytic approximation of solutions of parabolic partial
+             differential equations with variable coefficients},
+  journal = {Advances in Mathematical Physics},
+  volume  = {2017},
+  pages   = {1--5},
+  year    = {2017},
+  doi     = {10.1155/2017/2947275},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1093/imanum/drae094
+% (IMA J. Numer. Anal. 45(6), 3473-3506, 2025).
+@article{ImbertGerardMoiolaPerinatiStocker2025,
+  author  = {Imbert-Gérard, Lise-Marie and Moiola, Andrea and Perinati,
+             Chiara and Stocker, Paul},
+  title   = {Polynomial quasi-{T}refftz {DG} for {PDEs} with smooth
+             coefficients: elliptic problems},
+  journal = {IMA Journal of Numerical Analysis},
+  volume  = {45},
+  number  = {6},
+  pages   = {3473--3506},
+  year    = {2025},
+  doi     = {10.1093/imanum/drae094},
+}
+
+% VERIFIED 2026-09-24: arXiv API record 2505.18480 (v2; submitted
+% 2025-05-24; math.NA; no journal reference).
+@misc{ImbertGerard2025local,
+  author        = {Imbert-Gérard, Lise-Marie},
+  title         = {Local {T}aylor-based polynomial quasi-{T}refftz spaces for
+                   scalar linear equations},
+  year          = {2025},
+  eprint        = {2505.18480},
+  archivePrefix = {arXiv},
+  primaryClass  = {math.NA},
+  note          = {arXiv:2505.18480},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1007/s10915-025-03121-7
+% (J. Sci. Comput. 106(1), article 22; online 2025-12-05, print January
+% 2026). Abstract and sect. 5.3 read by the E5.2 pass (LITERATURE.md P3).
+@article{GomezPerinatiStocker2026,
+  author  = {Gómez, Sergio and Perinati, Chiara and Stocker, Paul},
+  title   = {Inf-sup stable space--time local discontinuous {G}alerkin
+             method for the heat equation},
+  journal = {Journal of Scientific Computing},
+  volume  = {106},
+  number  = {1},
+  pages   = {22},
+  year    = {2026},
+  doi     = {10.1007/s10915-025-03121-7},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1090/S0002-9947-1922-1501228-5
+% (Trans. Amer. Math. Soc. 24(4), 312-324). The AMS PDF was not fetched.
+@article{Polya1922,
+  author  = {Pólya, George},
+  title   = {On the mean-value theorem corresponding to a given linear
+             homogeneous differential equation},
+  journal = {Transactions of the American Mathematical Society},
+  volume  = {24},
+  number  = {4},
+  pages   = {312--324},
+  year    = {1922},
+  doi     = {10.1090/S0002-9947-1922-1501228-5},
+}
+
+% VERIFIED 2026-09-24: zbMATH Open record Zbl 0153.38902 (Pure and Applied
+% Mathematics 15, Interscience / Wiley, New York, 1966, xviii+586 pp.).
+% No DOI.
+@book{KarlinStudden1966,
+  author    = {Karlin, Samuel and Studden, William J.},
+  title     = {Tchebycheff Systems: With Applications in Analysis and
+               Statistics},
+  series    = {Pure and Applied Mathematics},
+  volume    = {15},
+  publisher = {Interscience Publishers},
+  address   = {New York},
+  year      = {1966},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1007/BFb0058618
+% (Springer Lecture Notes in Mathematics, 1971). The LNM volume number is
+% not in the record and is left out.
+@book{Coppel1971,
+  author    = {Coppel, W. A.},
+  title     = {Disconjugacy},
+  series    = {Lecture Notes in Mathematics},
+  publisher = {Springer},
+  address   = {Berlin, Heidelberg},
+  year      = {1971},
+  doi       = {10.1007/BFb0058618},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/0021-9045(73)90104-4
+% (J. Approx. Theory 9(2), 165-172).
+@article{Muhlbach1973,
+  author  = {Mühlbach, G.},
+  title   = {A recurrence formula for generalized divided differences and
+             some applications},
+  journal = {Journal of Approximation Theory},
+  volume  = {9},
+  number  = {2},
+  pages   = {165--172},
+  year    = {1973},
+  doi     = {10.1016/0021-9045(73)90104-4},
+}
+
+% ---------------------------------------------------------------------
+% The standing alternative: change the coefficient, keep the scheme
+% ---------------------------------------------------------------------
+
+% VERIFIED 2026-09-24: zbMATH Open record Zbl 0521.76003 (Series in
+% Computational Methods in Mechanics and Thermal Sciences, Hemisphere,
+% Washington, and McGraw-Hill, New York, 1980, xiii+197 pp.). The section
+% cited, 4.2-3 "The Interface Conductivity" (pp. 44-47; eqs. 4.9-4.10, the
+% harmonic mean at f_e = 1/2), was pinned by the E5.2 pass from the OCR
+% text of the 1980 edition on archive.org (item numericalheattra0000pata;
+% contents page and index; the page images are access-restricted). The
+% CRC Press reissue is doi:10.1201/9781482234213 (Crossref, 2018; its
+% ch. 4 "Heat Conduction", pp. 41-77, doi:10.1201/9781482234213-4).
+@book{Patankar1980,
+  author    = {Patankar, Suhas V.},
+  title     = {Numerical Heat Transfer and Fluid Flow},
+  series    = {Series in Computational Methods in Mechanics and Thermal
+               Sciences},
+  publisher = {Hemisphere},
+  address   = {Washington},
+  year      = {1980},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.3133/wri924124 (USGS
+% Water-Resources Investigations Report 92-4124, 1992; Crossref lists no
+% author) and the USGS Publications Warehouse page, which names the
+% authors and carries the abstract, read.
+@techreport{GoodeAppel1992,
+  author      = {Goode, D. J. and Appel, C. A.},
+  title       = {Finite-difference interblock transmissivity for unconfined
+                 aquifers and for aquifers having smoothly varying
+                 transmissivity},
+  institution = {U.S. Geological Survey},
+  type        = {Water-Resources Investigations Report},
+  number      = {92-4124},
+  year        = {1992},
+  doi         = {10.3133/wri924124},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/s1064827599353877
+% (SIAM J. Sci. Comput. 23(4), 1335-1351, 2001); abstract read (OpenAlex).
+@article{EwingIlievLazarov2001,
+  author  = {Ewing, R. and Iliev, O. and Lazarov, R.},
+  title   = {A modified finite volume approximation of second-order elliptic
+             equations with discontinuous coefficients},
+  journal = {SIAM Journal on Scientific Computing},
+  volume  = {23},
+  number  = {4},
+  pages   = {1335--1351},
+  year    = {2001},
+  doi     = {10.1137/s1064827599353877},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.4208/ijnam2026-1016
+% (Int. J. Numer. Anal. Model. 23(3), 390-407, 2026); full text of the
+% arXiv version 2502.09413 read (the scheme, eq. 3, and the conclusions).
+@article{PanXuLi2026,
+  author  = {Pan, Kejia and Xu, Hengrui and Li, Zhilin},
+  title   = {Analysis of harmonic average method for interface problems with
+             discontinuous solutions and fluxes},
+  journal = {International Journal of Numerical Analysis and Modeling},
+  volume  = {23},
+  number  = {3},
+  pages   = {390--407},
+  year    = {2026},
+  doi     = {10.4208/ijnam2026-1016},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/s0036142997318541
+% (SIAM J. Numer. Anal. 36(2), 442-464, 1999); abstract read (OpenAlex).
+@article{MoskowEtAl1999,
+  author  = {Moskow, Shari and Druskin, Vladimir and Habashy, Tarek and Lee,
+             Ping and Davydycheva, Sofia},
+  title   = {A finite difference scheme for elliptic equations with rough
+             coefficients using a {C}artesian grid nonconforming to
+             interfaces},
+  journal = {SIAM Journal on Numerical Analysis},
+  volume  = {36},
+  number  = {2},
+  pages   = {442--464},
+  year    = {1999},
+  doi     = {10.1137/s0036142997318541},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1190/1.1620626
+% (Geophysics 68(5), 1525-1536, 2003).
+@article{DavydychevaDruskinHabashy2003,
+  author  = {Davydycheva, Sofia and Druskin, Vladimir and Habashy, Tarek},
+  title   = {An efficient finite-difference scheme for electromagnetic
+             logging in {3D} anisotropic inhomogeneous media},
+  journal = {Geophysics},
+  volume  = {68},
+  number  = {5},
+  pages   = {1525--1536},
+  year    = {2003},
+  doi     = {10.1190/1.1620626},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1023/A:1025332815267
+% (J. Sci. Comput. 19(1-3), 527-552, 2003). Metadata only.
+@article{TornbergEngquist2003,
+  author  = {Tornberg, Anna-Karin and Engquist, Björn},
+  title   = {Regularization techniques for numerical approximation of {PDEs}
+             with singularities},
+  journal = {Journal of Scientific Computing},
+  volume  = {19},
+  number  = {1--3},
+  pages   = {527--552},
+  year    = {2003},
+  doi     = {10.1023/A:1025332815267},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.4310/MAA.2006.v13.n3.a3
+% (Methods Appl. Anal. 13(3), 247-274) and the paper's first page (the
+% open-access PDF the companion fetched): the byline is Tornberg and
+% Engquist, in that order; Crossref lists them the other way round.
+@article{TornbergEngquist2006,
+  author  = {Tornberg, Anna-Karin and Engquist, Björn},
+  title   = {Regularization for accurate numerical wave propagation in
+             discontinuous media},
+  journal = {Methods and Applications of Analysis},
+  volume  = {13},
+  number  = {3},
+  pages   = {247--274},
+  year    = {2006},
+  doi     = {10.4310/MAA.2006.v13.n3.a3},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1190/geo2016-0477.1
+% (Geophysics 82(4), T159-T182, 2017); abstract read (Crossref, by the
+% E5.2 pass).
+@article{Mittet2017,
+  author  = {Mittet, Rune},
+  title   = {On the internal interfaces in finite-difference schemes},
+  journal = {Geophysics},
+  volume  = {82},
+  number  = {4},
+  pages   = {T159--T182},
+  year    = {2017},
+  doi     = {10.1190/geo2016-0477.1},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1093/gji/ggab444
+% (Geophys. J. Int. 229(1), 70-96; Crossref's issued and print dates are
+% 2021, the volume is 2022, as the arXiv journal_ref gives it). Full text
+% of arXiv 2104.08206 read.
+@article{KoeneWittstenRobertsson2022,
+  author  = {Koene, Erik F. M. and Wittsten, Jens and Robertsson, Johan O. A.},
+  title   = {Finite-difference modelling of {2-D} wave propagation in the
+             vicinity of dipping interfaces: a comparison of anti-aliasing
+             and equivalent medium approaches},
+  journal = {Geophysical Journal International},
+  volume  = {229},
+  number  = {1},
+  pages   = {70--96},
+  year    = {2022},
+  doi     = {10.1093/gji/ggab444},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1190/1.3278525
+% (Geophysics 75(1), F33-F50, 2010); full text read by the E5.2 pass (the
+% EMGS PDF): conductivity is averaged, not band-limited.
+@article{Mittet2010,
+  author  = {Mittet, Rune},
+  title   = {High-order finite-difference simulations of marine {CSEM}
+             surveys using a correspondence principle for wave and diffusion
+             fields},
+  journal = {Geophysics},
+  volume  = {75},
+  number  = {1},
+  pages   = {F33--F50},
+  year    = {2010},
+  doi     = {10.1190/1.3278525},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.cpc.2023.108745
+% (Comput. Phys. Commun. 288, article 108745, 2023); full text of arXiv
+% 2304.00233 read by the E5.2 pass. The title's "fictious" is the
+% record's own spelling.
+@article{Yang2023,
+  author  = {Yang, Pengliang},
+  title   = {{libEMM}: A fictious wave domain {3D} {CSEM} modelling library
+             bridging sequential and parallel {GPU} implementation},
+  journal = {Computer Physics Communications},
+  volume  = {288},
+  pages   = {108745},
+  year    = {2023},
+  doi     = {10.1016/j.cpc.2023.108745},
+}
+
+% ---------------------------------------------------------------------
+% Thin resistive layers and imperfect interfaces
+% ---------------------------------------------------------------------
+
+% VERIFIED 2026-09-24: zbMATH Open record Zbl 0273.35007 (J. Math. Pures
+% Appl. (9) 53, 251-269, 1974). No DOI. Title only: its content was not
+% read (LITERATURE.md section 4).
+@article{SanchezPalencia1974,
+  author  = {Sanchez-Palencia, Enrique},
+  title   = {Problèmes de perturbations liés aux phénomènes de conduction à
+             travers des couches minces de grande résistivité},
+  journal = {Journal de Mathématiques Pures et Appliquées},
+  volume  = {53},
+  pages   = {251--269},
+  year    = {1974},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.amc.2013.06.047
+% (Appl. Math. Comput. 221, 48-65, 2013); the INRIA report RR-7163 read in
+% part by the E5.2 pass (the layer's conductivity scaled with its
+% thickness; the order-0 resistive transmission condition).
+@article{PerrusselPoignard2013,
+  author  = {Perrussel, Ronan and Poignard, Clair},
+  title   = {Asymptotic expansion of steady-state potential in a high
+             contrast medium with a thin resistive layer},
+  journal = {Applied Mathematics and Computation},
+  volume  = {221},
+  pages   = {48--65},
+  year    = {2013},
+  doi     = {10.1016/j.amc.2013.06.047},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1063/1.1337936
+% (J. Appl. Phys. 89(4), 2261-2267, 2001); abstract read (Crossref).
+@article{Hashin2001,
+  author  = {Hashin, Zvi},
+  title   = {Thin interphase/imperfect interface in conduction},
+  journal = {Journal of Applied Physics},
+  volume  = {89},
+  number  = {4},
+  pages   = {2261--2267},
+  year    = {2001},
+  doi     = {10.1063/1.1337936},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1103/revmodphys.61.605
+% (Rev. Mod. Phys. 61(3), 605-668, 1989); abstract read.
+@article{SwartzPohl1989,
+  author  = {Swartz, E. T. and Pohl, R. O.},
+  title   = {Thermal boundary resistance},
+  journal = {Reviews of Modern Physics},
+  volume  = {61},
+  number  = {3},
+  pages   = {605--668},
+  year    = {1989},
+  doi     = {10.1103/revmodphys.61.605},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/s1064827501385931
+% (SIAM J. Sci. Comput. 24(4), 1379-1407, 2003); the HAL preprint
+% hal-00004812 read by the E5.2 pass (Result 2, eqs. 4.25-4.26).
+@article{LombardPiraux2003,
+  author  = {Lombard, Bruno and Piraux, Joël},
+  title   = {How to incorporate the spring-mass conditions in
+             finite-difference schemes},
+  journal = {SIAM Journal on Scientific Computing},
+  volume  = {24},
+  number  = {4},
+  pages   = {1379--1407},
+  year    = {2003},
+  doi     = {10.1137/s1064827501385931},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1137/05062740x
+% (SIAM J. Sci. Comput. 28(1), 172-205, 2006; the record's title ends in
+% a stray period, dropped); sect. 4.7 and 5.2 of the arXiv version
+% physics/0508018v2 read and the quotes in LITERATURE.md checked against
+% it. The published wording was not compared.
+@article{LombardPiraux2006,
+  author  = {Lombard, Bruno and Piraux, Joël},
+  title   = {Numerical modeling of elastic waves across imperfect contacts},
+  journal = {SIAM Journal on Scientific Computing},
+  volume  = {28},
+  number  = {1},
+  pages   = {172--205},
+  year    = {2006},
+  doi     = {10.1137/05062740x},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.3934/math.2023292
+% (AIMS Math. 8(3), 5789-5815; Crossref's issued year is 2022, the volume
+% is 2023); full text read by the E5.2 pass.
+@article{CaoYuan2023,
+  author  = {Cao, Fujun and Yuan, Dongfang},
+  title   = {A class of {HOC} finite difference method for elliptic interface
+             problems with imperfect contact},
+  journal = {AIMS Mathematics},
+  volume  = {8},
+  number  = {3},
+  pages   = {5789--5815},
+  year    = {2023},
+  doi     = {10.3934/math.2023292},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2015.03.028
+% (J. Comput. Phys. 292, 114-140, 2015); the INRIA report RR-8302 read in
+% part by the E5.2 pass.
+@article{LeguebePoignardWeynans2015,
+  author  = {Leguèbe, M. and Poignard, C. and Weynans, L.},
+  title   = {A second-order {C}artesian method for the simulation of
+             electropermeabilization cell models},
+  journal = {Journal of Computational Physics},
+  volume  = {292},
+  pages   = {114--140},
+  year    = {2015},
+  doi     = {10.1016/j.jcp.2015.03.028},
+}
+
+% VERIFIED 2026-09-24: Crossref record of doi:10.1016/j.jcp.2015.06.026
+% (J. Comput. Phys. 298, 747-765, 2015); abstract read (HAL, by the E5.2
+% pass).
+@article{GuittetEtAl2015,
+  author  = {Guittet, Arthur and Lepilliez, Mathieu and Tanguy, Sebastien and
+             Gibou, Frédéric},
+  title   = {Solving elliptic problems with discontinuities on irregular
+             domains -- the {V}oronoi {I}nterface {M}ethod},
+  journal = {Journal of Computational Physics},
+  volume  = {298},
+  pages   = {747--765},
+  year    = {2015},
+  doi     = {10.1016/j.jcp.2015.06.026},
 }

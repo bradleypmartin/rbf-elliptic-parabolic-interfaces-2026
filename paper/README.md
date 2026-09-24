@@ -7,9 +7,12 @@ parabolic, in 1-D and 2-D. Scaffolded in E5.1 (#42); the sections are drafted
 one ticket at a time (table below). The layout follows the companion wave
 manuscript's `paper/`.
 
-**Novelty is cited, not claimed.** Until the literature pass (E5.2, #43)
-writes `LITERATURE.md` at the repository root, no section states novelty;
-after it, §6 there holds the only novelty wording the manuscript may use.
+**Novelty is cited, not claimed.** [`LITERATURE.md`](../LITERATURE.md) at
+the repository root (E5.2, #43) is the novelty ledger. Its §6 holds the only
+novelty wording the manuscript may use: §6a the prior-work paragraph, §6b
+the claim sentences and their required caveats. Its §1d records what the
+pass decided: plan R1 is answered (the 1-D construction is classical; the
+claim is two-dimensional and scoped to stencils) and T3 is dropped.
 
 **Licensing.** `paper/` (`main.tex`, `references.bib`, `main.pdf`, `figures/`,
 `data/`) is [CC BY 4.0](LICENSE); the code in the rest of the repository is
@@ -31,7 +34,7 @@ manuscript alone.
 | File | What it is |
 |---|---|
 | `main.tex` | The manuscript (single source file; amsart). Each section opens with a `% TRACE` block naming the notes sections it quotes and the ticket that drafts it; `\stub{}` lines, visible in the PDF, mark what is not yet drafted. |
-| `references.bib` | Bibliography. Seeded in E5.1 with the 2016–2017 sources and the companion preprint only, each flagged `TODO(verify, #43)`; E5.2 verifies every entry against a fetched primary source and writes a dated `VERIFIED` note above it. No unverified citation ships. |
+| `references.bib` | Bibliography: 94 entries, each with a dated `VERIFIED` note naming the primary source fetched for it (E5.2, #43; `LITERATURE.md` §2 P6). No unverified citation ships; `tests/test_literature.py` checks the notes and that every key §6 of the ledger cites exists. |
 | `main.pdf` | The built PDF, committed with every change to `main.tex` or `references.bib`. |
 | `make_arxiv.py` | arXiv packaging, with its gates (below). |
 | `data/` | The results files the text quotes: one JSON per driver run, written with `--data-dir paper/data` (E5.3). |
@@ -90,8 +93,9 @@ this order:
    with the committed `main.pdf`.
 
 Then it writes `arxiv.tar.gz`. `--no-verify` skips 2 and the rebuild of 3;
-`--keep-comments` stages the sources verbatim. As scaffolded, the script stops
-at gate 1 (the stubs, then the four unverified entries).
+`--keep-comments` stages the sources verbatim. Until the sections are drafted
+the script stops at gate 1, on the stubs; since E5.2 the bibliography passes
+it.
 
 ## Work breakdown (epic E5, #7)
 
