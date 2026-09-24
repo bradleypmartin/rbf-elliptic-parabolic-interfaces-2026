@@ -43,8 +43,6 @@ from matplotlib.lines import Line2D  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from paper_tables import TABLES  # noqa: E402
-
 import heat1d_stiff as d1  # noqa: E402
 import heat2d_ring as ring  # noqa: E402
 import heat2d_stiff as d2  # noqa: E402
@@ -60,6 +58,7 @@ from heat_interfaces.plotting import (  # noqa: E402
     use_print_style,
 )
 from heat_interfaces.results_cache import float_keys, read_results  # noqa: E402
+from paper_tables import COMPARATOR_ORDER, TABLES  # noqa: E402
 
 # fontTools reads the pinned SOURCE_DATE_EPOCH = 0 into each embedded font's
 # head table and says so once per font; the date is the point.
@@ -154,7 +153,10 @@ def _delta_label(delta: float) -> str:
 
 # --- one dimension (stiff note §2) --------------------------------------------------
 
-MEDIUM_TITLE = {"matlab": r"$1/9\,|\,1$", "eq75": "eq. 75"}
+# The manuscript's names for the media (its §2 notation) and the treatments (the
+# 1-D table's), not the notes' and the driver's.
+MEDIUM_TITLE = {"matlab": "two-constant", "eq75": "sinusoidal"}
+COMPARATOR_LABEL = dict(COMPARATOR_ORDER)
 
 
 def heat1d_knee(data: Data):
@@ -224,7 +226,7 @@ def heat1d_treatments(data: Data):
                 ax.set_xlabel("nodes $n$")
         axes[i, 0].set_ylabel(r"$\|e\|_2 / \|u\|_2$")
     handles = [
-        _key(colour, label, ls=ls)
+        _key(colour, COMPARATOR_LABEL[label], ls=ls)
         for label, (colour, ls) in d1.COMPARATOR_STYLE.items()
     ]
     _legend(fig, handles, 4)

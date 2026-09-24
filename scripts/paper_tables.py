@@ -189,7 +189,8 @@ def rows_by_delta(table: dict) -> dict[float, list[dict]]:
 
 # --- one dimension (stiff note §2) --------------------------------------------------
 
-MEDIA = (("matlab", r"MATLAB medium $1/9\,|\,1$"), ("eq75", "eq.~75 medium"))
+# The manuscript's names (its §2 notation), not the notes' "MATLAB" and "eq. 75".
+MEDIA = (("matlab", r"two-constant medium $1/9\,|\,1$"), ("eq75", "sinusoidal medium"))
 H1D = "heat1d_stiff.json"
 CONSTRUCTION_1D = "δ = 0 construction"  # the 1-D driver's label, a row key
 
@@ -222,8 +223,9 @@ def tab_1d_knee(data: Any) -> str:
     measured = sorted({f"{c['measured']:.5f}" for c in constants})
     body += note(
         7,
-        rf"MATLAB floor $= c\,\delta$: $c = {'$, $'.join(measured)}$ measured"
-        rf" (every $\delta$), ${constants[0]['closed']:.5f}$ closed form",
+        r"two-constant medium: deficit $c\,\delta$,"
+        rf" $c = {'$, $'.join(measured)}$ measured,"
+        rf" ${constants[0]['closed']:.5f}$ closed form",
     )
     comments = [
         "floor: the two references' difference at the nodes, at the finest n;",
