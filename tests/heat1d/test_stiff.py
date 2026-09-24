@@ -395,6 +395,48 @@ def test_six_point_stencils_carry_phi_5():
     )
 
 
+def test_the_seeds_are_the_formal_powers_of_the_sturm_liouville_operator():
+    # LITERATURE.md §1a K2: in 1-D the chain is Kravchenko & Porter's
+    # recursive integrals (arXiv 0811.4488, Theorem 1, eqs. 6-8) with q = 0,
+    # u₀ = r = 1, p = alpha, taken from the anchor: φ_k = k! α_e^⌈k/2⌉ X^(k)
+    # for odd k and X̃^(k) for even k, where each integral alternates the
+    # weights 1/alpha and 1. Checked through the MATLAB medium's edge, which
+    # the stencil at x_e crosses; seed_profiles works in stencil units, so
+    # φ_k(x_e + ξ h) is h^k times its value.
+    from math import ceil, factorial
+
+    from scipy.integrate import cumulative_simpson
+
+    m = SmoothEdges(matlab_alpha(), 0.01)
+    x_e, xi = -0.013, np.array([-2.0, -1.0, 1.0, 2.0])
+    phi = seed_profiles(np.array([x_e]), H, xi, m, count=6, rtol=1e-13, atol=1e-15)
+    alpha_e = float(m.alpha(np.array([x_e]))[0])
+    s = np.linspace(0.0, 2 * H, 20001)
+    for side in (-1.0, 1.0):
+        inv = 1.0 / m.alpha(x_e + side * s)
+        tilde, plain = [np.ones_like(s)], [np.ones_like(s)]
+        for n in range(1, 6):
+            odd = n % 2 == 1
+            tilde.append(
+                side
+                * cumulative_simpson(
+                    tilde[-1] * (1.0 if odd else inv), x=s, initial=0.0
+                )
+            )
+            plain.append(
+                side
+                * cumulative_simpson(
+                    plain[-1] * (inv if odd else 1.0), x=s, initial=0.0
+                )
+            )
+        for j in np.flatnonzero(np.sign(xi) == side):
+            at = int(round(abs(xi[j]) / 2 * (s.size - 1)))
+            for k in range(6):
+                power = (plain if k % 2 else tilde)[k][at]
+                spps = factorial(k) * alpha_e ** ceil(k / 2) * power
+                assert phi[0, k, j] * H**k == pytest.approx(spps, rel=1e-9)
+
+
 def test_build_operator_dispatches_by_name():
     g = equispaced_grid(41)
     m = SmoothEdges(matlab_alpha(), 0.01)

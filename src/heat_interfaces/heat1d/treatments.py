@@ -24,9 +24,9 @@ against the true-δ reference.
   item 3), which no nodal alpha under ``Dx A Dx`` is (§1.8's correction and
   ``tests/heat1d/test_operators.py``). It is an operator, not a medium.
 
-T3, the band-limited alpha of the seismic literature, is not built here: the
-ticket keeps it only if the literature pass (E5.2, #43) finds it in use for
-diffusion.
+T3, the band-limited alpha of the seismic literature, is not built: the
+literature pass (E5.2, #43, ``LITERATURE.md`` §1d) found it in use for waves
+only, so plan §3.4 drops it.
 """
 
 from __future__ import annotations

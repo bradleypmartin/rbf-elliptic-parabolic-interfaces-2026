@@ -22,7 +22,9 @@ Dirichlet rows ``y = 0`` and ``y = 1`` and periodic in ``x``, as 1-D's
 windows are clipped at the domain ends. There is no twin of 1-D's T1-FV:
 a conservative scheme with exact face conductances needs faces, and a
 scattered node set has none (stiff note §2.4, H12). T3, the band-limited
-alpha, waits on the literature pass (E5.2, #43), as in 1-D.
+alpha, is dropped, as in 1-D (``LITERATURE.md`` §1d). No source averages
+alpha over a disc about each node; the manuscript calls T1 here the natural
+scattered-node analogue of the harmonic-mean conductance (§1a K10).
 
 The disc integrals are exact to rounding for the materials of the sweeps
 (``disc_integrals``): in the product-grid reference's ``ShearMap``
