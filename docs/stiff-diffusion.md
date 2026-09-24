@@ -121,6 +121,13 @@ solution and says what one monomial becomes through the edge:
   of `u_t` is constant, `α ∂ₓ u_t = 6 α_e²`.
 - **φ₄**: `u = φ₄ + 12 α_e t φ₂ + 12 α_e² t²`, with `u_tt ≡ 24 α_e²`.
 
+*In general (E5.5, #46, the manuscript's Lemma 3.2):* `u_k = Σ_{j ≤ k/2}
+k!/(j! (k − 2j)!) (α_e t)ʲ φ_{k−2j}` solves `u_t = L u` with `u_k(·, 0) =
+φ_k`, since `(j + 1) c_{j+1} = c_j (k − 2j)(k − 2j − 1)` for `c_j =
+k!/(j! (k − 2j)!)`; with constant α it is the heat polynomial `v_k(x − x_e,
+t)`. So `∂ₜᵐ u_{2m} = (2m)! α_eᵐ` and `∂ₜᵐ u_{2m+1} = (2m + 1)! α_eᵐ φ₁`,
+the list above to any k.
+
 So the even seeds are the conditions `∂ₜᵏu = const` (k = 0, 1, 2) and the
 odd seeds the conditions `α ∂ₓ ∂ₜᵏu = const` (k = 0, 1): in that order
 they are the five continuity conditions `(u, 0), (flux, 0), (u, 1),
@@ -228,7 +235,15 @@ companion measured 22 %, 10 %, 0.98 %, 0.098 % at δ/h = 1, 0.1, 0.01,
 not. Two consequences carried over: an edge below about `1e-5 h` is better
 served by the jump weights directly, and for δ of the order of the stencil
 or wider every row is seeded and the standard weights would have done as
-well, so seeding a resolved edge costs accuracy nothing.
+well, so seeding a resolved edge costs accuracy nothing. *E5.5 (#46)
+withdraws the first for diffusion. The jump weights solve the jump problem,
+whose solution lies O(δ) from the smooth one (0.71–0.75 δ relative at
+equilibrium and 0.27–0.29 δ on the ramp problem, §2.2's floor on the MATLAB
+medium), so they serve an edge whose δ is below the error wanted, not one
+below a fixed fraction of h: at h = 0.01 and δ = 1e-5 h the ramp problem's
+floor is 2.9e-8, eighteen times the seeds' 1.6e-9 at 200 nodes. The
+manuscript (§3.1) carries the march's own floor (§2.3) and no threshold in
+δ instead.*
 
 ### 1.5 Well-posedness: the seeds form an extended complete Chebyshev system
 
@@ -273,7 +288,16 @@ interpolation at distinct points (the Rolle argument between consecutive
 zeros only needs the derivative to exist almost everywhere with the sign
 of the next weight), which is why the confluent ("extended") part of ECT
 is the only part the jump costs and the stencil solves are never
-threatened.
+threatened. *E5.5 (#46): the manuscript (Proposition 3.3) states it that
+way throughout: a complete Chebyshev system for α positive, bounded away
+from zero and piecewise continuous, and an extended one where α is smooth,
+since the classical ECT theorem asks the weights for derivatives up to the
+order and "continuous" alone does not give the confluent part. It proves
+it from the formal-powers identity below, unrolled as `φ_k = k!
+α_e^⌈k/2⌉ I_k` with `I_k` the k nested integrals from x_e whose weights
+alternate 1/α (outermost) and 1: the seeds are then multiples of the
+canonical basis of the Pólya-form kernel, and the leading-behaviour step
+is not needed.*
 
 The seeds are close relatives of two classical objects, cited and not
 claimed: splines whose pieces lie in `ker L` are the L-splines of Schultz
@@ -428,7 +452,12 @@ the seeds fourth.
 of α over one and two cells, a material the naive operator samples", is
 not item 3. `Dx A Dx` applied to a kinked solution is not exact for any
 nodal α, because `Dx` of the kink is already O(1) off at the nodes beside
-it: on the MATLAB jump sitting mid-cell at 100 nodes, the residual
+it (*E5.5, #46: "any nodal α" overstates it. `α_j = B/(D_x u)_j` makes `Dx
+A Dx` exact, since `D_x u` has no zero on this equilibrium; a scratch check
+on the MATLAB jump gives 8e-14 at 50 nodes and 7e-13 at 100. That α is read
+off the discrete solution, not the medium. What the test pins, and what
+the manuscript's §3.5 says, is that neither cell mean makes it exact*): on
+the MATLAB jump sitting mid-cell at 100 nodes, the residual
 `max |L_h u_exact|` over the interior rows is 5.6 with the one-cell
 harmonic mean at the nodes and 1.2 with the two-cell mean, where the
 jump-aware operator gives rounding
@@ -959,7 +988,9 @@ never see):
 | 0.01 | 0.0107 | 92.2 | 92.2 |
 | 0.001 | 0.00107 | 90.5 | 90.5 |
 
-§1.4's scratch numbers to three digits (84 %, 47 %, 11 %, 1.1 %, 0.11 %),
+§1.4's scratch numbers to three digits (84 %, 47 %, 11 %, 1.1 %, 0.11 %;
+*E5.5's number check: the table's 0.465 is 46 %, which the manuscript
+quotes*),
 first order in δ/h (ratios 10.6 and 10.0 over the last two decades), and
 the δ = 0 march equal to the translated basis to rounding at offsets ½,
 3/2 and 0 cells (the last with the jump *on* the evaluation node, `α_e`
@@ -1008,12 +1039,14 @@ Below 1e-12 to 400 nodes at every δ, then growing exactly as E1.2's own
 seeds. The seed rows' residual on the exact solution, `h² max |L_h u_δ|`
 over the seeded rows at 200 nodes, is 1.8e-16, 2.5e-16, 9.7e-17 at δ/h =
 1, ½, 0.1 and 2.4e-13, 5.8e-13 at 0.01, 0.001 (against the δ = 0 rows'
-6.6 … 0.024 of §2.2): rounding while the march crosses the edge in a few
-steps, and the march's own floor once it takes many, which the solution
+6.6 … 0.024 of §2.2; *E5.5: those are unscaled `max |L_h (u_δ − u₀)|`, and
+h² times them is 6.6e-4 … 2.4e-6*): rounding while the march crosses the
+edge in a few steps, and the march's own floor once it takes many, which the solution
 sees at δ ≲ h/40 (1.0e-11 at 101 nodes and δ = 5e-4, 4e-11 at 100 nodes
 and δ = 1e-4; tightening rtol to SciPy's 100 eps changes neither, and
 §1.4's remark that an edge below 1e-5 h is better served by the jump
-weights stands, with the bound nearer 1e-2 h for 1e-12 work). The
+weights stands, with the bound nearer 1e-2 h for 1e-12 work; *withdrawn by
+E5.5, §1.4: the jump weights' solution is O(δ) from the smooth one*). The
 ticket's "exact to 1e-12 at every δ" is met where the direct solve allows
 it and for δ ≳ h/40.
 
