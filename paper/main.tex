@@ -805,35 +805,568 @@ Section~\ref{sec:discussion} returns to these restrictions.
 \section{Seeds for the diffusion operator in one dimension}
 \label{sec:seeds1d}
 % TRACE: stiff 1.2 (the chain), 1.3 (its first-order form), 1.4 (nested
-% kernels, the jump limit), 1.5 (ECT well-posedness), 1.6 (truncation
-% error), 1.8 (the elliptic degeneracy and its finite-volume twin); code
-% heat1d/stiff.py. Drafted by #46. Figure: the seed basis (#44; today
-% docs/figures/heat1d_stiff_seeds.png).
+% kernels, the jump limit), 1.5 (the Chebyshev property), 1.6 (truncation
+% error), 1.8 (the elliptic degeneracy and its finite-volume twin), with
+% the measurements of 2.3 (P4-P8) and 2.5 (the seed functions); E5.5's
+% notes in 1.2, 1.4, 1.5, 1.8 and 2.3; LITERATURE.md 1a K1-K3 and K7 for
+% the citations (#43); code heat1d/stiff.py. Drafted by #46. Numbers are
+% traced paragraph by paragraph; every cache-backed one is a check in
+% scripts/paper_numbers.py whose `where` names a "§3.x".
+Fix a stencil of the grid of Section~\ref{sec:setting1d}: five nodes
+$x_1 < \cdots < x_5$ and an evaluation point $x_e$, one of them. The
+standard weights are exact on the monomials $(x - x_e)^k$, $k \le 4$, and
+the interface-aware weights of Section~\ref{sec:jump} on the translated
+basis. This section builds the basis for a smooth edge, shows that the
+translated basis is its limit as $\delta \to 0$, proves that every stencil
+solve is nonsingular, and says what the truncation error is. Each
+ingredient is classical in one dimension (Section~\ref{sec:priorwork}), and
+the construction is that of our companion paper for the wave equation
+\cite{Martin2026seeds}, specialised to the diffusion operator.
+
 \subsection{Seeds as the profiles of solutions polynomial in time}
 \label{sec:chain}
-\stub{\#46: the chain of seeds anchored at the evaluation node, continued
-through the edge in first-order form so that $\alpha$ is never
-differentiated; the seed-basis figure}
+% TRACE: stiff 1.2 (the time-polynomial solutions, (j + 1) g_{j+1} = L g_j;
+% one power of L per power of t against the wave equation's two; the heat
+% polynomials of Rosenbloom-Widder; the definition; the seeds one at a
+% time; the five continuity conditions in order, one field). Lemma
+% lem:heatpoly's general u_k is E5.5's, added to stiff 1.2 with this
+% ticket (the chain's algebra, no number).
+Look for solutions of $u_t = L u$, $L = \px \alpha \px$, that are
+polynomial in time, $u = \sum_{j = 0}^{J} t^j g_j(x)$. Matching powers of
+$t$ gives $(j + 1)\, g_{j+1} = L g_j$ and $L g_J = 0$, so the profile at
+$t = 0$ satisfies $L^{J+1} g_0 = 0$. The heat equation spends one power of
+$L$ on each power of $t$ where the wave equation spends two, but the
+profiles fill the same nested kernels of $L$. With a constant $\alpha$
+they are the polynomials: the time-polynomial solutions of
+$u_t = \alpha u_{xx}$ are the heat polynomials
+\begin{equation*}
+  v_k(x, t) = \sum_{0 \le j \le k/2} \frac{k!}{j!\, (k - 2j)!}\,
+  x^{k - 2j}\, (\alpha t)^j
+\end{equation*}
+\cite{RosenbloomWidder1959,Widder1975}, whose profiles at $t = 0$ are the
+monomials. The seeds are the same profiles for a variable $\alpha$,
+anchored at the evaluation point.
+
+\begin{definition}[Seeds]
+\label{def:seeds}
+Let $\alpha > 0$ and $\alpha_e = \alpha(x_e)$. The \emph{seeds} at $x_e$
+are the functions $\phi_0, \phi_1, \ldots$ of the chain \eqref{eq:chain}:
+$\phi_0 = 1$, $\alpha \phi_1' = \alpha_e$ and
+$L \phi_k = k (k - 1)\, \alpha_e\, \phi_{k-2}$ for $k \ge 2$, with
+$\phi_k(x_e) = 0$ for $k \ge 1$ and $\phi_k'(x_e) = 0$ for $k \ge 2$.
+\end{definition}
+
+\begin{lemma}
+\label{lem:heatpoly}
+For every $k$ the function
+\begin{equation}
+  \label{eq:heatpoly}
+  u_k(x, t) = \sum_{0 \le j \le k/2} \frac{k!}{j!\, (k - 2j)!}\,
+  (\alpha_e t)^j\, \phi_{k - 2j}(x)
+\end{equation}
+solves $u_t = L u$, and $u_k(\cdot, 0) = \phi_k$. With a constant
+$\alpha$, $\phi_k = (x - x_e)^k$ and $u_k(x, t) = v_k(x - x_e, t)$.
+\end{lemma}
+
+\begin{proof}
+Write $c_j = k! / (j!\, (k - 2j)!)$. By the chain,
+$L u_k = \sum_j c_j\, (k - 2j)(k - 2j - 1)\, \alpha_e^{j+1}\, t^j\,
+\phi_{k-2j-2}$ and $\pt u_k = \sum_j (j + 1)\, c_{j+1}\, \alpha_e^{j+1}\,
+t^j\, \phi_{k-2j-2}$, and the two agree because
+$(j + 1)\, c_{j+1} = c_j\, (k - 2j)(k - 2j - 1)$. With $\alpha$ constant,
+$L (x - x_e)^k = \alpha\, k (k - 1) (x - x_e)^{k-2}$ and the anchor
+conditions fix the two constants of integration, so $\phi_k = (x - x_e)^k$
+by induction; with $\alpha_e = \alpha$, \eqref{eq:heatpoly} is then
+$v_k(x - x_e, t)$.
+\end{proof}
+
+Read one at a time, the seeds say what each monomial becomes through the
+edge. The seed $\phi_1$ solves $L \phi_1 = 0$: it is the equilibrium of
+constant flux, $\phi_1(x) = \alpha_e \int_{x_e}^{x} d\xi / \alpha(\xi)$,
+and what stays smooth through the edge is its flux $\alpha \phi_1'$, not
+its slope. The seed $\phi_2$ is the profile of $u_2 = \phi_2 + 2 \alpha_e
+t$, whose rate of change is constant, $u_t = 2 \alpha_e$; the constant
+matters, since $u_t = 0$ would only return $\ker L$. In general, by
+\eqref{eq:heatpoly}, $\pt^m u_{2m} = (2m)!\, \alpha_e^m$ is constant and
+$\pt^m u_{2m+1} = (2m + 1)!\, \alpha_e^m\, \phi_1$ has a constant flux:
+the even seeds carry $\pt^m u = \text{const}$ and the odd ones
+$\alpha\, \px \pt^m u = \text{const}$. Taken in the order
+$\phi_0, \ldots, \phi_4$ these are the five conditions of
+\eqref{eq:continuity} from which the translated basis of a jump is built,
+on $u$, its flux, $u_t = L u$, the flux of $u_t$, and $u_{tt} = L^2 u$. In
+the wave equation the same alternation passes between two fields; in
+diffusion both kinds of condition bear on $u$, so one chain serves every
+stencil.
+
+% TRACE: stiff 1.5's closing note and LITERATURE.md 1a K2 (the identity
+% with q = 0, u_0 = r = 1, p = alpha, x_0 = x_e; the recursive integrals
+% without a factor n, X^(k) for odd k and X~^(k) for even k, their weights
+% 1/alpha and 1 alternating; the lambda-series coefficients the
+% time-polynomial profiles). Checked in
+% tests/heat1d/test_stiff.py::test_the_seeds_are_the_formal_powers_of_the_
+% sturm_liouville_operator at 1e-9 relative through the two-constant
+% medium's delta = 0.01 edge (the E5.2 pass found 12 digits for k <= 5).
+% eq:nestedint is that identity with the recursion unrolled.
+In one dimension the seeds are a classical object. Integrating the chain
+twice from the anchor gives
+$\phi_k(x) = k (k - 1)\, \alpha_e \int_{x_e}^{x} \alpha(s)^{-1}
+\int_{x_e}^{s} \phi_{k-2}(r)\, dr\, ds$, and unrolling the recursion,
+\begin{equation}
+  \label{eq:nestedint}
+  \phi_k = k!\, \alpha_e^{\lceil k/2 \rceil}\, I_k, \qquad
+  I_k(x) = \int_{x_e}^{x} \frac{ds_1}{\alpha(s_1)} \int_{x_e}^{s_1} ds_2
+  \int_{x_e}^{s_2} \frac{ds_3}{\alpha(s_3)} \cdots,
+\end{equation}
+where $I_0 = 1$ and $I_k$ has $k$ nested integrals whose weights alternate
+between $1/\alpha$ and $1$, starting from $1/\alpha$ outermost. These are
+the recursive integrals, $X^{(k)}$ for odd $k$ and $\tilde X^{(k)}$ for even
+$k$, by which Kravchenko and Porter write the solutions of $(p u')' + q u =
+\lambda r u$ as power series in the spectral parameter
+\cite{Kravchenko2008,KravchenkoPorter2010}, here with $q = 0$, $r = 1$,
+$p = \alpha$, the particular solution $u_0 = 1$ and the integrals taken
+from the anchor. The seeds are thus the formal powers of the
+Sturm--Liouville operator $L$ anchored at the evaluation point, and the
+coefficients of those series are the time-polynomial profiles, with
+$\lambda$ in the role of $\pt$. The repository's tests check the identity
+against the ODE march below to a relative $10^{-9}$ through a $\tanh$ edge.
+
+% TRACE: stiff 1.2 (the moment conditions, the same ones E1.2 imposes on
+% the translated basis); 2.3 P4 (constant alpha = 0.7: 0.7 times
+% Fornberg's weights to 1e-15 centred and 2e-16 off-centre, tests);
+% LITERATURE.md 6a's HODIE and fitted-operator sentence, verbatim (#45's
+% first cut dropped it from section 1 because "Section 3 cites them"); K3
+% (Samarskii-Makarov, Gavrilyuk et al.: the seed stencil "a variant of
+% them", K3's framing).
+The weights $w_i$ of a stencil approximate $L u$ at $x_e$ from the nodal
+values by reproducing $L$ on the first five seeds,
+\begin{equation}
+  \label{eq:moments}
+  \sum_{i=1}^{5} w_i\, \phi_k(x_i) = (L \phi_k)(x_e) =
+  \begin{cases} 2 \alpha_e, & k = 2, \\ 0, & k = 0, 1, 3, 4, \end{cases}
+\end{equation}
+since $L \phi_k = k (k - 1)\, \alpha_e\, \phi_{k-2}$ vanishes at $x_e$ for
+every $k$ but $2$. These are the conditions the interface-aware stencils
+impose on the translated basis, and with a constant $\alpha$ they return
+$\alpha$ times the standard second-derivative weights \cite{Fornberg1988},
+which the implementation reproduces to rounding. Stencils exact on a local
+space other than the polynomials go back to fitted operators and to HODIE
+\cite{AllenSouthwell1955,Ilin1969,LynchRice1980,RoosStynesTobiska2008}.
+Three-point schemes whose coefficients come from Cauchy problems
+integrated across a piecewise-smooth coefficient are the exact and
+truncated schemes \cite{SamarskiiMakarov1990,GavrilyukEtAl2011}, and the
+seed stencils are a five-point variant of them.
+
+\begin{figure}
+  \centering
+  % figures/heat1d_stiff_seeds.pdf: scripts/paper_figures.py from
+  % paper/data/heat1d_stiff.json (seed_functions, seed_functions/curves);
+  % never hand-edited. TRACE: stiff 2.5 (the window: 200 nodes, h =
+  % 0.01005, the 1/9 | 1 edge half a cell right of x_e, h_s = 2h, delta/h
+  % = 1/2 and 0.1; the factor (alpha_0/alpha_e)^ceil(k/2), which 2.5's
+  % limitations require the caption to state; the jump's seeds the
+  % monomials on the node's side, to 1e-13 in tests; first order in
+  % delta/h, 2.5's table).
+  \includegraphics{heat1d_stiff_seeds}
+  \caption{The seeds $\phi_1, \ldots, \phi_4$ of one five-point stencil of
+  the two-constant medium at $200$ nodes, whose evaluation point $x_e$ lies
+  half a cell to the left of the $9 : 1$ edge (dotted), in the stencil
+  coordinate $\xi = (x - x_e) / h_s$ with $h_s = 2h$; $\alpha$ across the
+  stencil on top. Grey, dashed: the monomials $\xi^k$. Purple: the
+  translated basis of the jump ($\delta = 0$). Blue: the seeds at
+  $\delta = h/2$ (solid, with their values at the nodes) and
+  $\delta = h/10$ (dashed). Each seed is multiplied by
+  $(\alpha_0 / \alpha_e)^{\lceil k/2 \rceil}$, with $\alpha_0$ the jump's
+  value at $x_e$ and $\alpha_e$ the edge's, so that the lines compare across
+  $\delta$; the factor is the normalisation of \eqref{eq:chain}, which the
+  weights never see. On the node's side of the jump its seeds are the
+  monomials, and across it the slope of $\phi_1$ falls ninefold; the seeds
+  of a smooth edge bend through it instead of kinking, and approach the
+  translated basis at first order in $\delta / h$.}
+  \label{fig:seeds1d}
+\end{figure}
+
+\para{First-order form}
+% TRACE: stiff 1.3 (the state (phi_k, psi_k), psi_k = alpha phi_k'; the
+% initial data; the march outward from x_e; a jump a segment boundary
+% across which (phi, psi) is continuous, the weak reading; the
+% double-cross), 2.3 (on each segment alpha is read from the piece of the
+% medium's element that owns it, so delta = 0 is marched like any other
+% width rather than dispatched to E1.2's algebra).
+The chain is integrated as a first-order system in each seed and its flux
+$\psi_k = \alpha \phi_k'$,
+\begin{equation}
+  \label{eq:firstorder}
+  \phi_k' = \psi_k / \alpha, \qquad
+  \psi_k' = k (k - 1)\, \alpha_e\, \phi_{k-2},
+\end{equation}
+with $\phi_0(x_e) = 1$, $\psi_1(x_e) = \alpha_e$ and every other initial
+value zero, so that $\alpha$ is never differentiated. The ten states march
+together from $x_e$ outward to each side of the stencil. Across a jump
+$\phi$ and $\psi$ are continuous, which is $L$ read in the weak sense: the
+march stops at the jump and reads $\alpha$ on each side from the piece
+that owns it, so a jump is marched like any other width, and a stencil that
+straddles both edges of a thin layer marches through both.
+
+\para{Stencil coordinate}
+% TRACE: stiff 1.3 (the chain invariant in xi; w = w~ / h_s^2), 2.3 (h_s =
+% max |x_i - x_e|, xi_i = 0, +-1/2, +-1 on an interior row) and P5: 23.5
+% the constant-alpha Vandermonde value, and 24 again for delta >= 10 h
+% (tests, stiff 2.3); 90 at delta = 0 and 138 at delta = h/2 on the stencil
+% of fig:seeds1d, paper/data/heat1d_stiff.json weights_vs_jump/matlab
+% (paper_numbers.py, where "§3.1; stiff §2.3 P5").
+In the coordinate $\xi = (x - x_e) / h_s$, with $h_s = \max_i |x_i - x_e|$,
+the functions $\phi_k(x) / h_s^k$ satisfy the same chain with
+$\alpha(x_e + h_s \xi)$ in place of $\alpha$. They are close to $\xi^k$, and
+the matrix $A_{ki} = \phi_k(x_i) / h_s^k$ of \eqref{eq:moments} is a
+perturbed Vandermonde matrix; the weights are $w = \tilde w / h_s^2$, with
+$A \tilde w$ equal to the right-hand side of \eqref{eq:moments}. For the
+centred stencil, $\xi_i = 0, \pm \tfrac12, \pm 1$, the condition number of
+$A$ is $23.5$ with a constant $\alpha$. On the stencil of
+Figure~\ref{fig:seeds1d}, half a cell from a $9 : 1$ edge, it is $90$ at
+$\delta = 0$ and $138$ at $\delta = h/2$, and $24$ again once
+$\delta \ge 10 h$, where the seeds are close to the monomials.
+
+\para{The march and the seeded rows}
+% TRACE: stiff 2.3 (DOP853 at SEED_RTOL 1e-13 / SEED_ATOL 1e-15; EDGE_STOP
+% at the centre and +-10 delta; the rows whose window span meets (x_c - 20
+% delta, x_c + 20 delta), TANH_REACH; 8 and 84 rows at delta = 0.0025 and
+% 0.04 on 100 nodes; the batched march, some sixteen solve_ivp calls per
+% operator, 0.11 s for the 1284 rows of delta = 0.04 at 1600 nodes: counts
+% and timings from the notes, not a results file); 2.1 (the pieces to the
+% bit beyond 20 delta); no threshold in delta, stiff 2.3's closing
+% paragraph (the h <~ 2 delta regime costs the seeds nothing; at delta = 0
+% they are E1.2's operator). E5.5 withdrew stiff 1.4's "an edge below
+% about 1e-5 h is better served by the jump weights" (their solution is
+% O(delta) from the smooth one, stiff 2.2), so it is not carried here. The
+% march's floor: h^2 max |L_h u| over the seeded rows at 200 nodes,
+% paper/data/heat1d_stiff.json row_residuals/matlab (paper_numbers.py,
+% where "§3.1; stiff §2.3 P6"); the solution's 1.0e-11 at 101 nodes and
+% delta = 5e-4 and 4e-11 at 100 and 1e-4, stiff 2.3 P6 (scratch, notes
+% only); collocation not built, stiff 2.5's limitations.
+The march is an explicit adaptive Runge--Kutta method of order eight
+(SciPy's DOP853) at relative tolerance $10^{-13}$ and absolute tolerance
+$10^{-15}$, with segment boundaries at each edge centre and at $10 \delta$
+on either side of it, so that the step never has to find the edge inside a
+long step over flat material. A row is seeded when the span of its stencil
+meets $(x_c - 20 \delta, x_c + 20 \delta)$ for an edge centre $x_c$,
+beyond which the edge is its pieces to the last bit; every other row is the
+standard one. At $\delta = 0$ the seeded rows are exactly those that
+straddle the jump; at $\delta = 0.0025$ and $0.04$ on $100$ nodes they
+number $8$ and $84$; once $20 \delta$ covers the domain, every row is
+seeded. No threshold in $\delta$ switches the seeds on or off: a resolved
+edge costs them nothing (Section~\ref{sec:seedrates1d}), and at
+$\delta = 0$ they are the jump's weights (Section~\ref{sec:jumplimit}).
+Rows whose nodes sit at the same offsets from $x_e$ march as one system,
+so an operator costs some sixteen calls of the integrator whatever the
+number of seeded rows: $0.11$\,s for the $1284$ seeded rows of
+$\delta = 0.04$ on $1600$ nodes. The march has one floor of its own. With
+$L_h$ the discrete operator, the seeded rows' residual on the exact
+equilibrium, $h^2 \max |L_h u|$, is at most $\sci{2.5}{-16}$ at $200$
+nodes while the march crosses the edge in a few steps ($\delta \ge h/10$),
+and $\sci{2.4}{-13}$ and $\sci{5.8}{-13}$ at $\delta = h/100$ and $h/1000$,
+where it takes many. The equilibrium solution shows it once
+$\delta \lesssim h/40$, at $10^{-11}$ to $\sci{4}{-11}$. A collocation
+integration of the same chain would remove the floor; we have not built
+one.
 
 \subsection{Nested kernels and the jump as the limit}
 \label{sec:jumplimit}
-\stub{\#46: the nested kernels of the operator; the translated basis of
-Section~\ref{sec:jump} as the $\delta \to 0$ limit}
+% TRACE: stiff 1.4 (the nested spaces; the spaces, not the basis,
+% determine the weights; the weak reading; the translated x with slopes in
+% the ratio alpha^+/alpha^-; for constant pieces the chain is the
+% translated basis, one construction with two implementations); 2.3 P4 and
+% 2.5 (the march against E1.2's algebra at delta = 0: 7e-16 in the
+% weights, 3e-15 in the functions, paper/data/heat1d_stiff.json
+% weights_vs_jump/matlab and seed_functions, paper_numbers.py where "§3.2;
+% stiff §2.5 (2)"); LITERATURE.md 1a K3 (Sujecki, Gartland).
+Since $L$ sends each seed two steps down the chain,
+$\operatorname{span}\{\phi_0, \ldots, \phi_k\}$ is the $(k + 1)$-th space
+of
+\begin{equation}
+  \label{eq:nested}
+  \{1\} \subset \ker L \subset \ker \px L \subset \ker L^2 \subset
+  \ker \px L^2 \subset \cdots,
+\end{equation}
+where $\ker \px L^m$ holds the $g$ with $L^m g$ constant. The spaces depend
+on neither the anchor nor the normalisation, so the weights do not either;
+only the basis does.
+
+For a jump, read $L$ in the weak sense, $\phi$ and $\alpha \phi'$
+continuous across it. Then $\ker L$ is spanned by $1$ and the
+piecewise-linear function whose slope changes by the factor
+$\alpha^- / \alpha^+$ across the jump, the translated $x$ of
+Section~\ref{sec:jump}. On constant pieces $L \phi_2 = 2 \alpha_e$ makes
+$\phi_2'' = 2 \alpha_e / \alpha^\pm$ on the two sides, with $\phi_2$ and its
+flux continuous, which is the continuity of $u_t$ and of its flux; and so
+on up the chain, each condition $\pt^m u = \text{const}$ or
+$\alpha\, \px \pt^m u = \text{const}$ being one of \eqref{eq:continuity}.
+For constant pieces the chain across a jump is therefore the translated
+basis, the anchor conditions picking one basis of its span, and the
+interface-aware stencils are the seed stencils at $\delta = 0$: one
+construction with two implementations, algebra for a jump and an ODE march
+for a smooth edge. On the stencil of Figure~\ref{fig:seeds1d} the march
+reproduces the translated basis to $\sci{3}{-15}$ function by function, and
+its weights to $\sci{7}{-16}$. The same device, Taylor data carried across
+a step to make the weights, appears in photonics \cite{Sujecki2010}, and
+three-point schemes of any prescribed order across a jump in the
+coefficient are Gartland's \cite{Gartland1989}.
+
+% TRACE: stiff 2.3 P4 (0.843, 0.465, 0.114, 0.0107, 0.00107 of the largest
+% weight at delta/h = 1, 1/2, 0.1, 0.01, 0.001), paper/data/heat1d_stiff.json
+% weights_vs_jump/matlab (paper_numbers.py, where "§3.2; stiff §2.3 P4");
+% E5.5's number check: 0.465 is 46 %, not the 47 % of stiff 1.4's scratch;
+% the functions first order too, stiff 2.5's table (5.12e-2, 5.12e-3,
+% 5.12e-4 for phi_1 at delta/h = 0.1, 0.01, 0.001, tests); P8, the
+% double-cross, stiff 2.3 (1 | 0.1 | 1 on [0, 2h] at h = 0.05: 7.6e-15 at
+% delta = 0; 22.2 %, 1.86 %, 0.182 % at delta/h = 0.1, 0.01, 0.001; tests).
+As $\delta \to 0$ the seed weights approach the jump's at first order in
+$\delta / h$. On the stencil of Figure~\ref{fig:seeds1d},
+$\max_i |w_i - w_i^{\mathrm{jump}}| / \max_i |w_i^{\mathrm{jump}}|$ is
+$84$, $46$, $11$, $1.1$ and $0.11$ percent at $\delta / h = 1$,
+$\tfrac12$, $0.1$, $0.01$ and $0.001$, and the seeds approach the
+translated basis at the same rate. A stencil that straddles both edges of a
+layer two cells thick, $\alpha = 1 \,|\, 0.1 \,|\, 1$, marches through
+both: at $\delta = 0$ its weights are those of the jump construction
+translated twice, to $\sci{7.6}{-15}$, and at $\delta / h = 0.1$, $0.01$
+and $0.001$ they differ from them by $22$, $1.9$ and $0.18$ percent.
+
+% TRACE: stiff 1.4 (phi_2 = (x - x_e)^2 - (2/3)(alpha_e'/alpha_e)(x -
+% x_e)^3 + ...; the two spaces differ at relative O(h alpha'/alpha); both
+% exact on their own space), 2.3 P4 on eq. 75 (the row whose evaluation
+% point is the layer's edge x = 0, 201 nodes, alpha_e = 0.1 the layer's,
+% alpha'/alpha = 25: 1.25 at delta = 0 and 1.26-2.24 for delta/h from 0.001
+% to 1, paper/data/heat1d_stiff.json weights_vs_jump/eq75, paper_numbers.py
+% where "§3.2; stiff §2.3 P4"; first order in h at x = 0.5, 1.75, 1.25,
+% 0.50, 0.22 for h = 0.02 to 0.0025, tests), 2.5 (the functions 0.19-0.40
+% apart, so eq. 75's seeds are read against the reference solution); the
+% seed operator better by 6-44 times at equilibrium and 6-38 on the ramp
+% problem at delta = 0 over 101-1601 nodes, knee/equilibrium and knee/ramp
+% eq75 at delta = 0, where the construction's column is E1.2's operator
+% (paper_numbers.py, where "§3.2; stiff §2.3 P6" and "P7").
+When the pieces vary the limit is not exact. The interface-aware
+construction expands each side's $\alpha$ to degree four about the
+interface and truncates the operator there (Section~\ref{sec:jump}), while
+the seed $\phi_2$ solves $(\alpha \phi_2')' = 2 \alpha_e$ exactly,
+$\phi_2 = (x - x_e)^2 - \tfrac23\, (\alpha'(x_e) / \alpha_e)\, (x - x_e)^3
++ \cdots$, so that within a stencil the two five-dimensional spaces differ
+at relative order $h \alpha' / \alpha$. On the sinusoidal medium, whose
+layer has $\alpha' / \alpha = 25$ at its edge, the seed and jump weights
+of the row whose evaluation point is that edge differ at $h = 0.01$ by
+$1.25$ times the largest weight at $\delta = 0$ and by $1.26$ to $2.24$
+times for $\delta / h$ from $0.001$ to $1$, and the difference falls with
+$h$.
+Neither space is wrong, each being exact on its own five functions; on this
+medium the seed operator's error is the smaller, by $6$ to $44$ times at
+equilibrium and $6$ to $38$ times on the ramp problem at $\delta = 0$ over
+$101$ to $1601$ nodes. There the seeds are measured against the reference
+solution, never against the jump construction.
 
 \subsection{Well-posedness}
 \label{sec:ect}
-\stub{\#46: the seeds form an extended complete Chebyshev system, so every
-stencil solve is nonsingular}
+% TRACE: stiff 1.5 (the proposition and its Polya form; the owner's
+% alpha_e on a jump) with E5.5's note there: a complete Chebyshev system
+% for piecewise-continuous alpha, an extended one where alpha is smooth
+% (the classical theorem asks the weights for derivatives), proved from
+% eq:nestedint, the seeds being multiples of the canonical nested
+% integrals; LITERATURE.md 1a K7 (the companion's argument, on Polya,
+% Karlin-Studden, Coppel).
+The stencil solve is nonsingular for every edge width, the jump included,
+and for every set of distinct nodes, not only the ones we used.
+
+\begin{proposition}
+\label{prop:ect}
+Let $\alpha$ be positive and bounded away from zero on an interval $I$
+containing $x_e$, and continuous on $I$ except at finitely many jumps,
+across which $L$ is read in the weak sense. Then for every $k$ the seeds
+$\phi_0, \ldots, \phi_k$ form a complete Chebyshev system on $I$:
+interpolation in their span at any $k + 1$ distinct points of $I$ is
+uniquely solvable. Where $\alpha$ is smooth, as through a $\tanh$ edge
+between smooth pieces, they form an extended complete Chebyshev system. In
+particular \eqref{eq:moments} has a unique solution for every
+$\delta \ge 0$ and every five distinct nodes in $I$.
+\end{proposition}
+
+\begin{proof}
+By \eqref{eq:nestedint} the seeds are nonzero multiples of $I_0, \ldots,
+I_k$, nested integrals whose weights $v_1 = 1/\alpha$, $v_2 = 1$,
+$v_3 = 1/\alpha, \ldots$ (outermost first) are positive. Such a family is
+the canonical basis of the kernel of the operator in P\'olya form
+$\px \frac{1}{v_k} \px \cdots \frac{1}{v_2} \px \frac{1}{v_1} \px$, which is
+$\px L^m$ for $k = 2m$ and $L^{m+1}$ for $k = 2m + 1$, and whose kernel
+is the $(k + 1)$-th space of \eqref{eq:nested}. Suppose $g = \sum_{j \le k} c_j I_j$
+vanishes at $k + 1$ distinct points of $I$. Then $g' = v_1 g_1$, where
+$g_1 = \sum_{1 \le j \le k} c_j I'_{j-1}$ is a combination of the $k$
+nested integrals $I'_0, \ldots, I'_{k-1}$ with the weights $v_2, v_3,
+\ldots$, and $g_1$ is continuous. Between two consecutive zeros $a < b$ of
+$g$, $\int_a^b v_1 g_1 = 0$ with $v_1 > 0$, so $g_1$ vanishes in $(a, b)$:
+it has $k$ distinct zeros. By induction on $k$, $g_1 \equiv 0$, so
+$c_1 = \cdots = c_k = 0$, and then $g = c_0$ vanishes, so $c_0 = 0$. Only
+the positivity and integrability of the weights entered, so the argument
+holds across finitely many jumps. Where $\alpha$ is smooth the operator is
+disconjugate on $I$ and the family is an extended complete Chebyshev system
+\cite{Polya1922,KarlinStudden1966,Coppel1971}.
+\end{proof}
+
+% TRACE: stiff 1.5 (x_e on a jump, as for E1.2's rows at an interface
+% node: alpha_e the owner's value, region_index putting a point on a jump
+% to its right, PiecewiseAlpha.at_interface naming the owner; phi_1 slope
+% 1 on the owner's side and alpha_e/alpha_other on the other); LITERATURE.md
+% 1a K7 (the argument is the companion's).
+When $x_e$ lies on a jump, as it does for the rows whose evaluation node
+falls on an edge of the sinusoidal medium, $\alpha_e$ is the value of the
+piece that owns $x_e$; $\phi_1$ then has slope $1$ on that side and
+$\alpha_e / \alpha$ on the other, and nothing else changes, since
+$\alpha_e$ enters the seeds only as a factor. The argument is the one the
+companion paper makes for the two fields of the wave equation
+\cite{Martin2026seeds}, shortened by \eqref{eq:nestedint}.
 
 \subsection{Truncation error}
 \label{sec:truncation}
-\stub{\#46: third order locally on the seeded rows, fourth globally; the two
-readings of the bound}
+% TRACE: stiff 1.6 (the Newton form with Muhlbach's remainder; M = d_x L^2,
+% five derivatives; tau(g) = c_5 h^3 (M g) + ...; one order below the
+% companion's first-derivative bound; E1.2's h^3 moments 0.32, 0.084 and
+% 172 for the 1/9 | 1 jump at 1/2, 3/2 and 0 cells, zero to rounding for
+% equal pieces, tests/heat1d/test_interface.py::test_jump_rows_have_an_h3_
+% moment_and_equal_pieces_do_not); the global order four, stiff 1.6 (the
+% bounded discrete Green's function; E1's rates 3.85-4.19 on the jump,
+% port notes 1.3-1.4); LITERATURE.md 1a K7 (Beale-Layton's O(h)
+% truncation at the interface, O(h^2) solution: cited here, not claimed).
+Interpolation in an extended complete Chebyshev system has a Newton form
+whose remainder carries the operator that annihilates the space where the
+polynomial remainder carries the $(k + 1)$-th derivative
+\cite{Muhlbach1973}. For the five seeds that operator is $M = \px L^2$, and
+the local truncation error of a seed stencil on a smooth function $g$ is
+\begin{equation}
+  \label{eq:truncation}
+  \tau(g) = \sum_{i=1}^{5} w_i\, g(x_i) - (L g)(x_e) = O(h^3\, M g),
+\end{equation}
+with a constant that the remainder expresses through $1/\alpha$ inside the
+stencil. That is third order, not fourth: a second derivative on five
+points is generically third order, and the centred standard stencil gains
+its fourth only because its $h^3$ term vanishes by symmetry, which an edge
+breaks. The interface-aware rows of a jump show the same. On the function
+of degree five in their translated basis, which lies outside the space they
+reproduce, the $h^3$ term is $0.32$, $0.084$ and $172$ (in the stencil
+coordinate) for a $9 : 1$ jump half a cell and one and a half cells from
+the evaluation node and at the node itself, and zero to rounding for equal
+pieces.
+
+The global order is still four. A local error of order $h^3$ on a fixed
+number of rows costs one order less in the solution than the same error on
+every row, since the inverse of the discrete operator has entries of
+order $h$, so the solution error is $O(h^4)$. This is what the
+interface-aware stencils reach at a jump (rates $3.85$ to $4.19$,
+elliptic and parabolic, in our port of \cite{Martin2016}), and it is the
+phenomenon Beale and Layton prove for interface corrections, where an
+$O(h)$ truncation error at the interface leaves the solution second order
+\cite{BealeLayton2006}. The bound \eqref{eq:truncation} has two readings,
+and Section~\ref{sec:results1d} is built on them.
+
+\para{Equilibrium}
+% TRACE: stiff 1.6's first reading (u = A + B phi_1 in every seeded
+% window; the seeded rows exact at any delta and h).
+If $L u = 0$ then $M u = 0$, and more than that: $u$ has a constant flux,
+so on every seeded stencil it lies in $\operatorname{span}\{\phi_0,
+\phi_1\}$, and \eqref{eq:moments} reproduces $L u$ there exactly, at any
+$\delta$ and any $h$ (Section~\ref{sec:elliptic1d}).
+
+\para{Time dependence}
+% TRACE: stiff 1.6's second reading (M u = d_x u_tt, bounded independently
+% of delta, changing by the contrast ratio across the edge; FD4's u^(5) ~
+% delta^-4; the naive rows miss an O(1) fraction of the slope jump, O(1/h)
+% in L u; the constant's delta-independence not a consequence of the
+% proposition, P7); 2.3 (the separable solution e^{ct} v on the
+% two-constant medium, 100 -> 400 nodes: the seeded rows' residual rates
+% 3.06, 3.78 at delta = 0.01 and 3.15, 3.51 at 0.0025, residual n^3 0.27,
+% 0.26, 0.15 and 0.43, 0.38, 0.27, within a factor two between the widths;
+% the plain rows' 3.94, 3.97 and 3.94, 4.01; tests, notes only); the
+% smoothing paragraph, stiff 1.6's last (the flux changes by int u_t dx =
+% O(delta) across the edge; why the construction is a serious baseline).
+If $u_t = L u$ then $L^2 u = u_{tt}$ and $M u = \px u_{tt}$, the
+$x$-derivative of another solution of the heat equation. Since $u_{tt}$
+has a continuous flux, $\px u_{tt}$ is bounded independently of $\delta$
+and changes across the edge by the ratio of the pieces, whatever the width.
+The standard stencil's error is driven by $u^{(5)}$ instead, which grows
+like $\delta^{-4}$ inside the edge, and the rows of $D_x A D_x$ that see an
+unresolved edge miss a fixed fraction of the jump in slope, an error of
+order $1/h$ in $L u$. The bound does not make the constant in
+\eqref{eq:truncation} independent of $\delta / h$, since the remainder
+involves $1/\alpha$ across the stencil. Measured on a separable solution
+$e^{ct} v(x)$ of the two-constant medium from $100$ to $400$ nodes, the
+seeded rows' residual is third order (rates $3.06$ to $3.78$), its
+constants at $\delta = 0.01$ and $0.0025$ within a factor of two of each
+other, and the standard rows' residual is fourth order ($3.94$ to
+$4.01$).
+
+Diffusion smooths, so for $t > 0$ every $\pt^k u$ is itself a solution and
+the second reading holds for the whole chain. And since
+$\px (\alpha u_x) = u_t$, the flux changes across an edge of width $\delta$
+only by $\int u_t\, dx = O(\delta)$: in diffusion a sub-grid edge is close
+to a jump at all times. That is why the $\delta = 0$ construction is a
+serious baseline here (Section~\ref{sec:construction1d}), and why the
+seeds' margin over it is set by $\delta$.
 
 \subsection{The elliptic problem in one dimension}
 \label{sec:elliptic1d}
-\stub{\#46: the exactness remark and its finite-volume twin, citing the
-literature \#43 finds}
+% TRACE: stiff 1.8 (the exact constructions; the face conductance a_{i+1/2}
+% = h / int dxi / alpha, exact for any profile; the plan's T1 not item 3;
+% the correction for E3.5 with E5.5's note there: no cell mean sampled at
+% the nodes makes Dx A Dx exact, while a nodal alpha read off the discrete
+% solution would; tests/heat1d/test_operators.py::test_no_nodal_alpha_
+% makes_dx_a_dx_exact_on_a_kinked_equilibrium, a residual above 0.5 at 100
+% nodes for one and two cells), 1.6's first reading, 2.5 (4) (the
+% sinusoidal medium: the plain rows not exact, the conservative scheme
+% exact); LITERATURE.md 1a K1 (Tikhonov-Samarskii, Samarskii; Patankar
+% section 4.2-3, pp. 44-47, eqs. 4.9-4.10, derived from the steady,
+% no-source, one-dimensional case; Pan-Xu-Li's harmonic average method,
+% their eq. 3, second order their theorem; Goode-Appel's statement of
+% exactness), K10 (i) (T1 the like-for-like changed-medium comparator,
+% citing nothing); plan 3.2 and R2.
+The one-dimensional equilibrium has a constant flux $\alpha u' = B$, so
+$u = u(-1) + B \int_{-1}^{x} d\xi / \alpha$, and two constructions are
+exact on it at every $h$ and every $\delta$ when the pieces are constant.
+
+The first is the seed operator. Its seeded rows are exact by the first
+reading of Section~\ref{sec:truncation}, and its standard rows see a
+linear function on a constant piece. At $\delta = 0$ it is the
+interface-aware operator of the jump.
+
+The second is the conservative three-point scheme with the face
+conductances
+\begin{equation}
+  \label{eq:faceconductance}
+  a_{i+1/2} = h \Big/ \int_{x_i}^{x_{i+1}} \frac{d\xi}{\alpha(\xi)},
+\end{equation}
+whose discrete flux $a_{i+1/2} (u_{i+1} - u_i) / h$ equals $B$ at the
+exact nodal values whatever $\alpha$ is, so that the exact solution
+satisfies every discrete equation. It is the homogeneous scheme of
+Tikhonov and Samarskii \cite{TikhonovSamarskii1962,Samarskii2001}, whose
+face coefficient is the conductance of the constant-flux seed over one
+cell. For a piecewise-constant $\alpha$ it is the harmonic-mean interface
+conductivity of finite-volume heat conduction, which Patankar derives from
+the same steady one-dimensional flux \cite[\S4.2-3]{Patankar1980} and which
+is the exact interblock transmissivity of groundwater models for steady
+one-dimensional flow through blocks of uniform transmissivity
+\cite{GoodeAppel1992}. Pan, Xu and Li call the scheme
+the harmonic average method and prove it second order
+\cite{PanXuLi2026}. The exactness belongs to the conservative form: the
+same harmonic mean sampled at the nodes and used as $A$ in $D_x A D_x$,
+the like-for-like changed medium of Section~\ref{sec:treatments1d}, leaves
+a residual above $0.5$ on the exact equilibrium of the $9 : 1$ jump at
+$100$ nodes, whether the mean is taken over one cell or two.
+
+So on constant pieces the one-dimensional equilibrium cannot rank the seeds
+against the conservative scheme. It is the sanity check and the limit
+case, and the one-dimensional ranking is the parabolic problem's, where
+the conservative scheme is second order and the seeds are fourth
+(Section~\ref{sec:treatments1d}). Both exactness results are classical,
+and so is the conservative scheme's second order; we observe them and claim
+none of them. Where the pieces vary, as in the sinusoidal medium, the
+equilibrium does rank the two, for a reason that has nothing to do with
+the edge: the conservative scheme stays exact, while the seed operator's
+standard rows inside the layer keep the error of a smooth coefficient, and
+it is exact only where the seeded rows cover the layer
+(Section~\ref{sec:seedrates1d}).
 
 % ===========================================================================
 \section{One-dimensional results}

@@ -262,7 +262,7 @@ def heat1d_seeds(data: Data):
         for xc in curves["xi_edges"]:
             if -1 <= xc <= 1:
                 ax.axvline(xc, color=REFERENCE, lw=0.5, ls=":")
-        ax.set_title(rf"$\varphi_{k}$")
+        ax.set_title(rf"$\phi_{k}$")
         if k >= 3:
             ax.set_xlabel(r"$\xi$")
     handles = [
