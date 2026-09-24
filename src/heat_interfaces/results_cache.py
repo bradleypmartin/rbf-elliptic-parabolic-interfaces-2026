@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+import warnings
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,6 +36,10 @@ from typing import Any
 import numpy as np
 
 SCHEMA = 1
+
+WHERE = frozenset({"outputs", "data_dir"})
+"""Arguments that say where a run writes, not what it computed: a rerun that
+differs only in them is the same run (``write``'s overwrite warning)."""
 
 
 def git_state(root: Path | None = None) -> dict[str, Any]:
@@ -70,6 +76,31 @@ def jsonable(obj: Any) -> Any:
     if isinstance(obj, Path):
         return str(obj)
     return obj
+
+
+def finite(table: Any, placeholders: Collection[str], key: str | None = None) -> Any:
+    """``table`` with a driver's non-finite placeholders as None; any other raises.
+
+    A driver's printed tables may use ``inf`` or ``nan`` for "not applicable"
+    (the jump's h/δ, a rate with no earlier count), which strict JSON cannot
+    hold and ``write`` refuses. The keys a driver names in ``placeholders``
+    become null; a non-finite value under any other key is a failed solve or
+    march, and it raises here, naming the key, rather than being recorded. A
+    value in a list takes the key of the dict it sits under, and a dict keyed
+    by numbers (δ, counts) keeps its parent's.
+    """
+    if isinstance(table, dict):
+        return {
+            k: finite(v, placeholders, k if isinstance(k, str) else key)
+            for k, v in table.items()
+        }
+    if isinstance(table, (list, tuple)):
+        return [finite(v, placeholders, key) for v in table]
+    if isinstance(table, (float, np.floating)) and not np.isfinite(table):
+        if key in placeholders:
+            return None
+        raise ValueError(f"{key!r} is {table}, and it is not a placeholder")
+    return table
 
 
 def _key(k: Any) -> str:
@@ -112,17 +143,46 @@ class ResultsCache:
         }
 
     def write(self, *paths: Path) -> list[Path]:
-        """The same payload to every path: ``outputs/`` and, given, ``--data-dir``."""
+        """The same payload to every path: ``outputs/`` and, given, ``--data-dir``.
+
+        A file already there from a run with other arguments (``WHERE`` aside)
+        is overwritten with a warning naming them: a results file holds the
+        last run of its name, and a near-miss of a documented command must not
+        replace the manuscript's tables in silence (E4.10, the /spar review).
+        """
+        payload = self.payload()
         # A NaN or an infinity would be written as a token no strict parser
         # reads; the number check must see it fail here instead.
-        text = json.dumps(self.payload(), indent=1, allow_nan=False) + "\n"
+        text = json.dumps(payload, indent=1, allow_nan=False) + "\n"
         written = []
         for path in paths:
             path = Path(path)
+            changed = changed_args(path, payload["args"])
+            if changed:
+                warnings.warn(
+                    f"{path}: overwriting a run with other {', '.join(changed)}",
+                    stacklevel=2,
+                )
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
             written.append(path)
         return written
+
+
+def changed_args(path: Path, args: dict[str, Any]) -> list[str]:
+    """The arguments (``WHERE`` aside) in which ``path``'s run differs from ``args``.
+
+    Empty when there is no file; ``["the file"]`` when it is not a results file.
+    """
+    path = Path(path)
+    if not path.exists():
+        return []
+    try:
+        old = read_results(path)["args"]
+    except (ValueError, KeyError, TypeError):
+        return ["the file"]
+    keys = (set(old) | set(args)) - WHERE
+    return sorted(k for k in keys if old.get(k) != args.get(k))
 
 
 def read_results(path: Path) -> dict[str, Any]:

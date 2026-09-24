@@ -545,6 +545,8 @@ def convergence(
                     "full": rms_error(u, full),
                     "far": rms_error(u[keep], far),
                     "far-share": float(keep.mean()),
+                    # max |u|, a sanity reading, not an error: no ring line has
+                    # a max-norm error (stiff note §5.5; E4.10's roundtable).
                     "max": float(np.abs(u).max()),
                     "solve": time.perf_counter() - t0,
                     **info,

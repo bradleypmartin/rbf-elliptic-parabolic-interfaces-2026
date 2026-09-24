@@ -11,14 +11,15 @@ results (E3.2, #27, to E3.6, #31, which closes it in §2.5); §3 is the
 flat band and its references (E4.2, #33, §4.1), the naive baseline
 through it (E4.3, #34, §4.2), the scalar seeds on one stencil (E4.4,
 #35, §4.3) and in the matrix (E4.5, #36, §4.4), the flat δ sweep
-(E4.6, #37, §4.5) and the curved feature (E4.7, #38, §4.6), on to E4.10
-(#41); §3.10 designs the tangential chain that E4.7 asked for (E4.11,
-#81), and §4.7 holds its results; §3.11 is what EABE eq. 40's ring needed
-beyond it (E4.8, #39), and §4.8 holds the ring's results; §4.9 holds the
+(E4.6, #37, §4.5) and the curved feature (E4.7, #38, §4.6); §3.10
+designs the tangential chain that E4.7 asked for (E4.11, #81), and §4.7
+holds its results; §3.11 is what EABE eq. 40's ring needed beyond it
+(E4.8, #39), and §4.8 holds the ring's results; §4.9 holds the
 coefficient treatments on scattered nodes (E4.9, #40), and §4.10 the
-Gaussians on rows anchored inside a smooth resistive layer (E4.12, #84). The port
-of the 2016 methods this builds on is in
-`docs/port-notes.md`.
+Gaussians on rows anchored inside a smooth resistive layer (E4.12, #84).
+§5 closes the 2-D study (E4.10, #41): the snapshot, the results files,
+what §4 states, the hypotheses' ledger and the limitations. The port of
+the 2016 methods this builds on is in `docs/port-notes.md`.
 
 The construction is the one of the wave-equation companion, *Seed
 stencils: high-order finite differences and RBF-FD through material edges
@@ -1432,9 +1433,11 @@ sweeps, every one cached in `heat1d_stiff_knee.json` afterwards.
   resistance deficit `c δ` (§1.7) with its maximum at the edge; T1-FV's
   is largest far from the edge (its second-order truncation on the
   curved profile, the edge itself handled exactly by the face
-  conductances); the seeds' 1e-8 is the BD4 time error at `dt = h`, the
-  δ = 0 line's 2.95e-8 at this count, flat across the domain with two
-  sign changes (the dips). The zoom makes the naive and construction
+  conductances); the seeds' 2.95e-8 is the δ = 0 line's at this count,
+  flat across the domain with two sign changes (the dips), and about half
+  of it is BD4's time error at `dt = h`: with `dt → h/8` it is 1.47e-8
+  (*corrected by E4.10's roundtable, §5.6; this sentence had called it the
+  BD4 time error*). The zoom makes the naive and construction
   errors visible to the eye at u ≈ 0.05: this is what an unresolved edge
   costs at fourth order's price.
 - **The results file and `--data-dir`.** `results_cache.py` (plan D1;
@@ -1479,10 +1482,17 @@ their numbers and where they were measured:
 2. **The seeds' rates (§2.3, P4–P9 ✓).** The seed operator is fourth
    order at every δ with a δ-independent constant: on the MATLAB ramp
    problem one line for every δ, rates 6.4, 4.2, 4.05 and 4.0–4.1 from 50
-   to 800 nodes (2.5e-6 → 6e-12, then the reference's 2e-12 floor), with δ =
+   to 800 nodes (2.5e-6 → 6e-12, then the reference's 2e-12 floor; 2e-11 at
+   δ = 0.04), with δ =
    0.0025 on the δ = 0 jump-aware line to 0.1–0.3 %, δ = 0.01 to 1–1.5 %
    and δ = 0.04 to 3–5 % where δ ≈ h and the solutions genuinely differ
-   (P7 as measured: "one line", not "three digits at every n"). At
+   (P7 as measured: "one line", not "three digits at every n"). These
+   are fully discrete at `dt = h`, and part of them is BD4's: the spatial
+   error alone (`dt → h/8`, E4.10's roundtable, §5.6) is 1.47e-8, 1.05e-9,
+   7.40e-11 and 4.5e-12 at 100–800 nodes, rates 3.8, 3.8, 4.0, with
+   δ = 0.0025 on δ = 0 to 0.3 % and δ = 0.01 to 1.8 %, so the order and
+   the one line are the space discretisation's; the time error is about
+   half the total at 100 nodes and a quarter from 200 (it is the 6.4). At
    equilibrium the seeds are exact to solver precision at every δ (P6:
    below 1e-12 to 400 nodes, then the direct solve's own growth). The
    seeds are E1.2's operator at δ = 0 on constant pieces (2e-14 in the
@@ -1513,12 +1523,19 @@ their numbers and where they were measured:
    harmonic mean's order 1.5 is a local O(h) defect on the two nodes
    beside the edge, first order in the max norm, so the norm is named
    wherever the ranking is quoted.
-4. **The elliptic remark (§1.8, §2.2, §2.4; plan §3.2).** The 1-D
-   equilibrium problem cannot rank the methods: its solution has constant
-   flux and lies in `span{φ₀, φ₁} = ker L`, so the seeds are exact at any
-   δ and any h (1.9e-14 at 50 nodes, δ = 0.01, growing with n to 1.7e-11
-   at 1600 through the solver), and so is any finite-volume scheme with
-   exact face conductances (T1-FV, 1e-14 → 6.5e-12). What the elliptic
+4. **The elliptic remark (§1.8, §2.2, §2.4; plan §3.2).** On the MATLAB
+   medium the 1-D equilibrium problem cannot rank the methods: its
+   solution has constant flux and lies in `span{φ₀, φ₁} = ker L`, so every
+   seeded row is exact at any δ and h, and with constant pieces so is every
+   plain row: the seed operator is exact (1.9e-14 at 50 nodes, δ = 0.01,
+   growing with n to 1.7e-11 at 1600 through the solver), and so is any
+   finite-volume scheme with exact face conductances (T1-FV, 1e-14 →
+   6.5e-12). *On eq. 75, whose pieces vary, the plain rows are not exact
+   (E4.10's roundtable, §5.6): the seed operator's equilibrium error is
+   9.7e-5 → 1.2e-8 at δ = 0 over 101–1601 nodes (5.0e-6 → 3.6e-10 at
+   δ = 0.0025; exact at δ = 0.01 and 0.04, where the reach covers the
+   layer), while T1-FV stays at 3e-14 → 1.4e-11, so there the equilibrium
+   does rank, for a reason that has nothing to do with the edge.* What the elliptic
    tables do show is the same knee for the naive operator (7.6e-3 at
    h = 4δ to 9.3e-9 at h = δ/8, δ = 0.01, MATLAB) and the construction on
    the same `c δ` floor, so the elliptic row of the knee figure is the
@@ -1536,7 +1553,7 @@ their numbers and where they were measured:
 | P3 the δ = 0 construction on the `c δ` floor | §2.2 | holds for `h ≳ 2δ` with c = 8.79 to six digits; corrected: O(1) growth once `h ≲ 2δ` |
 | P4 the seed weights → E1.2's at first order in δ/h | §2.3, §2.5 | holds (84 % … 0.11 %), and function by function to 3e-15 at δ = 0; eq. 75's `O(h α′/α)` floor recorded |
 | P5 `cond A` Vandermonde-like | §2.3 | holds: 90 → 138 (peak at δ = h/2) → 23.5 |
-| P6 equilibrium exact at every δ | §2.3 | holds below 1e-12 to 400 nodes; the march floor at δ ≲ h/40 added |
+| P6 equilibrium exact at every δ | §2.3 | holds below 1e-12 to 400 nodes on the MATLAB medium; the march floor at δ ≲ h/40 added; on eq. 75 only where the reach covers the layer (§5.6) |
 | P7 fourth order at every δ, one line | §2.3 | holds as "one line for every δ" (0.3 %, 1.5 %, 5 %), not three digits; local truncation O(h³) seeded / O(h⁴) plain |
 | P8 the double-cross | §2.3 | holds: 7.6e-15 at δ = 0, first order in δ/h |
 | P9 spectra real and negative | §2.3 | holds, and the seeds are stable on eq. 75 at 49 and 53 nodes where the construction is not |
@@ -1544,7 +1561,8 @@ their numbers and where they were measured:
 
 **Limitations to carry into the manuscript.** The DOP853 march's floor
 at δ ≲ h/40 (a collocation integration of the same chain would remove it;
-not built); the eq. 75 seed line being the plain rows' pre-asymptotic
+not built); the ramp problem's errors at `dt = h` being part BD4's (half at
+100 nodes, a quarter from 200, statement 2); the eq. 75 seed line being the plain rows' pre-asymptotic
 sinusoid line, so the medium's fourth-order claim rests on its δ > 0
 rows and the MATLAB medium; the seed-function figure's `(α₀/α_e)^⌈k/2⌉`
 normalisation, stated in its caption; the snapshot's grid chosen at
@@ -2226,7 +2244,7 @@ package code exists, and #35's "milliseconds" is met with a margin.
 | route (a) profiles by Newton on the sine curves, the product-grid reference for δ > 0, `--amplitude` | `heat2d/seeds.py`, `heat2d/exact.py`, the driver | E4.7 (#38) |
 | the smooth ring, widths from the outer radius, `matched_residual` through smooth α, the s-sweep with seeds, `--ring` *(E4.8 put its driver in `scripts/heat2d_ring.py`, reusing E2.9's references and helpers; the radial references are in `heat2d/exact.py`)* | `heat2d/domain.py`, `scripts/heat2d_extremes.py` | E4.8 (#39) |
 | disc harmonic / arithmetic means (radius h/2, h), the widened edge, band-limited α if E5.2 keeps it | `heat2d/treatments.py` | E4.9 (#40) |
-| the figures, §4–5 of this note, `--data-dir` and `ResultsCache` as in `heat1d_stiff.py` | `scripts/heat2d_stiff.py`, `docs/figures/` | E4.10 (#41) |
+| the figures, §4–5 of this note, `--data-dir` and `ResultsCache` as in `heat1d_stiff.py` *(done, §5.1; the eigenvalue driver too)* | `scripts/heat2d_stiff.py`, `docs/figures/` | E4.10 (#41) |
 
 Every driver default runs in seconds (plan D7); the sweeps and the
 references sit behind flags and cache under `outputs/`, and the notes
@@ -2687,6 +2705,8 @@ band and case 2 as an ablation (`seeds-edge`, `tangential-edge`).
 piece keeps the Gaussians, warped or plain, with the stronger diagonal; the rule
 is a ring's switch like the four above, and making it the default elsewhere is
 left to E4.10 (#41), which regenerates the lines the manuscript quotes.
+*Decided there (§5.2, Brad on #41, 2026-09-23): it stays the ring's; off the
+ring the row-by-row choice at near-ties can do worse than either uniform choice.*
 
 ## 4. Results in 2-D (E4.2–E4.12)
 
@@ -3623,7 +3643,10 @@ bound, so read it across a table's operators and not against a bound),
   the jump's. The median hardly moves (0.671–0.688) and is above both ends'
   at every δ. **No δ/h degrades anything**, so #36's "if direct solves
   degrade, name the δ/h" has nothing to name and the plan stands as written
-  for E4.6.
+  for E4.6. *(E4.10's roundtable, §5.3 statement 6: nothing breaks down, but
+  the least DDR, the condition estimate and the iteration counts do move
+  toward the jump's values as δ → 0, the counts not monotonically; this is
+  case 1, and the ring's iterative solves at 20,000 nodes were not run.)*
 - *SuperLU does not see δ.* Factor and solve is 0.04–0.06 s at every width
   (the naive product's 0.13 s with `PRODUCT_ORDERING`), the residual is
   1e-14 or below throughout, and the one-norm condition estimate of the seed
@@ -3935,7 +3958,9 @@ RMS error (order per halving of h), the fit over the six counts beneath:
   jump the *lowest* of the five at the fine end and the widest edge the
   highest — the opposite of every other method here, and the same picture
   §2.3 drew in 1-D ("one line for every δ", 0.3 %, 1.5 %, 5 % there, a
-  little looser on scattered nodes).
+  little looser on scattered nodes). *(E4.10's roundtable: those are the
+  sweep's two ends; at 20,000 nodes the widths spread 2.38×, 2.53×
+  parabolic, §5.3 statement 4.)*
 - *Fourth order, δ-independent constant*: fits 4.77, 4.23, 4.31, 4.23, 4.48
   (elliptic) and 4.77, 4.22, 4.28, 4.18, 4.44 (parabolic). The per-halving
   rates wander between 2.6 and 5.9 — the node sets are independent draws, so
@@ -4021,7 +4046,11 @@ this is the whole matrix marched:
   not against the direct operator, which the seeds beat everywhere.**
 
 **The rule, restated for diffusion.** *Seed every row whose 30 nodes see an
-edge within 20 δ; there is no δ threshold and no crossover to manage.* The
+edge within 20 δ; there is no δ threshold and no crossover to manage.*
+*(E4.10's roundtable, §5.3 statement 4: no switch, but the 42 / 5 naive
+product, converging at 5.2 against the seeds' 4.2 on a resolved edge, passes
+them as n grows: a crossover of the stencils' degree, measured by the 30 / 4
+naive control of §5.6.)* The
 evidence is the ratio table at every (δ, n): the seeds are at or below the
 construction's error everywhere (equal at δ = 0, where they are its rows),
 and below the naive product's everywhere except δ = 0.04 at 20,000 and
@@ -4066,7 +4095,10 @@ error over the warped rows' (above 1: the warp wins):
   sets' own scatter. E4.5's two-count preview ("1.4–2.0× better at δ ≥ h at
   10,000 nodes") was the resolved side of the same turn.
 - *The seeds stay warped.* Where the warp loses, both rows are already at
-  1e-8 and the loss is at most 2.6×; where it wins, the problem is the one
+  1e-8 and the loss is at most 2.6× *(E4.10's roundtable: not "at 1e-8" — at
+  δ = 0.01 on 5000 nodes the warp loses at 7.95e-7 against plain's 4.39e-7,
+  errors of 1e-7 to 1e-6 on the intermediate grids, §5.3 statement 7)*;
+  where it wins, the problem is the one
   the study is about, and at δ = 0 the plain rows bring back port notes
   §2.5's complex loop in the spectrum (E4.5's H6: `h² max |Im|` 1.51
   against 0.18). The ablation stays in the driver as a line of the sweep,
@@ -4840,7 +4872,9 @@ relative residual of the weights, and mean 2-norm condition numbers:
   what H11 called "the stored width, the second floor"; with `Band.gap` and the
   march in the offset from the outer circle, it is not a floor at all.
 - *The seeds' conditioning does not see s*: block 7.1e3 raw and 5.0e3
-  column-scaled, system 1.0e6, the same from 10⁵ to 10¹¹, where E2.3's
+  column-scaled, system 1.0e6 (per stencil: the mean 2-norm condition numbers
+  of the seed block and of each row's saddle-point system; the global matrix's
+  was not measured), the same from 10⁵ to 10¹¹, where E2.3's
   polynomial block and system grow like s (4.6e10 and 2.7e13 at 10¹¹). §3.6
   predicted `s w/h_s`, about 2e9, from case 3's `w = 0.001`; eq. 40 has
   `s w = 1`, and the ring's resistance, which is what the seeds carry, is the
@@ -5337,7 +5371,10 @@ switches itself off, since `max(δ, m h)` knows δ.
 - *"T0 is the worst, on the widened floor"*: **holds** (the table above).
 - *"There is no conservative scheme on scattered nodes, so T1-FV has no twin
   and the strongest low-order comparator is the two-cell disc harmonic
-  mean"*: **the first half holds, the second is wrong.** The radius-h
+  mean"*: **the first half holds, the second is wrong.** *(E4.10's
+  roundtable: the first half holds as "none was built"; control volumes on
+  a point cloud are possible, so it is not an impossibility, §5.3 statement
+  10.)* The radius-h
   harmonic mean is 1.6–3.4× *above* sampling at the jump from 5000 nodes.
   The best treatment anywhere is a half-spacing mean, which is sampling
   itself at the jump and gains at most 1.6× (case 1) or 1.75× (case 2)
@@ -5577,7 +5614,10 @@ rows (17 min alone, 2026-09-23) and reads every line against it too:
   the better line, never showed it wrong.
 - *The plain-built run is the better reference here, not a better method*: on
   the coarse sets at this (s, δ) plain is 0.73–1.69× the rule, and at
-  δ = 0.0025 up to 3.4× the warp.
+  δ = 0.0025 up to 3.4× the warp. *(E4.10's roundtable: which makes the rule's
+  own 160,000-node solution the discrepant one at this (s, δ), 3.55e-6 from a
+  run every coarse line converges toward; the rule's convergence here past
+  40,000 nodes is unresolved, §5.3 statement 9.)*
 - *The other five (s, δ) show no floor this large*: their lines reach
   7.1e-7 to 1.5e-6 at 40,000 nodes against the rule-built runs; no
   plain-built run was made for them. §4.8 quotes the rule-built fine runs and,
@@ -5612,6 +5652,7 @@ warped line's (E4.6's and E4.11's lines), 1250–40,000 nodes, equilibrium
 - So the rule stays a ring's switch (Brad's decision on #84, §3.11); making it
   a default off the ring would need case 2's two losses explained first. That
   is E4.10's call (#41), which regenerates the lines the manuscript quotes.
+  *E4.10 explained them and kept the rule the ring's (§5.2).*
 
 **Cost.** The δ > 0 rerun on the ring: three lines from one march per row,
 35–190 s per line and count (a third of the shared march, under up to 11
@@ -5641,5 +5682,620 @@ as well, reproducibly (`--plain-fine`).
 **What E4.10 inherits.** The ring's documented command now carries
 `--plain-fine 1e11:0.001`; the smooth ring figure draws the seeds against the
 plain-built run as open squares in that panel. Whether the rule becomes the
-default off the ring is E4.10's decision (above). This section is E4.12's
-though it is numbered 4.10, as §4.7 is E4.11's.
+default off the ring is E4.10's decision (above; it does not, §5.2). This
+section is E4.12's though it is numbered 4.10, as §4.7 is E4.11's.
+
+## 5. Closing the 2-D study (E4.10, #41)
+
+![snapshot](figures/heat2d_stiff_snapshot.png)
+
+E4.10 adds what §2.5 added to the 1-D study: the snapshot above, the seed
+line on §4.2's knee figure, a results file for every documented run, and this
+section, which states what §4 has established, with the numbers and the
+subsection each traces to (§5.3), ticks the hypotheses (§5.4) and lists the
+limitations the manuscript carries (§5.5). §5.2 records the decision #41 owed
+E4.12: the diagonal rule stays a ring's switch. §5.6 records the review of
+§5's claims by two referees from different vendors (GPT-6 Astra and Fable 5.1,
+2026-09-23), the checks run for it, and what it corrected here, in §2.5 and in
+§4; the statements below are the corrected ones. Every number below is quoted
+from its subsection or from those checks, and the snapshot's are the sweep's
+own. The ring keeps its own driver, `scripts/heat2d_ring.py` (§4.8), not the
+plan's `--ring` flag on `heat2d_stiff.py`.
+
+### 5.1 The figures, the results files and the documented runs
+
+**The snapshot** (`--mode snapshot`, 10 s, nothing cached; the default
+`--mode all` runs it after the stencils). §2.5's figure on scattered nodes:
+case 1 at 2500 nodes and δ = 0.0025 (`h = 1/48 = 8.3 δ`, 1-D's `h = 8δ`,
+`SNAPSHOT`), the parabolic problem at `t = 0.1`, four operators built as the
+sweep builds them. Their RMS errors are the sweep's to every digit printed
+(§4.5, a test pins three). Top: `|e|` over the strip on one colour scale;
+bottom: `|e|` at every node against `y`, the band shaded.
+
+| operator | RMS | max \|e\| | at (x, y) | share of Σe² within 2h of a curve |
+| --- | --- | --- | --- | --- |
+| naive `Dx A Dx + Dy A Dy` | 2.63e-3 | 1.82e-2 | (0.708, 0.710) | 0.25 |
+| δ = 0 construction | 6.97e-4 | 4.05e-3 | (0.750, 0.790) | 0.65 |
+| direct `α ∇² + ∇α · ∇` | 3.71e-2 | 1.52e-1 | (0.250, 0.790) | 0.58 |
+| seeds | 3.33e-6 | 2.27e-5 | (0.259, 0.980) | 0.12 |
+
+- *The naive error is the band's, not the edge's.* It is speckled over the
+  whole strip at the node spacing and largest in the band's middle (the max at
+  `y = 0.71`); a quarter of its energy is within `2h` of a curve, where 15 % of
+  the nodes are, so it leans on the edges only 1.6× and three quarters of it is
+  elsewhere: the O(1) flux defect of §4.2 at the edge, spread by the product's
+  two-radius reach into everything the band's rows couple to. 1-D's snapshot
+  put 84 % of the naive energy away from the edge too (§2.5).
+- *The construction's error is a smooth shift* with the `sin 2πx` shape of the
+  solution (its zero lines at `x = 0, ½`), largest next to the upper curve,
+  where the resistance deficit of §4.1's floor enters: 65 % of its energy is
+  within `2h`, four times the nodes' share. It is the floor, 0.98 of it at this
+  `h/δ` on the parabolic problem (§4.2).
+- *The blind direct stencil is the worst line* while the edge is unresolved,
+  3.71e-2, fourteen times the naive product: it carries α and ∇α at the anchor
+  and meets the edge as an `h^k α^{(k)}` series that does not converge (§4.5).
+- *The seeds' error does not see the edge.* 3.33e-6, 790× below the naive
+  product and 210× below the construction, with 12 % of its energy within
+  `2h` of a curve, below the 15 % of the nodes there; its max sits by the top
+  Dirichlet row (`y = 0.98`), in the boundary zone, not at the band.
+
+The grid is chosen as 1-D's was: it is the row of the sweep at which the lines
+are ordered and apart (naive 3.8× the construction, the seeds 210× below
+that). At 5000 nodes (`h = 6δ`) naive and construction are 1.3× apart, and at
+10,000 they cross (§4.2).
+
+**The seed line on the knee** (`--mode naive`, §4.2's figure). The knee
+figure now draws the seed operator's RMS error in blue beside the naive and
+construction lines, wherever `heat2d_stiff_knee.json` holds it (`cached_line`:
+nothing is solved for it): every width to 40,000 nodes and δ = 0 to 160,000.
+It is §2.5's knee figure's twin, the four regimes of the study in one panel
+per problem.
+
+**The committed figures** (`docs/figures/`), each with the section it
+belongs to and the documented run that writes it:
+
+| figure | section | written by |
+| --- | --- | --- |
+| `heat2d_stiff_knee.png` | §4.2 | `heat2d_stiff.py --mode naive` to 160,000 (with the seeds' cache from `--mode seeds`) |
+| `heat2d_stiff_spectra.png`, `heat2d_stiff_dominance.png` | §4.4 | `heat2d_stiff_eigenvalues.py` (default: 1600 and 2500 nodes) |
+| `heat2d_stiff_seeds.png` | §4.5 | `heat2d_stiff.py --mode seeds` (case 1) |
+| `heat2d_stiff_seeds_a0.02_sine.png` | §4.6 | `--mode seeds --amplitude 0.02`, route (a)'s lines |
+| `heat2d_stiff_tangential_a0.02_sine.png` | §4.7 | `--mode seeds --amplitude 0.02` with the tangential lines |
+| `heat2d_ring_convergence.png`, `heat2d_ring_conditioning.png`, `heat2d_ring_smooth.png` | §4.8, §4.10 | `heat2d_ring.py`, the documented command |
+| `heat2d_stiff_treatments.png`, `heat2d_stiff_treatments_a0.02_sine.png` | §4.9 | `--mode treatments`, both geometries |
+| `heat2d_stiff_snapshot.png` | §5.1 | `--mode snapshot` |
+
+Rerun from the caches on 2026-09-23, every figure committed before E4.10 but
+the knee (which gained the seed line) is byte-identical to its copy under
+`docs/figures/`. Getting there took three fixes to the driver, none of
+which moves a number:
+
+- *The δ = 0 columns had overwritten the full sweeps' figures.* The
+  documented run `--deltas 0 … --counts … 160000` (H4 to the end, §4.5) wrote
+  a one-panel `heat2d_stiff_seeds.png` over the six-panel one, and B's column
+  to 160,000 (§4.7) did the same to B's figure. A sweep of δ = 0 alone now
+  writes `…_jump.png` (`figure_name`).
+- *E4.12's `-edge` lines drew in the main line's style* (`_style` matched
+  `seeds-edge` as `seeds`). They are now `STYLE`'s own, and they are left out
+  of the seed figures altogether: the rule is a ring's switch (§5.2), so off
+  the ring it is a column of the tables, and E4.6's and E4.11's figures stay
+  as §4.5 and §4.7 show them.
+- *The eigenvalue driver's figures carry the count off its defaults*
+  (`heat2d_stiff_spectra_n4900.png`, `heat2d_stiff_dominance_n10000.png`), so
+  that §4.4's two larger runs no longer overwrite the default figures.
+
+**The results files** (plan D1; E5.3, #44). `heat2d_stiff.py` and
+`heat2d_stiff_eigenvalues.py` now write every run's tables and phase times
+through `results_cache.ResultsCache` (schema 1: driver, date, git SHA and
+dirty flag, args, timings, tables), under `--outputs` and, with `--data-dir
+paper/data`, there too, as `heat1d_stiff.py` (§2.5) and `heat2d_ring.py`
+(§4.8) already did. One file per documented run, named by `results_name`: the
+mode, `tangential` for a seed sweep with the tangential line, the geometry's
+tag off case 1, `seed<k>` off node set 0 and `jump` for δ = 0 alone. The
+printed tables use `inf` for the jump's `h/δ` and `nan` for δ = 0's chain
+residual (no edge to difference across); strict JSON holds neither. The
+residual is None where it is made; the `h/δ` is written as null
+(`NOT_APPLICABLE`, found by running every documented command), which is safe
+because it is `h` over δ and never a solve's output; and any other non-finite
+value stops the write (`results_cache.finite`), which is what the schema asked
+of a failed solve. The eigenvalue driver nulls nothing: an empty row group's
+DDR, which no documented run has, would stop its write too. The sweeps' files hold the whole `sweep` table (every line's readings
+at every (δ, n): RMS, max, probe, rows, seconds and, for `-edge`, the rows
+kept plain), from which every ratio §4 prints is computed.
+
+| documented run (`uv run python scripts/…`) | results file | tables | cached |
+| --- | --- | --- | --- |
+| `heat2d_stiff.py --mode references --deltas 0 0.04 0.01 0.005 0.0025 0.002 0.001 0.0005` | `heat2d_stiff_references.json` | `references` | 0.2 s |
+| `heat2d_stiff.py --mode naive --counts 1250 … 160000` | `heat2d_stiff_naive.json` | `knee`, `matched/<problem>`, `spectra` | 0.6 s |
+| `heat2d_stiff.py --mode naive --seed 1` (and `2`) `--counts 1250 … 20000 --spectrum-counts` | `heat2d_stiff_naive_seed1.json`, `…_seed2.json` | `knee`, `matched/<problem>` | 0.5 s |
+| `heat2d_stiff.py --mode stencils` | `heat2d_stiff_stencils.json` | `stencils` | 17 s |
+| `heat2d_stiff.py --mode snapshot` | `heat2d_stiff_snapshot.json` | `snapshot` | 8 s |
+| `heat2d_stiff.py --mode seeds --operators naive construction direct direct-reach seeds seeds-plain seeds-edge --counts 1250 … 40000` | `heat2d_stiff_seeds.json` | `sweep`, `ratios/<problem>`, `resolved/<problem>` | 0.5 s |
+| `heat2d_stiff.py --mode seeds --deltas 0 --operators naive construction seeds --counts 1250 … 160000` | `heat2d_stiff_seeds_jump.json` | the same | 0.2 s |
+| `heat2d_stiff.py --mode references --amplitude 0.02` | `heat2d_stiff_references_a0.02_sine.json` | `references` | 63 s |
+| `heat2d_stiff.py --mode seeds --amplitude 0.02 --operators naive construction construction-flat direct direct-reach seeds seeds-plain --counts 1250 … 40000` | `heat2d_stiff_seeds_a0.02_sine.json` | the same and `flat` | 0.4 s |
+| the same with `… seeds seeds-plain tangential tangential-plain tangential-edge` (no `construction-flat`) | `heat2d_stiff_seeds_tangential_a0.02_sine.json` | the same | 0.5 s |
+| A: `--amplitude 0.02 --inside constant --deltas 0 0.0025 --operators naive construction seeds tangential tangential-plain` | `heat2d_stiff_seeds_tangential_a0.02_constant.json` | the same | 0.3 s |
+| B: `--inside sine --deltas 0 0.0025`, the same lines | `heat2d_stiff_seeds_tangential_a0_sine.json` | the same | 0.3 s |
+| B's δ = 0 to 160,000: `--inside sine --deltas 0`, the same lines | `heat2d_stiff_seeds_tangential_a0_sine_jump.json` | the same | 0.2 s |
+| `heat2d_stiff.py --mode tangential --counts 1250 … 40000` | `heat2d_stiff_tangential.json` | `tangential` (circles, span, spectra, timing) | 8.7 min, not cached |
+| `heat2d_stiff.py --mode treatments --counts 1250 … 40000` (and `--amplitude 0.02`) | `heat2d_stiff_treatments.json`, `…_a0.02_sine.json` | `sweep`, `ratios/…`, `crossovers/…`, `h12/<problem>/<norm>` (and `flat`) | 0.5 s |
+| `heat2d_stiff_eigenvalues.py` | `heat2d_stiff_eigenvalues.json` | `rows`, `spectra` | 0.5 s |
+| `heat2d_stiff_eigenvalues.py --mode rows --n 10000` | `heat2d_stiff_eigenvalues_rows_n10000.json` | `rows` | 0.2 s |
+| `heat2d_stiff_eigenvalues.py --mode spectra --spectrum-n 4900 --deltas 0 0.005` | `heat2d_stiff_eigenvalues_spectra_n4900.json` | `spectra` | 0.4 s |
+| `heat2d_ring.py`, the documented command (§4.8) | `heat2d_ring_results.json` | `convergence`, `conditioning`, `spectrum`, `smooth`, `fine-gap` | 2.2 s (wall) |
+
+The full commands are in the drivers' docstrings. Their timings column is the
+file's own `total`; wall clock adds 0.7 s of interpreter start, and the whole
+list reprints in under two minutes, `--mode tangential` aside. The default
+`heat2d_stiff.py` (`--mode all`: references, the naive knee at 1250–10,000,
+the stencils and the snapshot, 26 s cached, about 2.7 min cold) writes
+`heat2d_stiff.json` and a four-count knee figure; it is the quick check, not
+one of the documented runs, and after it the knee figure is regenerated by
+the documented `--mode naive`. Cold, the runs cost what §4 recorded: 58 min
+for the naive knee to 160,000 (§4.2), 28 min for the flat seed sweep (1.4 more
+for `direct-reach`) and 25 for its `-edge` line (§4.5, §4.10), 3 min for the
+δ = 0 column to 160,000 (§4.5), 34 + 58 + 61 min for case 2's route (a),
+tangential and `-edge` lines (§4.6, §4.7, §4.10), 21 min per treatment sweep
+(§4.9), 2.7 min, 6.7 min and 2.1 min for the three eigenvalue runs (§4.4), and
+some 20 CPU-hours for the ring, run as concurrent processes over its one cache
+in about 75 min on 14 cores (§4.8; `heat2d_ring.py`'s docstring), most of them
+under other load.
+
+Three caveats, the 1-D ones and one more. The working caches
+(`heat2d_stiff_knee.json`, `heat2d_stiff_curved.json`, `heat2d_stiff_rows.json`,
+`heat2d_ring.json`) key on labels and versions, not on the operators' code:
+bump their versions after any change to an operator, a chain or the march
+(§3.8's trap). A results file is never read back by a driver, only by E5.3's
+scripts, and carries `dirty: true` when the tree had uncommitted changes, which
+`paper_numbers.py` should refuse. And a results file holds the *last* run of
+its name: a documented command run with fewer counts overwrites the manuscript's
+file with a shorter one (its `args` say so, and `write` warns, naming the
+arguments that differ), and rerunning the documented command restores it in
+seconds.
+
+### 5.2 E4.12's rule off the ring: why it stays a ring's switch
+
+E4.12 left one question to this ticket (§4.10, §3.3 of the plan): should the
+diagonal rule, which on the ring picks warped or plain Gaussians per row by the
+stronger signed diagonal share, be the default on every geometry? Off the ring
+it is the ablation `seeds-edge` / `tangential-edge`, and §4.10's table had it
+helping on the flat band (0.41–0.97 of the warped line where it fires, one loss
+of 1.06) and mixed on case 2, with two unexplained losses of 1.42 and 1.41 at the
+first count where it fires. Scratch runs on 2026-09-23 (a script that solves
+every seeded row with both Gaussian blocks on one march, assembles the warp,
+plain and the rule, and flips the rule's plain rows back one at a time; not
+committed, as §4.10's one-offs are not) reproduce the cached ratios to three
+digits and explain the losses. Elliptic RMS error over the warped line's, node
+sets 0, 1, 2:
+
+| geometry | δ | n | h/δ | rows kept plain | rule | plain on every row | rule, margin 0.05 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| case 2 | 0.01 | 2500 | 2.08 | 92, 72, 83 | 1.42, 1.40, 0.75 | 1.17, 1.34, 1.04 | 0.90, 0.97, 0.80 |
+| case 2 | 0.005 | 10,000 | 2.11 | 154, 154, 149 | 1.41, 2.03, 1.39 | 0.84, 0.78, 0.91 | 0.78, 0.87, 0.77 |
+| case 2 | 0.01 | 5000 | 1.49 | 235 | 0.82 | 0.88 | 0.93 |
+| case 2 | 0.005 | 20,000 | 1.49 | 505 | 0.70 | 0.55 | 0.72 |
+| case 1 | 0.04 | 1250 | 0.74 | 231 | 1.06 | 1.18 | 1.06 |
+| case 1 | 0.01 | 5000 | 1.49 | 164 | 0.56 | 0.55 | 0.56 |
+| case 1 | 0.005 | 20,000 | 1.49 | 349 | 0.43 | 0.40 | 0.42 |
+
+(Only node set 0 is cached; sets 1 and 2 are the scratch's. "Margin 0.05": plain
+kept only where its share beats the warp's by more than 0.05.)
+
+- *The selection can do worse than either uniform choice.* At δ = 0.005 on
+  10,000 nodes the rule loses on all three node sets while plain Gaussians on
+  every row *gain* (0.78–0.91). At δ = 0.01 on 2500 nodes plain on every row
+  loses too on two sets (1.17, 1.34, against the rule's 1.42, 1.40), so there
+  the loss is mostly plain's own at the first firing count, and the third set
+  gains under both (0.75, 1.04). Only node set 0 is in the cache; sets 1 and 2
+  are the scratch's.
+- *Where the loss sits.* The eight rows per losing grid whose revert to the
+  warp lowers the error most (by 2–15 % each) are straddling rows at the upper
+  curve's crest, `y ≈ 0.80–0.83` at `x ≈ 0.10–0.42` (the curve is
+  `0.8 + 0.02 sin 2πx`, 0.82 at `x = ¼`). On 36 of those 40 rows the two
+  diagonal shares are within 0.05 of each other (as close as 6e-5), and on 34
+  plain's truncation on the true solution is the larger, by up to 126×. So the
+  rule's near-ties pick rows that are often less consistent. Whether the loss
+  is those rows' own truncation or the mix of warped and plain rows around them
+  (a patchwork) the scratch does not separate: no clustered-against-dispersed
+  replacement and no error-response `A⁻¹τ` per variant were run. §4.7 found
+  the tangential chain's coarse-set constant on the rows above the upper curve
+  too.
+- *A tie margin repairs these grids and costs elsewhere.* Plain kept only where
+  its share wins by more than 0.05 takes the five losing grids to 0.78–0.97, but
+  case 2's gain at δ = 0.01, 5000 nodes goes from 0.82 to 0.93 (to 1.06 at a
+  margin of 0.1), and case 1's lone loss (1.06 at δ = 0.04, 1250 nodes) is
+  untouched. A constant tuned on seven grids is not a rule to ship before the
+  manuscript.
+- *Off the ring the rule mostly tracks H7's turn.* Where it helps, plain on every
+  row helps as much (case 1: 0.55 against 0.56, 0.40 against 0.43; case 2 at
+  20,000: 0.55 against 0.70): it fires from `h ≈ 2δ`, where §4.5 found the warp
+  losing by up to 2.6× once the edge is resolved. The failure it was built for,
+  the warp squeezing an anchor in a resistivity tail (§4.10), has no twin on the
+  flat band or the sine pair.
+
+**Decision (E4.10, Brad on #41, 2026-09-23).** The rule stays a ring's switch.
+The manuscript describes it as the ring's safeguard for rows anchored in a
+resistive layer, quotes E4.6's and E4.11's warped lines as the flat and curved
+seeds, and gives the off-ring ablation one sentence: it helps on the flat band
+where it fires and is mixed on case 2, where the row-by-row choice at near-ties
+can do worse than either uniform choice. No line §4 quotes moves.
+
+### 5.3 What §4 states
+
+The statements the manuscript's 2-D results (E5.8, #49) draw on, each with its
+numbers and the subsection that measured them, as the roundtable of §5.6 left
+them. Every error is the RMS over all nodes, Dirichlet rows included (the
+smooth ring's excepted, statement 9), `h = 1/round(0.95 √N)`, orders per
+halving of `h` from least-squares fits over the counts named (port notes
+§2.10), on node set 0 with 100 repulsion steps unless a scatter is quoted.
+
+1. **The references are exact to 1e-11 or better, except the smooth ring's
+   (§4.1, §4.6, §4.8).** On case 1 the separable Chebyshev reference in `y`
+   agrees with a finer one to 7e-13 … 2e-11 and at δ = 0 with the analytic
+   solution to 3.8e-13; on case 2 the sheared Fourier × Chebyshev product grid
+   agrees with finer grids in both directions to 1e-11 at every width, solves
+   in two seconds, and at δ = 0 puts E2.6's 160,000-node jump-aware run 4.3e-9
+   RMS away (E2.6's Richardson estimate: about 3e-9). The ring at δ = 0 is read
+   against E2.9's 160,000-node runs, whose own error is about 1e-7; at δ > 0 it
+   has only self-convergence against a 160,000-node seed run, on the far field
+   (statement 9). The smooth band's distance from the jump is first order in δ,
+   `sup |v_δ − v₀| / δ` rising to about 1.6.
+2. **The naive knee (§4.2; H10, corrected).** `Dx A Dx + Dy A Dy` with α at the
+   nodes follows the jump's first-order line (fit 1.23 to 160,000 nodes) only
+   while `h ≳ 6δ` (0.86–0.94 of the jump's error on the same nodes, elliptic;
+   0.78–0.97 parabolic); its knee spans `4δ ≳ h ≳ 0.75δ`, stalls at `h ≈ δ`
+   (0.081–0.084 of the jump for all three widths) and drops to 0.006–0.007 at
+   `0.53δ` (δ = 0.01, 0.005; 0.0026 for δ = 0.04 at `0.52δ`); below it the order
+   is the 42 / 5 stencils' 5, not 4 (δ = 0.04, resolved at every count, fits
+   5.31). The knee is 34–38× deep in the jump's units, shallower than 1-D's
+   55–250×. The flux on the first rows off the edge is a function of `h/δ`
+   alone to 1.7×: off by 0.31–0.86 of itself while `h ≥ 4δ` at every count
+   (on the jump it never converges, 0.34–0.37 from 10,000 to 160,000 nodes
+   while the RMS falls 20×), 4–5 % at `h = δ`, 1 % at `0.75δ`. The parabolic
+   table repeats the elliptic one (0.67–1.09×) from 2500 nodes; the 1250-node
+   parabolic naive row carries the coarse set's growing mode (+14.8 to +25.1).
+3. **The δ = 0 construction on its floor (§4.2; H10).** E2.3's warped rows
+   reading the pieces as if δ were 0 sit on the O(δ) floor (the two references'
+   difference at the nodes, 0.12–0.25 δ in the RMS) to three digits while
+   `h ≥ 2.1δ`, dip 5–10 % below it at `h ≈ δ`, then grow to 3–5× it (δ = 0.01:
+   5.0× at 160,000; δ = 0.04's error grows from 4.7e-3 to 2.2e-2 with n, a
+   negative fit). It beats the naive product only while `h ≳ 3δ`, by at most 6×,
+   so using it means knowing δ and switching it off near `h ≈ 3δ`.
+4. **The seeds are the jump's rows at δ = 0 and need no switch (§4.3–§4.5;
+   H1–H4, H8).** At δ = 0 the seed span equals E2.3's translated basis to
+   4.9e-14 and the rows to 7.6e-12 on case 1's 576 crossing stencils (1.9e-10
+   on a band one spacing thick, three-region stencils included), and the seed
+   line is port notes §2.4–2.5's to every count run, 1.598e-5 → 3.58e-10 at
+   1250 → 160,000 nodes (fit 4.54 over eight counts, 4.77 over the six the port
+   quotes). At δ > 0 they are one fourth-order line: elliptic fits 4.23, 4.31,
+   4.23, 4.48 at δ = 0.04 … 0.0025 over 1250–40,000 nodes (parabolic 4.22, 4.28,
+   4.18, 4.44), and 3.8–4.8 over the windows from 5000 or from 10,000 nodes; the
+   five widths lie within 1.2–2.4× of one another at every count (1.16× at 1250,
+   2.38× at 20,000, 1.67× at 40,000; parabolic up to 2.53×), the jump the lowest
+   at the finest counts. That is no deterioration as δ → 0 on these grids, not a
+   proven δ-uniform constant: one node set per count, and each line holds δ fixed
+   while h falls, so none holds `h/δ` fixed. The rule is *seed every row whose 30
+   nodes see an edge within 20 δ*: no δ threshold and no switch-off (the reach
+   itself was never varied, §5.5). At 40,000 nodes the seeds are four orders
+   below the naive product at δ = 0.0025 (7.99e-9 against 8.36e-5) and five below
+   the construction (6.18e-4); where the grid resolves the edge they are
+   0.10–0.22 of the direct operator and 0.086–0.22 of the same-stencil control.
+   The 42 / 5 naive product catches them at δ = 0.04 on 20,000–40,000 nodes
+   (0.98, 1.07; 1.15 parabolic) and, converging at 5.2 against their 4.2, will
+   pass them on finer sets: that is the stencils' degree, not the seeds, since
+   the naive product on the seeds' own 30 / 4 groups is 1.30e-6, 8.40e-6 and
+   1.76e-7 at 10,000–40,000 nodes and δ = 0.04, 8–200× the seeds (§5.6). So
+   H8's "≤ 1.2×" holds against the naive product through 40,000 nodes and not
+   asymptotically, and against the direct operator with a 5–10× margin the other
+   way. The seed block conditions like the polynomial block, within 0.46–2.5× of
+   it column-scaled from δ = 1e-5 h to 8h (H3).
+5. **The 2-D elliptic problem ranks the methods; the 1-D one does only off
+   constant pieces (§2.5, §4.5).** On the MATLAB medium's constant pieces the 1-D
+   equilibrium is in the seeds' kernel, and the seeds and T1-FV are exact at
+   every δ and h (§2.5 statement 4); on eq. 75 only the seeded rows are, and the
+   seed operator's equilibrium error is 9.7e-5 → 1.2e-8 at δ = 0 over 101–1601
+   nodes, where T1-FV's is 3e-14 → 1.4e-11. In 2-D `sin 2πx v(y)` is outside the
+   normal seed span, and the seeds' elliptic error is 1.6e-5 → 5.3e-9 and fourth
+   order. The parabolic error at `dt = h` is 1.04–1.17× the elliptic one at
+   40,000 nodes, but the parabolic problem is a weak second test: 3–19 BD4 steps
+   of one separable mode from its analytic history, which checks the operator's
+   spectrum under BD4 (it caught the growing mode, statement 2) more than a
+   transient through the edge (§5.5). The flux reading that stalls for the naive
+   product falls 2000× for the seeds from 1250 to 40,000 nodes at δ = 0 and 670×
+   at δ = 0.0025.
+6. **Solvability and spectra stay bounded as δ → 0 (§4.4; H5 on case 1, H6).**
+   The seed rows' least diagonal dominance falls from the direct rows' end toward
+   the jump-aware rows' as δ → 0 (0.409 → 0.239 at 2500 nodes, 0.404 → 0.211 at
+   10,000) and never below the jump's; the condition estimate rises from 7.1e3 to
+   1.7e4 (1.5e4 at δ = 0) and the unpreconditioned gmres count runs 134, 155, 147, 160, 161 from
+   δ = 8h to 0 (not monotone), all between the two ends and below the
+   construction's (161–208). SuperLU takes 0.04–0.06 s at every width at 2500
+   nodes, with residuals of 1e-14 or below, and every `gmres` and `bicgstab`
+   solve converged, preconditioned or not. That is case 1: the ring's iterative
+   solves at 20,000 nodes, which H5 also asked for, were not run (the ring has
+   its DDR and spectra at 5000 nodes, §4.8). The seed operator's spectrum is the
+   warped aware operator's at every δ: no eigenvalue in the right half-plane,
+   `max Re` −7.27 (the physical mode) moving to −7.73 as the edge widens,
+   `h² max |Im|` ≤ 0.23 at 1600 nodes, and at 4900 port notes §2.5's warped line
+   to the digit (−7.27, `h² min Re` −13.19, 0.385, BD4's largest root 0.897 at
+   `dt = h`). Plain Gaussians bring back the crossing rows' complex loop at δ = 0
+   (`h² max |Im|` 1.49 against 0.385 at 4900 nodes): a wider spectrum, not an
+   instability, since no eigenvalue crosses the axis and BD4's largest root stays
+   0.826 at 1600 nodes. Case 2 has no eigenvalue right of the axis either
+   (§4.7).
+7. **The warp (§4.5–§4.7; H7, corrected).** At δ = 0 the warp's factor on the
+   seeds is E2.4's by H2, since the seed rows are E2.3's with either Gaussian
+   block (2.3× at 1250 nodes to 6.9× at 40,000 on case 1; 5.5–11.7× on case 2
+   from 5000 nodes): a regression check, not a measurement. At δ > 0 it wins
+   while the edge is unresolved (1.7–7.9× at δ = 0.0025) and loses by up to 2.6×
+   once it is resolved, turning at `h ≈ 2δ` on case 1 (`h ≈ δ/2` at δ = 0.04)
+   and once `h ≲ 2δ` for the tangential chain on case 2 (0.55–1.1 there). Where
+   it loses the errors are 1e-7 to 1e-6 on the intermediate grids (δ = 0.01 at
+   5000 nodes: 7.95e-7 warped, 4.39e-7 plain), not negligible. The seeds stay
+   warped for the unresolved regime the study is about, and pay up to 2.6× once
+   the grid resolves the edge.
+8. **A curved or tangentially varying edge needs the tangential chain
+   (§4.6–§4.7; H9 failed, H13–H17 hold).** Route (a), the flat seeds along the
+   foot point's normal, is not consistent at a jump or while a smooth edge is
+   unresolved: at δ = 0 on case 2 its crossing rows' truncation stalls (fit
+   0.38) and its line is 17–6742× the flat seeds, from two terms each enough
+   alone (the curvature puts the kink on the tangent line: at δ = 0 on constant
+   pieces route (a) *is* EABE Fig. 10's flat-interface construction; the
+   tangential variation of α imposes the foot point's flux ratio at every node:
+   fit 1.00 on flat lines). Once the grid resolves a fixed δ both terms are
+   smooth and the order returns (δ = 0.01: 4.87 and 3.66 over the last two
+   counts), but not the constant (130× the flat seeds). The tangential chain, in
+   the foot curve's own coordinates with α's and the metric's variation along the
+   curve carried by 75 coupled levels, is fourth order within 1.4–3.9× of the
+   flat seeds from 5000 nodes at every δ on case 2 in the RMS (1.9–4.8× in the
+   max norm, where at δ = 0 its error localizes above the upper curve), and
+   within 1.1–4.4× on the split geometries A and B; at 40,000 nodes on case 2 it
+   is 7.18e-9, 3.01e-8, 3.00e-8, 2.69e-8 at δ = 0, 0.01, 0.005, 0.0025, below
+   E2.3's curved construction at δ = 0 from 5000 nodes (0.14–0.45×), with its
+   crossing rows converging at 2.7–3.6 on every geometry and width. What does
+   not: the coarsest two counts (2.8–8.1× the flat seeds), the probe's slowdown
+   through `h ≈ 2–3δ` at δ = 0.0025, and the cost (a row 2.5–3.8× route (a)'s,
+   4.2–7.3× case 1's). On concentric circles the chain's rows converge at 3.45,
+   4.6–7.3× below E2.3's (H14).
+9. **The ring (§4.8, §4.10; H11).** On EABE eq. 40's ring the seeds are exact on
+   the matched radial profile to rounding at every s (1.3–2.1e-15 from 10³ to
+   10¹¹, where E2.3's rows lose digits like s, 1.36e-7 at 10¹¹), and their
+   per-stencil blocks and saddle-point systems condition independently of s
+   (mean 2-norm condition numbers 7.1e3 / 5.0e3 and 1.0e6 from 10⁵ to 10¹¹;
+   E2.3's 4.6e10 and 2.7e13 at 10¹¹; the global matrix's conditioning was not
+   measured), because they carry the ring's resistance, which eq. 40 holds fixed
+   (`s w = 1`). This needed four things §3.2–§3.10 did not: the width as the
+   band's `gap`, the ring's own series, 20 flux seeds on the 30 nodes, and
+   `φ₀₁`'s level 0 as the warp. With them Fig. 19's twin is fourth order at
+   every s, 0.52–0.97× E2.3 from 5000 to 40,000 nodes (fits over 1250–40,000:
+   4.43–4.71 against E2.3's 4.08–4.13); the 80,000-node point (1.4e-7 at
+   s ≥ 10⁸) sits at the reference's own floor and is not quoted as a ratio.
+   Without the flux seeds the line stalls (8.2 and 11.8× E2.3 at 40,000 and
+   80,000 nodes at s = 10³, 2.2 and 3.2× at 10¹¹). Fig. 19's breakdown near
+   s = 10¹¹ is not reproduced by either construction. Through a *smooth* ring
+   whose width and edges are both below h (δ = 0.0025, 0.001, 0.00025) the
+   seeds converge at fourth order on the far field, the 74–96 % of the nodes
+   away from the ring (fits 4.0–4.8 over 2500–20,000 nodes at every (s, δ), and
+   4.4–4.8 to 40,000 on the five lines that do not floor), where E2.3 reads the
+   edges as jumps and floors at 1–7e-4, and the naive and direct stencils do not
+   see the ring until the grid samples it (at δ = 0.00025 both sit on the
+   no-ring floor, about 5e-3). The error near the ring is not scored at δ > 0,
+   and no ring line has a max-norm error. The 40,000-node values at δ ≤ 0.001
+   (7.1e-7 to 1.0e-6) are the size of the differences between fine-run rebuilds
+   at those widths (1.3–3.9e-6, §4.8), and the steep last rates at s = 10³ (6.7
+   and 6.9) may be cancellation against a fine run's own error; only one (s, δ)
+   was read against a second fine run. Rows anchored in the layer's resistivity
+   tail need E4.12's rule (warped or plain Gaussians by the stronger diagonal):
+   the warp on every row gave two outliers (6.2e-5 at δ = 0.001, 20,000 nodes),
+   and the rule removes both and is within 0.91–1.25× of the better uniform
+   choice at every (s, δ, n) where it fires, through 40,000 nodes. At s = 10¹¹,
+   δ = 0.001 the rule's own 160,000-node solution is the discrepant one: 3.55e-6
+   from a plain-built run toward which every coarse line converges (the seeds
+   8.0e-7 at 40,000, fit 4.77), so the rule's convergence at that (s, δ) past
+   40,000 nodes is unresolved.
+10. **The six coefficient treatments tested do not help (§4.9; H12,
+    corrected).** Harmonic and arithmetic means of α over discs of radius h/2
+    and h, and the edge widened to `max(δ, m h)` for m = 1, 2: in the RMS norm
+    none beats plain sampling by more than 1.75× anywhere in either sweep. In the
+    max norm the coarsest sets differ, up to 3.1× on case 1 at 1250 nodes (the
+    widened edge) and 2.4× on case 2 at 2500 (the radius-h harmonic mean, where
+    the sampled line is itself an outlier); from 5000 nodes on no treatment beats
+    sampling by more than 1.55× in either norm. The radius-h means are 1.6–3.4×
+    *worse* than sampling at the jump from 5000 nodes; the disc means cap the
+    naive product at second order once the edge is resolved (584–3100× behind it
+    at 40,000 nodes, the `r²/8` term measured); the half-spacing disc helps only
+    while `h ≳ 2–3δ` (crossovers at `h/δ` = 1.8–3.5). No conservative
+    scattered-node scheme (control volumes with face conductances, 1-D's T1-FV
+    in 2-D) was built, so the 2-D comparators are the naive product and the
+    δ = 0 construction, and "the strongest low-order comparator" is a statement
+    about these six. The seeds' lead over the best of them grows from 2.3 to 4.7
+    orders over 1250–40,000 nodes. At the jump the half-spacing disc is sampling
+    by construction on this node layout (E2.1's innermost rows sit exactly h/2
+    off the curve), so "worse than sampling" there is a statement about the
+    radius-h means and T0, not about averaging α as such.
+11. **The snapshot (§5.1).** At `h = 8.3δ` on 2500 nodes the four regimes are in
+    one picture: naive 2.63e-3 with three quarters of its error away from the
+    edge, the construction on its floor at 6.97e-4, the direct stencil at
+    3.71e-2, the seeds at 3.33e-6 with their error where the nodes are, not
+    where the edge is.
+
+### 5.4 The hypotheses of §3.7 and §3.10, as they stand
+
+| | Section | Status |
+| --- | --- | --- |
+| H1 the march is the chain | §4.3 | holds: monomials to 1.4e-15, the shift identity to 7e-16, the residual by twelfth-order differences 4e-11 to 9e-11 (the differences' floor), the 2-D march = the 1-D one to 7e-14, `ψ₀₁ ≡ α_e` to the bit; a stencil 2–7 ms |
+| H2 the jump limit is E2.3 | §4.3, §4.4 | holds at δ = 0 (spans 4.9e-14, weights 1.6e-12, rows 7.6e-12, the operator 5.3e-13); at δ > 0 first order in δ/h to 1e-5 h (0.476 δ/h in span on one stencil; rows 0.38 δ/h outside the band, 0.77 inside) |
+| H3 seed blocks condition like polynomial blocks | §4.3 | holds on case 1: 0.46–2.5× the monomial block's column-scaled, within 1.3× of E2.3's raw at δ = 0 |
+| H4 seeds = aware at δ = 0, fourth order with one constant at δ > 0 | §4.5 | holds on these grids: port notes' line to 160,000 nodes; fits 4.2–4.5 (3.8–4.8 over the later windows), the widths within 2.4× of one another at every count; a δ-uniform constant is not proven (one node set, δ fixed along each line) |
+| H5 solvability does not degrade as δ → 0 | §4.4 | holds on case 1: the DDR between the ends, no breakdown in any solve, SuperLU blind to δ, the iteration counts bounded but not monotone; the ring's 20,000-node iterative sweep was not run |
+| H6 spectra | §4.4, §4.7 | holds on cases 1 and 2: no positive eigenvalue, port notes §2.5's line at 4900 nodes; plain rows widen the spectrum at δ = 0 (the loop) without crossing the axis |
+| H7 the warp is worth on seeds what it is on polynomials | §4.4, §4.5 | at δ = 0 an identity through H2 (2.3–6.9×); corrected at δ > 0: wins while unresolved, loses ≤ 2.6× once resolved (at errors of 1e-7 to 1e-6), turning at `h ≈ 2δ` |
+| H8 the rule needs no δ; resolved penalty ≤ 1.2× direct | §4.5, §5.6 | holds: no threshold, and 5–10× better than the direct operator, not ≤ 1.2× worse; the ≤ 1.2× is against the 42 / 5 naive product (≤ 1.15× through 40,000 nodes; its higher order passes the seeds further on), the stencils' degree, as the 30 / 4 naive control measures |
+| H9 route (a) reproduces the flat numbers | §4.6 | fails at a jump and while the edge is unresolved (curvature and tangential α, each alone); answered by the tangential chain (H13–H17) |
+| H10 the 2-D knee | §4.2 | corrected: jump-like only while `h ≳ 6δ`, knee over `4δ ≳ h ≳ 0.75δ`, order 5 below; the construction's floor holds; the flux reading holds with the reference subtracted |
+| H11 the ring | §4.8, §4.10 | holds as answered: exact on the matched profile at every s, per-stencil conditioning flat in s, Fig. 19's twin fourth order at every s to 40,000 nodes; needed the gap, the ring's series, the flux seeds and level 0's warp; the smooth ring fourth order on the far field with E4.12's rule, one fine-run cross-check, at which the rule's own 160,000-node solution is the discrepant one |
+| H12 the comparators | §4.9 | corrected: the disc means cap at second order and T0 is the worst, but no treatment beats sampling by more than 1.75× in the RMS norm (in the max norm up to 3.1× on the coarsest sets, 1.55× from 5000 nodes); the strongest low-order comparator tested is the naive product itself; no conservative scheme was built |
+| H13 the chain is the curvilinear chain | §4.7 | holds: the flat limit to 1e-12, the residual 1e-10 on the line and growing like the fifth power of \|ξ\| off it |
+| H14 concentric circles are the osculating rung | §4.7 | holds: rows converge at 3.45, 4.6–7.3× below E2.3's |
+| H15 the jump limit on a curved or tangentially varying edge | §4.7 | holds: E2.3's rate on the probe, below E2.3-curved from 5000 nodes, spans first order |
+| H16 H9 again | §4.7 | holds from 5000 nodes (1.4–3.9× the flat seeds on case 2 in the RMS, 1.9–4.8× in the max norm; A and B 1.1–4.4×); the coarsest two counts 2.8–8.1× |
+| H17 cost | §4.7 | holds, barely: a row 2.5–3.8× route (a)'s, the case-2 sweep 58 min |
+
+### 5.5 Limitations to carry into the manuscript
+
+- *The norms.* Every 2-D error is the RMS over all nodes, Dirichlet rows
+  included; the 1-D study's is `‖e‖₂/‖u‖₂`. No table mixes them, and every
+  caption says which (§3.8). The smooth ring's errors are the far field's only
+  (74–96 % of the nodes), and no ring line has a max-norm error: the ring
+  driver's `max` is `max |u|`, a sanity reading (§4.8, `heat2d_ring.py`).
+- *One node set per count, with fixed rows at the edges.* The sweeps are node
+  set 0; sets 1 and 2 spread the naive product by up to 2× per count (§4.2) and
+  moved §5.2's rule ratios from 0.75 to 2.03. Orders are fits, never a single
+  pair of counts. Every set keeps E2.1's prescribed rows beside each curve
+  (0.5h, 1.37h and 2.23h off it) and scatters the rest, and changing the seed
+  does not move those rows, so robustness to arbitrary node placement near an
+  edge is untested.
+- *Tuned and fixed choices.* The reach of 20 δ was never varied (no
+  `--seed-reach` run); every smooth edge is one tanh blend (the ring's the
+  resistance composition), no other profile; the contrast is 5 : 1 on cases 1
+  and 2 (9 : 1 in 1-D), and the ring's contrast is large only at fixed `s w`,
+  so E4.12's tail-row instability, seen at `α_e/α_piece` = 0.2–0.43, was looked
+  for off the ring at 5 : 1 alone; the seeded rows are 30 / 4 in a 42 / 5 bulk,
+  whose higher degree passes the seeds on a resolved edge (statement 4).
+- *The parabolic test is short.* 3–19 BD4 steps (`t = 0.1`, `dt = h`) of one
+  separable mode from its analytic history: it tests the operator's spectrum
+  under BD4 and the time error's smallness, not a transient through the edge,
+  as 1-D's ramp to `t = 2` did. The 1-D ramp line at `dt = h` is itself part
+  BD4 error: about half of it at 100 nodes and a quarter from 200, the spatial
+  line alone fourth order (§5.6).
+- *What the seeds need as input.* The march samples α along each stencil's
+  normal line at arbitrary points, so it needs a continuous description of the
+  medium; the tangential chain also needs the curve's foot points and
+  curvature, and the ring its `gap`. The naive product needs α at the nodes
+  only.
+- *The coarse sets and the geometry the chain refuses.* The 1250-node naive
+  product (and every treatment, which is the naive product on another α) has a
+  growing mode that BD4 at `dt = h` amplifies, so its parabolic numbers start at
+  2500 (§4.2, §4.9); the tangential chain's constant is 2.8–8.1× the flat
+  seeds' on the two coarsest counts (§4.7); `FOOT_CURVATURE` refuses the
+  tightest curves' coarsest sets (the 0.25 circle below 2500 nodes, §4.7; some
+  ring rows at 1250, §3.11); and at δ = 0 a stencil that crosses both curves
+  where the other is not a coordinate line of the foot curve's frame is refused
+  (§4.7), so two close, non-concentric curved interfaces are outside what was
+  run.
+- *The ring's reference at δ > 0 is self-convergence* against a 160,000-node
+  seed run read on the far field (§4.8). At one (s, δ) a plain-built second
+  fine run was made, and there the rule's own fine solution is 3.55e-6 away
+  from it (§4.10); at the other five the 40,000-node errors are the size of the
+  fine-run rebuild differences, and no second fine run was made.
+- *E4.12's rule is a proxy.* The diagonal share stands in for stability: it
+  misjudges near-ties off the ring (§5.2) and 483 tail rows of one 160,000-node
+  fine run (§4.10). It is on for a ring only.
+- *The march floor.* 1-D's (§2.3, a 1e-12 row residual at `δ ≲ h/40`) was not
+  seen in 2-D, but the 2-D tests could not have seen it: §4.3's ladder measures
+  distances to the jump's rows (5e-6 at 1e-5 h) and its residual by
+  differences floors at 4e-11 (§4.3), and the ring's residuals are the march
+  tolerance's (§4.8).
+- *Cost.* A flat seeded row costs 1.3–4.4 ms (§4.5), a tangential one 15–25 ms
+  (§4.7, quiet), a ring row with the flux seeds up to 233 ms at δ > 0 under load
+  (§4.8); a 40,000-node operator at δ = 0.04, every row seeded, is 167 s of
+  marches against 2.6 s for the naive product. The seeded share settles at a
+  fixed fraction of N at fixed δ > 0 (the strip within 20 δ of a curve), so the
+  operator is O(N) marches.
+- *What is not covered*: corners and triple junctions (E2.10, a separate repo),
+  three dimensions, edges that meet a Dirichlet boundary (every edge here is
+  x-periodic), and time-dependent media.
+
+### 5.6 The roundtable: what two outside referees changed
+
+Before E5 drafts from this section, its pivotal claims (C1–C11: the seeds'
+order and constant, no threshold, the knee, the comparators, curved edges, the
+ring, solvability, the warp, §5.2's decision, the elliptic problems, and the
+limitations) went to two referees from different vendors on 2026-09-23, beside
+the /spar review of the code: **GPT-6 Astra** (OpenAI, through the API, a 256 KB
+dossier of §5, §2.5, §3.7, §3.10's hypotheses and §4, no filesystem; verdict
+HOLD, 13 findings) and **Fable 5.1** (Anthropic, with the repository and the
+results files, running its own probes; verdict REVISE, 12 findings). Brad took
+the rewording and the two code fixes and left the new runs they proposed as the
+limitations above. Every finding was checked against the results files before
+it was taken; the checks, all in scratch and not committed as drivers:
+
+- *The 1-D time error (Astra's first HIGH finding).* The MATLAB ramp's seed
+  line at `dt = h, h/2, h/4, h/8` on 100–800 nodes. The spatial error alone
+  (`dt → h/8`) is 1.47e-8, 1.05e-9, 7.40e-11, 4.5e-12 at δ = 0 (rates 3.8, 3.8,
+  4.0), δ = 0.0025 on it to 0.3 % and δ = 0.01 to 1.8 %; at `dt = h` the time
+  error is about half the total at 100 nodes and a quarter from 200. So the 1-D
+  seeds are fourth order in space with one line for every δ, as §2.5 said; §2.5's
+  sentence calling the snapshot's 2.95e-8 "the BD4 time error" was wrong and is
+  corrected there.
+- *The 30 / 4 naive control (Fable, `naive30.py`).* The naive product on the
+  seeds' own stencil groups (30 / 4 wherever the rule seeds), case 1, node set
+  0, equilibrium: 1.30e-6, 8.40e-6, 1.76e-7 at 10,000, 20,000, 40,000 nodes at
+  δ = 0.04, and 1.62e-5, 2.40e-5 at 20,000, 40,000 at δ = 0.01, against the
+  seeds' 1.67e-7, 4.19e-8, 8.78e-9 and 3.82e-8, 8.42e-9 (the 42 / 5 product
+  rebuilt beside it matched the cache to four digits). At equal degree the seeds
+  win by 8–2850×, so H8's catch is the stencils' degree (statement 4).
+- *Refits from the results files.* The flat seeds' spread across widths at every
+  count and their fits over the later windows (statement 4); Fig. 19's twin
+  without its 80,000-node point (fits 4.43–4.71, seeds over E2.3 0.52–0.97 from
+  5000 to 40,000); the smooth ring over 2500–20,000 (fits 4.0–4.8) and its
+  far-read shares (0.74–0.96); the treatments in the max norm (statement 10);
+  eq. 75's 1-D equilibrium (statement 5).
+
+What changed, besides §5.2–§5.5 as they now read: in §2.5, statement 2 carries
+the time-space split and δ = 0.04's 2e-11 floor, statement 4 is scoped to the
+constant-piece medium, and the snapshot bullet is corrected; in §4.4 and §4.5,
+"no δ/h degrades anything", "no crossover to manage", the widths' spread and
+the warp's "both rows are already at 1e-8" carry corrections in place; in §4.8,
+§4.9 and §4.10, the per-stencil conditioning, the conservative scheme that was
+not built, and the rule's discrepant fine solution. In the code, following the
+/spar review: δ = 0's chain residual is None where it is made and
+`chain_residual` takes its max over the differences' valid interior, where
+`nanmax` and `max(0, nan)` had dropped any NaN (the residuals are unchanged to
+the bit); only the jump's `h/δ` stays a placeholder in `heat2d_stiff.py` and
+none in the eigenvalue driver, so any other non-finite value stops a results
+file; and `ResultsCache.write` warns when it overwrites a file from a run with
+other arguments (where it writes, `--outputs` and `--data-dir`, aside). What the
+referees proposed and Brad left for later, each now a limitation: second fine
+runs at the other five (s, δ), the rule at 80,000 and 320,000 nodes at
+s = 10¹¹, δ = 0.001, the δ = 0.04 seed column to 160,000, node sets 1 and 2 at
+20,000, reach and contrast sweeps, a shifted-row layout, the ring's iterative
+solves, and a ring max norm.
+
+### 5.7 What this changes downstream
+
+E4 (#6) is complete with this section: §4 is the canonical 2-D account, and
+every 2-D number the manuscript will quote is in it with a subsection to trace
+to, the statements above point at those subsections, and each subsection's
+tables are a results file of §5.1. For E5:
+
+- *E5.3 (#44)* copies the results files of §5.1's table into `paper/data/`
+  with `--data-dir paper/data` (each documented command reruns in seconds but
+  for the three uncached ones), and asserts against them; the working caches
+  are not the manuscript's data. `use_print_style()` is E5.3's, for the
+  manuscript's copies of these figures.
+- *E5.7 (#48)*, the 2-D construction: §3.2–§3.4 (the straight feature), §3.10
+  (the tangential chain), §3.11 (the ring's gap, series, flux seeds and level-0
+  warp), §4.10 and §5.2 (the rule, and why it is the ring's).
+- *E5.8 (#49)*, the 2-D results, in the plan's order: test problems and
+  references (§4.1, §4.6, §4.8; statement 1), the naive baseline (§4.2; 2–3),
+  solvability and spectra (§4.4; 6), the flat sweep and the rule (§4.5; 4, 5,
+  7), the curved feature (§4.6–§4.7; 8), the ring and the s-sweep (§4.8, §4.10;
+  9), the treatments (§4.9; 10), the snapshot (§5.1; 11).
+- *E5.9 (#50)*: §5.5's limitations, and §5.6's list of what the referees
+  proposed and was left for later.
+- *E5.2 (#43)*: the scattered-node form of the conductance rule and T3 (§4.9),
+  and the contact-resistance literature for the ring's `s w = 1` (§4.8).
+
+Tests: `tests/test_results_cache.py` (`finite` nulling the named placeholders,
+refusing any other non-finite value and naming its key; `write` warning when it
+overwrites another run's file, and not for a run that differs only in where it
+writes); `tests/test_heat2d_stiff.py` (the results file and `--data-dir` on the
+reference table; the jump's `h/δ` and δ = 0's residual as null; `results_name`
+and `figure_name` for every documented run; the δ = 0 column writing `…_jump`
+and leaving the full figure alone; `cached_line` reading only the cache; the
+snapshot's errors equal to the sweep's and ordered, its shares and its files; a
+NaN in the medium reaching `chain_residual`'s result);
+`tests/test_heat2d_stiff_eigenvalues.py` (the results files and figure names by
+mode and count).

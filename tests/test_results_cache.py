@@ -1,6 +1,7 @@
 """``results_cache`` (plan D1; E5.3, #44): the schema of a driver's results file."""
 
 import json
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import pytest
 from heat_interfaces.results_cache import (
     SCHEMA,
     ResultsCache,
+    finite,
     git_state,
     jsonable,
     read_results,
@@ -62,6 +64,51 @@ def test_write_refuses_a_nan_or_an_infinity(tmp_path):
     with pytest.raises(ValueError):
         cache.write(tmp_path / "demo.json")
     assert not (tmp_path / "demo.json").exists()
+
+
+def test_finite_nulls_the_named_placeholders_and_refuses_any_other(tmp_path):
+    # E4.10: the 2-D drivers print inf and nan for "not applicable" (the
+    # jump's h/δ, an empty row group); those keys become null, and a
+    # non-finite value anywhere else is a failed run that must not be written.
+    table = {
+        0.0: [{"h_over_delta": float("inf"), "rms": 1e-5}],
+        0.01: [{"h_over_delta": 2.1, "least": np.float64("nan"), "rms": 2e-6}],
+    }
+    clean = finite(table, {"h_over_delta", "least"}, "knee")
+    assert clean[0.0] == [{"h_over_delta": None, "rms": 1e-5}]
+    assert clean[0.01] == [{"h_over_delta": 2.1, "least": None, "rms": 2e-6}]
+    cache = ResultsCache("demo")
+    cache.add("knee", clean)
+    cache.write(tmp_path / "demo.json")
+    assert read_results(tmp_path / "demo.json")["tables"]["knee"]["0"][0] == {
+        "h_over_delta": None,
+        "rms": 1e-5,
+    }
+    with pytest.raises(ValueError, match="'rms'"):
+        finite({0.0: [{"rms": float("nan")}]}, {"h_over_delta"}, "knee")
+    # A table that is itself a list of numbers takes the table's name.
+    assert finite([1.0, float("inf")], {"rates"}, "rates") == [1.0, None]
+    with pytest.raises(ValueError, match="'knee'"):
+        finite([float("inf")], set(), "knee")
+
+
+def test_write_warns_when_it_overwrites_another_runs_file(tmp_path):
+    # E4.10's /spar review: a near-miss of a documented command must not
+    # replace its results file in silence; where it writes does not count.
+    path = tmp_path / "demo.json"
+    ResultsCache("demo", {"counts": [1250, 2500], "outputs": "a"}).write(path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        ResultsCache("demo", {"counts": [1250, 2500], "outputs": "b"}).write(path)
+        ResultsCache(
+            "demo", {"counts": [1250, 2500], "outputs": "a", "data_dir": "d"}
+        ).write(path)
+    with pytest.warns(UserWarning, match="other counts"):
+        ResultsCache("demo", {"counts": [1250], "outputs": "a"}).write(path)
+    assert read_results(path)["args"]["counts"] == [1250]
+    path.write_text("{}")
+    with pytest.warns(UserWarning, match="the file"):
+        ResultsCache("demo", {}).write(path)
 
 
 def test_git_state_names_this_checkout_and_nothing_outside_one(tmp_path):
