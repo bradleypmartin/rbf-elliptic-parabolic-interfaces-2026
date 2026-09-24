@@ -24,6 +24,7 @@ from heat_interfaces.results_cache import (
     read_results,
     rounded,
     source_hash,
+    tables_hash,
 )
 
 
@@ -65,8 +66,10 @@ def test_write_and_read_round_trip_with_the_provenance(tmp_path):
         "argv",
         "args",
         "timings",
+        "tables_sha256",
         "tables",
     ]
+    assert data["tables_sha256"] == tables_hash(data["tables"])
     assert data["schema"] == SCHEMA == 2 and data["driver"] == "demo"
     datetime.strptime(data["date"], "%Y-%m-%dT%H:%M:%SZ")
     assert data["argv"] == argv
@@ -205,8 +208,23 @@ def test_git_state_ignores_the_runs_own_results_files(tmp_path):
 def test_provenance_refuses_a_dirty_tree_a_foreign_commit_and_schema_1(tmp_path):
     repo = _repo(tmp_path)
     head = git_state(repo)["sha"]
-    good = {"schema": SCHEMA, "git": {"sha": head, "dirty": False}}
+    tables = {"knee": [{"n": 50, "rms": 1e-3}]}
+    good = {
+        "schema": SCHEMA,
+        "git": {"sha": head, "dirty": False},
+        "tables_sha256": tables_hash(tables),
+        "tables": tables,
+    }
     assert provenance(good, repo) == []
+    # The /spar review of E5.3: a table edited after the run (a bad merge, a
+    # hand "fix") without its hash no longer passes.
+    edited = good | {"tables": {"knee": [{"n": 50, "rms": 2e-3}]}}
+    assert provenance(edited, repo) == [
+        "its tables do not match their recorded hash (edited?)"
+    ]
+    assert provenance(good | {"git": {"sha": head}}, repo) == [
+        f"records no dirty flag (at {head[:9]})"
+    ]
     dirty = good | {"git": {"sha": head, "dirty": True}}
     assert provenance(dirty, repo) == [
         f"made from a tree with uncommitted changes (at {head[:9]})"
@@ -221,7 +239,8 @@ def test_provenance_refuses_a_dirty_tree_a_foreign_commit_and_schema_1(tmp_path)
     assert provenance(good | {"schema": 1}, repo) == [f"schema 1, not {SCHEMA}"]
     # This repository's own HEAD is in its history.
     here = git_state()
-    assert provenance({"schema": SCHEMA, "git": here | {"dirty": False}}) == []
+    mine = good | {"git": here | {"dirty": False}}
+    assert provenance(mine) == []
 
 
 def test_changed_since_lists_the_files_that_moved(tmp_path):

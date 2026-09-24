@@ -16,8 +16,9 @@ uv run python scripts/paper_data.py --verify   # the files against the commands
 ```
 
 **Schema 2** (`src/heat_interfaces/results_cache.py`): `{"schema", "driver",
-"date", "git": {"sha", "dirty"}, "argv", "args", "timings", "tables"}`. `argv`
-is the command line; `tables` holds every table the driver printed, and the
+"date", "git": {"sha", "dirty"}, "argv", "args", "timings", "tables_sha256",
+"tables"}`. `argv` is the command line, `tables_sha256` the tables' checksum;
+`tables` holds every table the driver printed, and the
 arrays its figures draw to six figures (`seed_functions/curves`,
 `snapshot/curves`, `snapshot/field`, `spectra/figure`). Float keys are `%g`
 strings; lists of scalars sit on one line.
@@ -25,8 +26,11 @@ strings; lists of scalars sit on one line.
 **What `--verify` asks of each file** (and `scripts/paper_numbers.py` before
 any number): it is the file of a documented run and there is no other; it was
 written by that run's driver from that run's command (`argv` without
-`--outputs` and `--data-dir`); from a tree with no uncommitted change outside
-`paper/data` (`git.dirty` false); at a commit in the history of HEAD. A file
+`--outputs` and `--data-dir`); its tables match `tables_sha256`; from a tree
+with no uncommitted change outside `paper/data` (`git.dirty` false); at a commit
+in the history of HEAD; and it names no absolute path (the runs are told
+`paper/data`, so a file is the same bytes from any checkout, timings, date and
+commit aside). A file
 holds the last run of its name, so a near-miss of a documented command run
 with `--data-dir paper/data` (fewer counts, another seed) is refused, not
 quoted. `paper_data.stale()` also lists, for information, any file whose run's
@@ -34,6 +38,16 @@ code (the package and its driver) has changed since its commit: the working
 caches key on labels and versions, not on code (stiff note §5.1's caveat), so
 rerunning after such a change may reprint the same numbers, and whether a
 cache version needs a bump is the reader's call.
+
+**What the gate does not prove.** It binds a file to its command, its commit
+and its own checksum; it does not re-derive the numbers, which only rerunning
+the command does (`paper_data.py`, then `git diff paper/data`). The checksum
+catches an edit that did not recompute it (a merge, a hand "fix"), not a
+deliberate one. `scripts/paper_numbers.py` recomputes every number the notes'
+closing statements quote from the tables; the figures' arrays
+(`…/curves`, `snapshot/field`, `spectra/figure`) are covered by the checksum
+and by `paper_figures.py --check` only. The figures and fragments never read a
+run time (`tests/test_paper_figures.py` moves every one and redraws).
 
 | File | Run (`scripts/…`) | Notes |
 | --- | --- | --- |

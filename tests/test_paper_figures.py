@@ -1,6 +1,8 @@
 """``scripts/paper_figures.py`` (E5.3, #44): the figures drawn from paper/data."""
 
+import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -10,7 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from heat_interfaces.plotting import TEXTWIDTH, use_print_style  # noqa: E402
-from paper_figures import FIGURES, TABLES, Data, check, main, write  # noqa: E402
+from paper_figures import DATA, FIGURES, TABLES, Data, check, main, write  # noqa: E402
 
 
 class Recording(Data):
@@ -101,3 +103,39 @@ def test_main_writes_and_checks_the_named_files(tmp_path, capsys):
 def test_the_committed_figures_are_what_the_committed_data_draws(capsys):
     # E5.3's done-when, and make_arxiv's gate: paper/figures is paper/data's.
     assert main(["--check"]) == 0, capsys.readouterr().out
+
+
+TIMING = re.compile(r"(seconds|_ms|^ms|^total_s|^solved|build)$")
+
+
+def _slow_down(obj):
+    """``obj`` with every run time (``TIMING``, the rows' SuperLU ``direct``) × 1.37."""
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            number = isinstance(v, (int, float)) and not isinstance(v, bool)
+            timed = TIMING.search(k) or (k == "direct" and number)
+            out[k] = v * 1.37 if timed and number else _slow_down(v)
+        return out
+    if isinstance(obj, list):
+        return [_slow_down(v) for v in obj]
+    return obj
+
+
+def test_no_figure_or_fragment_depends_on_a_run_time(tmp_path):
+    # E5.3: rerunning the documented runs into an empty paper/data reproduced
+    # every figure and fragment but the one printing a product-grid solve's
+    # seconds (1.7 s committed, 1.6 s fresh). Run times are the notes', not the
+    # data's: move every one and the files must not change.
+    slowed = tmp_path / "data"
+    shutil.copytree(DATA, slowed)
+    moved = 0
+    for path in slowed.glob("*.json"):
+        data = json.loads(path.read_text())
+        before = json.dumps(data["tables"])
+        data["tables"] = _slow_down(data["tables"])
+        data["timings"] = {k: 1.37 * v for k, v in data["timings"].items()}
+        moved += json.dumps(data["tables"]) != before
+        path.write_text(json.dumps(data))
+    assert moved >= 10
+    assert check([*FIGURES, *TABLES], Data(slowed)) == []

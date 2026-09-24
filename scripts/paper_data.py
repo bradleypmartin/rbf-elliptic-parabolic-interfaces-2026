@@ -15,10 +15,13 @@ run's screen output to ``outputs/paper_data/<file>.log``.
 
 ``verify`` is the gate ``scripts/paper_numbers.py`` runs before any number:
 the data directory holds exactly these files, each written by its driver
-from its command (``argv``, ``WHERE`` aside), from a clean tree, at a commit
-in the history of HEAD. A file holds the last run of its name, so a
-near-miss of a documented command (fewer counts, another seed) run with
-``--data-dir paper/data`` is refused here, not quoted.
+from its command (``argv``, ``WHERE`` aside), with its tables matching their
+checksum, from a clean tree, at a commit in the history of HEAD, and naming
+no absolute path (the runs are given ``paper/data`` relative to the root, so
+the files are the same from any checkout and carry no machine's home). A file
+holds the last run of its name, so a near-miss of a documented command (fewer
+counts, another seed) run with ``--data-dir paper/data`` is refused here, not
+quoted.
 
     uv run python scripts/paper_data.py              # every run, ~13 min cached
     uv run python scripts/paper_data.py --only heat2d_stiff_snapshot.json
@@ -36,6 +39,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from heat_interfaces.results_cache import (
+    WHERE,
+    WHERE_FLAGS,
     changed_since,
     command,
     git_state,
@@ -217,6 +222,22 @@ RUNS: tuple[Run, ...] = (
 BY_NAME = {run.results: run for run in RUNS}
 
 
+def absolute_paths(data: dict) -> list[str]:
+    """The absolute paths a results file records where a run wrote (``WHERE``)."""
+    argv = list(data.get("argv") or [])
+    values = [b for a, b in zip(argv, argv[1:], strict=False) if a in WHERE_FLAGS]
+    joined = tuple(f"{flag}=" for flag in WHERE_FLAGS)
+    values += [t.split("=", 1)[1] for t in argv if t.startswith(joined)]
+    values += [str(v) for k, v in (data.get("args") or {}).items() if k in WHERE and v]
+    return sorted({v for v in values if Path(v).is_absolute()})
+
+
+def relative(path: Path, root: Path = ROOT) -> str:
+    """``path`` relative to ``root`` when inside it (what a run is told)."""
+    path = Path(path).resolve()
+    return str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
+
+
 def verify(data_dir: Path = DATA, root: Path = ROOT) -> list[str]:
     """Every reason ``data_dir`` is not the documented runs' files; empty if none."""
     data_dir = Path(data_dir)
@@ -242,6 +263,8 @@ def verify(data_dir: Path = DATA, root: Path = ROOT) -> list[str]:
                 f" not the documented {' '.join(run.argv)!r}"
             )
         problems.extend(f"{run.results}: {p}" for p in provenance(data, root))
+        for path in absolute_paths(data):
+            problems.append(f"{run.results}: records the absolute path {path}")
     return problems
 
 
@@ -274,7 +297,7 @@ def run(runs: list[Run], data_dir: Path) -> None:
         with log.open("w") as out:
             subprocess.run(
                 [sys.executable, str(ROOT / "scripts" / r.script), *r.argv]
-                + ["--data-dir", str(data_dir)],
+                + ["--data-dir", relative(data_dir)],
                 cwd=ROOT,
                 stdout=out,
                 stderr=subprocess.STDOUT,

@@ -399,9 +399,9 @@ def tab_2d_references(data: Any) -> str:
         row(
             "",
             r"\multicolumn{4}{c}{case 1: Chebyshev in $y$}",
-            r"\multicolumn{3}{c}{case 2: Fourier $\times$ Chebyshev}",
+            r"\multicolumn{2}{c}{case 2: Fourier $\times$ Chebyshev}",
         ),
-        r"\cmidrule(lr){2-5}\cmidrule(lr){6-8}",
+        r"\cmidrule(lr){2-5}\cmidrule(lr){6-7}",
         row(
             r"$\delta$",
             "finer, $c = 0$",
@@ -410,7 +410,6 @@ def tab_2d_references(data: Any) -> str:
             r"$\div \delta$",
             "finer in $x$",
             "finer in $y$",
-            "seconds",
         ),
     ]
     body = []
@@ -427,18 +426,17 @@ def tab_2d_references(data: Any) -> str:
                 "--" if d == 0 else f"{distance / d:.3f}",
                 sci(max(r["n_x"] for r in c2), 2) if c2 else "--",
                 sci(max(r["elements_check"] for r in c2), 2) if c2 else "--",
-                f"{max(r['seconds'] for r in c2):.1f}" if c2 else "--",
             )
         )
     e26 = next(r for r in curved if r["delta"] == 0.0 and "e26_rms" in r)
-    body += note(8, rf"case 2, $\delta = 0$, vs.\ E2.6's run: {sci(e26['e26_rms'])}")
+    body += note(7, rf"case 2, $\delta = 0$, vs.\ E2.6's run: {sci(e26['e26_rms'])}")
     comments = [
         "finer: the largest difference from a finer reference (case 1: in y, at",
         "c = 0 and c = 1; case 2: in x and in y, the larger over c); at delta = 0",
         "the sup |v_delta - v_0| column is the distance to the analytic solution;",
         "case 2's last line: RMS from E2.6's 160,000-node jump-aware run.",
     ]
-    return fragment(table, cols("l", "rrrrrrr", "7pt"), head, body, comments)
+    return fragment(table, cols("l", "rrrrrr", "7pt"), head, body, comments)
 
 
 def tab_2d_knee(data: Any) -> str:
@@ -681,14 +679,13 @@ def tab_2d_solvability(data: Any) -> str:
             r"cond$/10^3$",
             "gmres",
             "bicgstab",
-            "LU (s)",
         )
     ]
     body = []
     for k, name in enumerate((EIG, EIG_ROWS)):
         rows = data.tables(name)["rows"]
         n = rows[0]["n"]
-        body += group(8, f"$N = {count(n)}$, the seeds", rule=k > 0)
+        body += group(7, f"$N = {count(n)}$, the seeds", rule=k > 0)
         for r in (r for r in rows if r["label"] == "seeds"):
             body.append(
                 row(
@@ -699,7 +696,6 @@ def tab_2d_solvability(data: Any) -> str:
                     figs(r["cond"] / 1e3, 2),
                     str(r["gmres/none"]["iterations"]),
                     str(r["bicgstab/none"]["iterations"]),
-                    f"{r['direct']:.2f}",
                 )
             )
         for label in ("construction", "direct", "naive"):
@@ -713,15 +709,15 @@ def tab_2d_solvability(data: Any) -> str:
                     _range([r["cond"] / 1e3 for r in line], lambda v: figs(v, 2)),
                     _range([r["gmres/none"]["iterations"] for r in line], str),
                     _range([r["bicgstab/none"]["iterations"] for r in line], str),
-                    _range([r["direct"] for r in line], lambda v: f"{v:.2f}"),
                 )
             )
     comments = [
         "the seeded rows' diagonal dominance ratio (least, median), the matrix's",
-        "condition estimate, unpreconditioned gmres and bicgstab iterations, the",
-        "SuperLU solve; the italic lines: the other operators' range over delta/h.",
+        "condition estimate, unpreconditioned gmres and bicgstab iterations; the",
+        "italic lines: the other operators' range over delta/h. No timings: they",
+        "are not reproducible from paper/data (the notes quote SuperLU's).",
     ]
-    return fragment(table, cols("l", "rrrrrrr", "6pt"), head, body, comments)
+    return fragment(table, cols("l", "rrrrrr", "6pt"), head, body, comments)
 
 
 def tab_2d_spectra(data: Any) -> str:

@@ -59,7 +59,9 @@ uv run python scripts/paper_numbers.py         # every cache-backed number again
   refuses a tree with uncommitted changes outside `data/`, since the files
   record the commit and the dirty flag. `--verify` refuses a file that is not a
   documented run's, was written from another command line (`argv`, schema 2),
-  from a dirty tree or at a commit outside HEAD's history.
+  whose tables do not match their checksum, that names an absolute path, or
+  that was made from a dirty tree or at a commit outside HEAD's history
+  (`data/README.md` says what that does and does not prove).
 - **`paper_figures.py`** draws every figure and fragment from `data/` alone:
   the figures in print style at `\textwidth`, the fragments as booktabs
   `tabular`s with `\sci{}{}` numbers and a `% GENERATED` header naming their

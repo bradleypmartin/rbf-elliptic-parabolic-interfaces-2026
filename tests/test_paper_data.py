@@ -10,7 +10,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from heat_interfaces.results_cache import SCHEMA, ResultsCache, git_state  # noqa: E402
-from paper_data import BY_NAME, ROOT, RUNS, main, stale, verify  # noqa: E402
+from paper_data import (  # noqa: E402
+    BY_NAME,
+    ROOT,
+    RUNS,
+    absolute_paths,
+    main,
+    relative,
+    stale,
+    verify,
+)
 
 
 def test_the_runs_are_the_notes_documented_commands():
@@ -117,3 +126,32 @@ def test_stale_names_each_files_changed_code(tmp_path):
     ).stdout.split()[0]
     _file(tmp_path, ring, git={"sha": first, "dirty": False})
     assert "scripts/heat2d_ring.py" in stale(tmp_path)[ring.results]
+
+
+def test_the_files_name_no_absolute_path(tmp_path, monkeypatch):
+    # The /spar review of E5.3: every file had recorded the checkout's absolute
+    # --data-dir (a home directory, in a public repository, and bytes that
+    # differ from checkout to checkout). The runs are told paper/data.
+    head = git_state(ROOT)["sha"]
+    clean = {"sha": head, "dirty": False}
+    for run in RUNS:
+        _file(tmp_path, run, [*run.argv, "--data-dir", "paper/data"], clean)
+    assert verify(tmp_path) == []
+    run = RUNS[0]
+    _file(tmp_path, run, ["--data-dir", "/home/someone/paper/data"], clean)
+    assert verify(tmp_path) == [
+        "heat1d_stiff.json: records the absolute path /home/someone/paper/data"
+    ]
+    data = {"argv": ["--data-dir=/a/b"], "args": {"outputs": "/c", "counts": "/d"}}
+    assert absolute_paths(data) == ["/a/b", "/c"]
+    assert relative(ROOT / "paper" / "data") == "paper/data"
+    assert relative(tmp_path) == str(tmp_path.resolve())
+    calls = []
+    monkeypatch.setattr(
+        "paper_data.subprocess.run", lambda cmd, **kw: calls.append(cmd)
+    )
+    monkeypatch.setattr("paper_data.LOGS", tmp_path / "logs")
+    from paper_data import run as run_all
+
+    run_all([BY_NAME["heat2d_stiff_snapshot.json"]], ROOT / "paper" / "data")
+    assert calls[0][-2:] == ["--data-dir", "paper/data"]

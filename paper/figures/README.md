@@ -55,7 +55,9 @@ files and the notes section; the `%` lines after it say what the caption must
 (columns, norm, counts). Errors print as `$\sci{m}{e}$` (`main.tex`'s macro) to
 the notes' three figures, fitted orders to two decimals. They mirror the notes'
 tables, so that every number of the closing statements (stiff §2.5's four,
-§5.1's snapshot, §5.3's eleven) can be read off one of them.
+§5.1's snapshot, §5.3's eleven) can be read off one of them. None prints a run
+time: timings are the notes' to quote, since a rerun of the documented commands
+would not reproduce them.
 
 | Fragment | Notes | Holds |
 | --- | --- | --- |
@@ -67,7 +69,7 @@ tables, so that every number of the closing statements (stiff §2.5's four,
 | `tab_2d_references.tex` | §4.1, §4.6; §5.3 (1) | the references' own accuracy, case 1 and case 2 |
 | `tab_2d_knee.tex` | §4.2; §5.3 (2) | the naive product over the jump's and its flux against h/δ, per δ |
 | `tab_2d_floor.tex` | §4.2; §5.3 (3) | the construction against its floor and the naive product, per δ |
-| `tab_2d_solvability.tex` | §4.4; §5.3 (6) | DDR, condition estimate, gmres / bicgstab counts and LU time, 2500 and 10,000 nodes |
+| `tab_2d_solvability.tex` | §4.4; §5.3 (6) | DDR, condition estimate and gmres / bicgstab counts, 2500 and 10,000 nodes |
 | `tab_2d_spectra.tex` | §4.4; §5.3 (6) | the interior spectra's edges at 1600 and 4900 nodes |
 | `tab_2d_seeds.tex` | §4.5; §5.3 (4) | the seeds at every δ and count, the spread across widths, the fits, δ = 0 to 160,000 |
 | `tab_2d_baselines.tex` | §4.5; §5.3 (4) | every line at 40,000 nodes |

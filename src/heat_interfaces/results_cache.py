@@ -13,7 +13,12 @@ own (plan D2).
 
     {"schema": 2, "driver": "heat1d_stiff", "date": "2026-09-22T18:04:11Z",
      "git": {"sha": "…", "dirty": false}, "argv": ["--counts", …],
-     "args": {…}, "timings": {…}, "tables": {name: rows}}
+     "args": {…}, "timings": {…}, "tables_sha256": "…", "tables": {name: rows}}
+
+``tables_sha256`` (``tables_hash``) is the tables' own checksum: a later edit
+of a committed file's tables that does not recompute it (a bad merge, a hand
+"fix") breaks ``provenance``. It binds the file to itself, not to its commit:
+only rerunning the documented command can say the numbers are the code's.
 
 A table is whatever the driver keeps: a list of row dicts, or a dict of
 them keyed by medium and by δ. ``jsonable`` makes it JSON: float keys are
@@ -99,24 +104,35 @@ def command(argv: Sequence[str]) -> list[str]:
     return out
 
 
+def tables_hash(tables: Any) -> str:
+    """SHA-256 of ``tables`` as canonical JSON (sorted keys, no spaces)."""
+    text = json.dumps(tables, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
 def provenance(data: dict[str, Any], root: Path | None = None) -> list[str]:
     """What stops a results file from backing a quoted number; empty when nothing.
 
-    The file must be of this ``SCHEMA`` (so it names its command line), made in
-    a git checkout from a clean tree (``git_state``), at a commit in the
-    history of this checkout's HEAD: a run made on a branch that was later
+    The file must be of this ``SCHEMA`` (so it names its command line), its
+    tables must match their recorded ``tables_sha256``, and it must have been
+    made in a git checkout from a clean tree (``git_state``), at a commit in
+    the history of this checkout's HEAD: a run made on a branch that was later
     rewritten, or on another clone's unpushed commit, cannot be traced.
     """
     root = ROOT if root is None else Path(root)
     problems = []
     if data.get("schema") != SCHEMA:
         problems.append(f"schema {data.get('schema')}, not {SCHEMA}")
+    elif data.get("tables_sha256") != tables_hash(data.get("tables")):
+        problems.append("its tables do not match their recorded hash (edited?)")
     git = data.get("git") or {}
     sha = git.get("sha")
     if sha is None:
         problems.append("made outside a git checkout")
     else:
-        if git.get("dirty") is not False:
+        if git.get("dirty") is None:
+            problems.append(f"records no dirty flag (at {sha:.9})")
+        elif git.get("dirty") is not False:
             problems.append(f"made from a tree with uncommitted changes (at {sha:.9})")
         if _git(root, "merge-base", "--is-ancestor", sha, "HEAD").returncode:
             problems.append(f"commit {sha:.9} is not in the history of HEAD")
@@ -257,6 +273,7 @@ class ResultsCache:
             "argv": [str(a) for a in argv],
             "args": jsonable(self.args),
             "timings": dict(self.timings),
+            "tables_sha256": tables_hash(self.tables),
             "tables": self.tables,
         }
 
