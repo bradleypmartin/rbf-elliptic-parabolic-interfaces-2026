@@ -1249,7 +1249,9 @@ def naive_knee(f: Files, b: Book) -> None:
         "0.37",
     )
     jump = column(ell[0.0], "naive/rms")
-    b.eq(w6, "the jump's RMS falls, 1250 → 160,000", jump[1250] / jump[160000], "20")
+    # E5.10: the flux stalls over 10,000–160,000, and the RMS falls 6× there (the
+    # notes' 20× was 1250 → 160,000).
+    b.eq(w6, "the jump's RMS falls, 10,000 → 160,000", jump[10000] / jump[160000], "6")
     # Corrected by E5.3: the notes had "4–5 %"; δ = 0.0025 at 160,000 is 3.5 %.
     b.span(
         w6,
@@ -2274,16 +2276,27 @@ def treatments(f: Files, b: Book) -> None:
         if r["delta"] == 0.0
     }
     b.eq(
-        cited(w, "abstract", "§1", "§6.7", "§7.3"),
+        w6,
         "the seeds' lead over the best treatment at 1250, orders",
         orders[1250],
         "2.3",
     )
-    b.eq(
+    b.eq(w6, "… at 40,000", orders[40000], "4.7")
+    # E5.10 (#51): the caveat quoted case 1's parabolic line at the jump as the
+    # whole lead. Over both cases, both problems and every width H12 measures
+    # (the jump; δ = 0.005 and 0.0025 while h ≥ 4δ) it is 1.6 to 4.9.
+    leads = [
+        r["orders"]
+        for name in TREATMENTS.values()
+        for p in PROBLEMS
+        for r in f(name, f"h12/{p}/rms")
+    ]
+    b.span(
         cited(w, "abstract", "§1", "§6.7", "§7.3"),
-        "… at 40,000",
-        orders[40000],
-        "4.7",
+        "the seeds' lead over the best treatment, both cases and problems, orders",
+        leads,
+        "1.6",
+        "4.9",
     )
 
 

@@ -445,11 +445,33 @@ def tab_2d_references(data: Any) -> str:
     return fragment(table, cols("l", "rrrrrr", "7pt"), head, body, comments)
 
 
+# Five widths of eight counts are more rows than a page holds, so each §4.2
+# table is two fragments (#51): the jump and the wider edges, then the thinner.
+THIN_BELOW = 0.01
+
+
+def wide(d: float) -> bool:
+    return d == 0 or d >= THIN_BELOW
+
+
+def thin(d: float) -> bool:
+    return not wide(d)
+
+
 def tab_2d_knee(data: Any) -> str:
-    """§4.2 (H10): the naive product against the jump's line, per δ."""
-    table = TABLES["tab_2d_knee.tex"]
+    """§4.2 (H10): the naive product against the jump's line, the wider widths."""
+    return _knee(data, "tab_2d_knee.tex", wide)
+
+
+def tab_2d_knee_thin(data: Any) -> str:
+    """§4.2 (H10): the same, the thinner widths."""
+    return _knee(data, "tab_2d_knee_thin.tex", thin)
+
+
+def _knee(data: Any, name: str, keep: Callable[[float], bool]) -> str:
+    table = TABLES[name]
     knee = data.tables("heat2d_stiff_naive.json")["knee"]
-    elliptic = rows_by_delta(knee["elliptic"])
+    elliptic = {d: r for d, r in rows_by_delta(knee["elliptic"]).items() if keep(d)}
     parabolic = rows_by_delta(knee["parabolic"])
     head = [
         row(
@@ -493,9 +515,19 @@ def tab_2d_knee(data: Any) -> str:
 
 
 def tab_2d_floor(data: Any) -> str:
-    """§4.2 (H10): the δ = 0 construction on its floor, per δ."""
-    table = TABLES["tab_2d_floor.tex"]
-    knee = rows_by_delta(data.tables("heat2d_stiff_naive.json")["knee"]["elliptic"])
+    """§4.2 (H10): the δ = 0 construction on its floor, the wider widths."""
+    return _floor(data, "tab_2d_floor.tex", wide)
+
+
+def tab_2d_floor_thin(data: Any) -> str:
+    """§4.2 (H10): the same, the thinner widths."""
+    return _floor(data, "tab_2d_floor_thin.tex", thin)
+
+
+def _floor(data: Any, name: str, keep: Callable[[float], bool]) -> str:
+    table = TABLES[name]
+    naive = data.tables("heat2d_stiff_naive.json")["knee"]["elliptic"]
+    knee = {d: r for d, r in rows_by_delta(naive).items() if keep(d)}
     head = [
         row(
             "$N$",
@@ -1388,8 +1420,16 @@ TABLES: dict[str, Table] = {
     "tab_2d_knee.tex": Table(
         tab_2d_knee, ("heat2d_stiff_naive.json",), "stiff 4.2; 5.3 statement 2"
     ),
+    "tab_2d_knee_thin.tex": Table(
+        tab_2d_knee_thin, ("heat2d_stiff_naive.json",), "stiff 4.2; 5.3 statement 2"
+    ),
     "tab_2d_floor.tex": Table(
         tab_2d_floor, ("heat2d_stiff_naive.json",), "stiff 4.2; 5.3 statement 3"
+    ),
+    "tab_2d_floor_thin.tex": Table(
+        tab_2d_floor_thin,
+        ("heat2d_stiff_naive.json",),
+        "stiff 4.2; 5.3 statement 3",
     ),
     "tab_2d_solvability.tex": Table(
         tab_2d_solvability, (EIG, EIG_ROWS), "stiff 4.4; 5.3 statement 6"
