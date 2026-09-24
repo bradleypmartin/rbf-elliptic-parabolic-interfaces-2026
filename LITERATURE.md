@@ -1117,7 +1117,10 @@ manuscript may use without re-opening this ledger. #45 places (a) in §1
 (`\subsection{Relation to prior work}`, `sec:priorwork`); #45 and #50 fix
 (b) in the abstract, the contributions and the conclusions. Every `\cite`
 key exists in `paper/references.bib` and is [V]
-(`tests/test_literature.py`).
+(`tests/test_literature.py`). `\cite` commands to [V] keys may be inserted
+into these sentences where the manuscript places them; the words may not
+change (#45, Brad, 2026-09-24: §1 cites Lombard–Piraux inside §6b's
+flux-seed sentence, as K9 asks).
 
 ### 6a. Relation to prior work (§1 of the manuscript)
 
@@ -1198,6 +1201,15 @@ to 250–350 words. In order, it may:
 It keeps verbatim the first sentence, the FLAME and LOD clauses, and the
 last four sentences, which carry the obligations of §1a K2–K5, K10 and §1b
 O1.)
+
+*Placed by #45 (2026-09-24), with the three cuts and no other.* They save
+less than the note above expected: the paragraph in §1 is about 480 words
+(476 without the `\cite` keys), not 250–350. Reaching 350 would also cut
+the face-conductance (K1) and formal-powers (K2) sentences, the only
+support §1 then gives "classical in every part" and the abstract's
+formal-powers clause beyond K3. Brad accepted the longer paragraph over
+that; the 250–350 target is retired. It stays one paragraph, since O1 asks
+for K3–K6 beside the claim.
 
 ### 6b. Claim sentences (abstract, contributions, conclusions)
 
