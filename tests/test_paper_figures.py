@@ -65,6 +65,40 @@ def test_each_figure_fits_the_page_and_reads_only_its_files(name):
     plt.close(fig)
 
 
+def _labelled(ax) -> bool:
+    """Whether ``ax`` prints tick labels on its y axis, on either side."""
+    params = ax.yaxis.get_tick_params(which="major")
+    shown = params.get("labelleft", True) or params.get("labelright", False)
+    return shown and any(t.get_text() for t in ax.get_yticklabels())
+
+
+@pytest.mark.parametrize("name", list(FIGURES))
+def test_every_log_axis_and_every_row_of_panels_has_a_scale(name):
+    # #49, placing the 2-D figures: an axhline's x data (the axes' own 0 and 1)
+    # were read as node counts, which put a tick at 0 on the warp panels' log
+    # axes and crushed their lines to the right edge; and the smooth ring's
+    # far-field row, whose first column is hidden, printed no y tick labels.
+    use_print_style()
+    fig = FIGURES[name].draw(Data())
+    fig.canvas.draw()
+    rows: dict[tuple[int, int], list[bool]] = {}
+    for ax in fig.get_axes():
+        if not ax.get_visible():
+            continue
+        for scale, (low, _), ticks in (
+            (ax.get_xscale(), ax.get_xlim(), ax.get_xticks()),
+            (ax.get_yscale(), ax.get_ylim(), ax.get_yticks()),
+        ):
+            if scale == "log":
+                assert low > 0 and min(ticks) > 0, (name, ax.get_title())
+        spec = ax.get_subplotspec()
+        if spec is not None:
+            key = (id(spec.get_gridspec()), spec.rowspan.start)
+            rows.setdefault(key, []).append(_labelled(ax))
+    assert all(any(row) for row in rows.values()), name
+    plt.close(fig)
+
+
 def test_a_figure_is_the_same_bytes_every_time_and_the_text_width_wide(tmp_path):
     names = ["heat1d_stiff_knee.pdf", "heat2d_stiff_snapshot.pdf"]
     first = write(names, tmp_path / "a", Data())
