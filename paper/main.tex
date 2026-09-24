@@ -1773,18 +1773,21 @@ per dimension.
 % delta = 0.0025) and 2.5 (3). Checks: the eight errors at 200, where "§4.5;
 % stiff §2.5 (3)" (the seeds' and naive's "§4.4, §4.5"); 801 and 201,
 % "abstract, §1, §4.5" and "§4.5"; in paper_numbers.results_1d, where
-% "§4.5; stiff §2.4 P10": no row out of order, the middle three within 2.0
-% (2.02), 53 and 2.1e4, 9-35, 440.
+% "§4.5; stiff §2.4 P10": no row out of order, the middle three at most
+% 2.02 apart, 53 and 2.1e4, 9-35, 440. The chain is the ramp problem's: at
+% equilibrium the seeds and T1-FV are both exact and nine rows fall out of
+% order (#47's spar), so the sentence names the problem as well as the medium.
 Figure~\ref{fig:treatments1d} gives every treatment on the ramp problem, and
 Table~\ref{tab:treatments1d} the errors at $\delta = 0.0025$ in the order of
-the ranking. On the two-constant medium, at every width while
-$h \ge 4\delta$, the jump included, the order in $\|e\|_2 / \|u\|_2$ is
+the ranking. On the ramp problem of the two-constant medium, at every width
+while $h \ge 4\delta$, the jump included, the order in
+$\|e\|_2 / \|u\|_2$ is
 \begin{multline*}
   \text{seeds} < \text{T1-FV} < \text{T1 (two cells)} < \text{naive}
   \gtrsim \text{T1 (one cell)} \\
   \approx \text{T2} < \text{T0 } (m = 1) < \text{T0 } (m = 2),
 \end{multline*}
-with the middle three within a factor of $2.0$ of each other; at $200$
+with the middle three at most $2.02$ times apart; at $200$
 nodes and $\delta = 0.0025$ the errors are $\sci{1.6}{-9}$,
 $\sci{8.0}{-6}$, $\sci{8.9}{-5}$, $\sci{7.9}{-4}$, $\sci{4.0}{-4}$,
 $\sci{4.6}{-4}$, $\sci{2.2}{-3}$ and $\sci{5.0}{-3}$. At the jump the seeds

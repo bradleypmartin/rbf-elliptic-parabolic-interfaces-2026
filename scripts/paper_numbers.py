@@ -840,7 +840,7 @@ def results_1d(f: Files, b: Book) -> None:
             disorder += not ranked
             spread.append(max(middle) / min(middle))
     b.eq(w, "MATLAB ramp rows out of the ranking, h ≥ 4δ", disorder, "0")
-    b.le(w, "… the middle three's spread", max(spread), "2.0")
+    b.eq(w, "… the middle three's spread, largest", max(spread), "2.02")
     lead = {
         r["n"]: r["T1-FV"] / r["seeds"]
         for r in comparators_1d(f, "ramp", "matlab", 0.0)

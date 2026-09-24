@@ -1363,7 +1363,7 @@ cells) < naive ≳ T1 (one cell) ≈ T2 < T0 (m = 1) < T0 (m = 2)*, the middle
 three within a factor two of each other; at 200 nodes and δ = 0.0025 on
 the ramp problem, 1.6e-9, 8.0e-6, 8.9e-5, 7.9e-4 / 4.0e-4 / 4.6e-4, 2.2e-3,
 5.0e-3. *E5.6's number check: the whole chain, with the middle three
-within a factor 2.0, holds on the MATLAB ramp problem at every δ and every
+at most 2.02× apart, holds on the MATLAB ramp problem at every δ and every
 count with h ≥ 4δ, and not "on both media and both problems". At
 equilibrium the seeds and T1-FV are both exact (§1.8) and their order is
 rounding; the rest of the chain holds on the MATLAB medium, the middle
