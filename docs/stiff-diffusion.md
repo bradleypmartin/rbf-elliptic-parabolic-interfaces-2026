@@ -15,7 +15,8 @@ through it (E4.3, #34, §4.2), the scalar seeds on one stencil (E4.4,
 (#41); §3.10 designs the tangential chain that E4.7 asked for (E4.11,
 #81), and §4.7 holds its results; §3.11 is what EABE eq. 40's ring needed
 beyond it (E4.8, #39), and §4.8 holds the ring's results; §4.9 holds the
-coefficient treatments on scattered nodes (E4.9, #40). The port
+coefficient treatments on scattered nodes (E4.9, #40), and §4.10 the
+Gaussians on rows anchored inside a smooth resistive layer (E4.12, #84). The port
 of the 2016 methods this builds on is in
 `docs/port-notes.md`.
 
@@ -2641,6 +2642,27 @@ shaped on the physical spacing are too flat in the coordinate they live in
 (the seed system's condition number reached 1e8). On a ring `ε = shape / d`
 takes `d` from the nodes in `(ξ, g₀)`. Elsewhere both are §3.4's and §3.10's.
 
+**The Gaussians on rows anchored in an edge** (E4.12, #84; §4.10 has the
+measurements). The warp `g₀′ = α_e/α` has slope 1 over the anchor's side of the
+stencil only where the anchor sits on its piece. An anchor in an edge (on the
+ring, in the resistivity tail that reaches several δ out, `(1.5/δ) e^{−2z}`) has
+`α_e` below its piece's, and the warp squeezes its own side by `α_e/α_piece`,
+0.2–0.4 on the rows that made §4.8's δ = 0.001 outlier. Neither ε nor a warp
+that does not squeeze repairs that (§4.10). The failure is not consistency (the
+probe on those rows keeps falling) but stability: the anchor's share of a
+squeezed row, `−w_e / Σ_{j≠e} |w_j|`, is 0.08–0.13 against plain Gaussians'
+0.25–0.27, and a whole ring of such rows is amplified by the inverse. Plain
+Gaussians fail the other way where the edge is nearly resolved: at δ = 0.0025
+some tail rows get an anchor weight of the wrong sign. So a row anchored off its piece,
+`|ln(α_e/α_piece)| > 0.05` (`seeds.PIECE_TOL`, `α_piece` the δ = 0 band's alpha
+at the anchor), is solved with both Gaussian blocks on its one march and keeps
+the weights whose anchor dominates the row more (`seeds.diagonal_share`,
+Appendix B's eq. 93 with its sign; `seeds.gaussian_choice`); a row on its piece
+keeps the warp. At δ = 0 every anchor is on its piece, so the rule is the warp
+bit for bit and E4.8's δ = 0 numbers do not move. Like the other switches of
+this section it is on only on a band with a `gap`; §4.10 measures it on the flat
+band and case 2 as an ablation (`seeds-edge`, `tangential-edge`).
+
 **Decisions (E4.8).**
 
 1. The ring carries its width (`Band.gap`); the stored radii stay the jump's
@@ -2661,7 +2683,12 @@ takes `d` from the nodes in `(ξ, g₀)`. Elsewhere both are §3.4's and §3.10'
    refused at δ = 0.001, none at 2500 for any width run); the driver names
    the refusal.
 
-## 4. Results in 2-D (E4.2–E4.10)
+**Decision (E4.12, Brad on #84, 2026-09-23).** On a ring a row anchored off its
+piece keeps the Gaussians, warped or plain, with the stronger diagonal; the rule
+is a ring's switch like the four above, and making it the default elsewhere is
+left to E4.10 (#41), which regenerates the lines the manuscript quotes.
+
+## 4. Results in 2-D (E4.2–E4.12)
 
 ### 4.1 The smooth flat band and the separable references (E4.2, #33)
 
@@ -4772,13 +4799,18 @@ the figure its own, the cache round trip), and `--mode tangential`'s tables.
 width, its own tangential series, the flux seeds (20 on the 30 nodes), and the
 Gaussians on `φ₀₁`'s level 0 with `ε` from the warped spacing. The driver is
 `scripts/heat2d_ring.py`, four parts over one cache (`heat2d_ring.json`,
-version 3): Fig. 19's twin at δ = 0 against E2.9's cached 160,000-node
+version 4): Fig. 19's twin at δ = 0 against E2.9's cached 160,000-node
 references; Fig. 20's twin, the matched radial profile and the conditioning at
 every (s, δ); the spectrum and the DDR; and the smooth ring, the probe on its
 exact radial mode and a far-field self-convergence line. E2.3 is the papers'
 operator (E2.9's "curved"); "seeds (15)" is the chain without the flux seeds,
-the ablation. Seed 0, 100 repulsion iterations; the runs of 2026-09-23 went as
-up to 16 concurrent processes on the M4 Pro, so their times are inflated.
+the ablation. At δ > 0 the seeds line is E4.12's (§3.11, §4.10): a row
+anchored in an edge keeps the warped or the plain Gaussians, whichever has the
+stronger diagonal; at δ = 0 that is the warp on every row, bit for bit. E4.8's
+own δ > 0 lines, the warp on every row, are kept as `seeds-warp` beside plain
+Gaussians, all three from one march per row. Seed 0, 100 repulsion iterations;
+the runs of 2026-09-23 went as up to 16 concurrent processes on the M4 Pro, so
+their times are inflated.
 
 **H11, Fig. 20's twin: the seeds are exact on the matched profile at every s.**
 10,000 nodes, the 1254 rows the seeds rebuild, the ring at its constant part
@@ -4897,19 +4929,25 @@ dominance, least and median over the seeded rows (the median over all rows is
 | 10³ | 0 | plain | 0 | −14.316 | −13.58 | 0.854 | 0.121 / 0.666 |
 | 10⁸–10¹¹ | 0 | seeds | 0 | −14.301 | −13.48 … −13.71 | 0.27–0.44 | 0.069–0.084 / 0.674–0.678 |
 | 10⁸–10¹¹ | 0 | plain | 0 | −14.301 | −13.48 … −13.71 | 0.74–0.99 | 0.090–0.099 / 0.681–0.684 |
-| 10³, 10¹¹ | 0.0025 | seeds | 0 | −14.158, −14.140 | −13.62, −13.50 | 0.28, 0.38 | 0.052, 0.044 / 0.676, 0.675 |
+| 10³, 10¹¹ | 0.0025 | seeds | 0 | −14.158, −14.140 | −25.5, −26.5 | 1.49, 0.93 | 0.067, 0.057 / 0.676, 0.675 |
+| 10³, 10¹¹ | 0.0025 | warp | 0 | −14.158, −14.140 | −13.62, −13.50 | 0.28, 0.38 | 0.052, 0.044 / 0.676, 0.675 |
 | 10³, 10¹¹ | 0.0025 | plain | 0 | −14.158, −14.140 | −25.5, −26.5 | 2.06, 1.86 | 0.040, 0.012 / 0.674, 0.675 |
-| 10³, 10¹¹ | 0.001 | seeds | 0 | −14.251, −14.232 | −13.60, −13.52 | 0.78, 0.74 | 0.088, 0.071 / 0.667, 0.644 |
-| 10³, 10¹¹ | 0.00025 | seeds | 0 | −14.299, −14.281 | −13.58, −13.57 | 0.57, 0.50 | 0.093, 0.072 / 0.653, 0.661 |
+| 10³, 10¹¹ | 0.001 | seeds = warp | 0 | −14.251, −14.232 | −13.60, −13.52 | 0.78, 0.74 | 0.088, 0.071 / 0.667, 0.644 |
+| 10³, 10¹¹ | 0.001 | plain | 0 | −14.252, −14.233 | −18.7, −18.0 | 0.76, 0.68 | 0.142, 0.090 / 0.669, 0.647 |
+| 10³, 10¹¹ | 0.00025 | seeds = warp | 0 | −14.299, −14.281 | −13.58, −13.57 | 0.57, 0.50 | 0.093, 0.072 / 0.653, 0.661 |
+| 10³, 10¹¹ | 0.00025 | plain | 0 | −14.299, −14.282 | −13.58, −13.58 | 1.32, 0.72 | 0.150, 0.094 / 0.659, 0.665 |
 
-No eigenvalue right of the axis at any (s, δ), warped or plain; the slowest mode
-is the physical −14.1 to −14.3 (E2.9's −14.3 for E2.3); the warped operator's
-spectrum is the jump-aware one's to the digit at every s. E2.9 found the *plain*
-E2.3 operator with 53–60 positive eigenvalues on the ring; the plain seeds have
-none, but at δ = 0.0025 they carry a mode twice as stiff (`h² min Re` −26) and a
-wider imaginary spread (2.1), where the warped seeds stay at E2.3's −13.6 and 0.3.
-The seeded rows' least DDR, 0.04–0.09 warped, is E2.8's 0.08 on case 3; it does
-not see s.
+No eigenvalue right of the axis at any (s, δ), for the seeds, the warp or plain;
+the slowest mode is the physical −14.1 to −14.3 (E2.9's −14.3 for E2.3); the
+warped operator's spectrum is the jump-aware one's to the digit at every s.
+E2.9 found the *plain* E2.3 operator with 53–60 positive eigenvalues on the
+ring; the plain seeds have none, but at δ = 0.0025 they carry a mode twice as
+stiff (`h² min Re` −26) and a wider imaginary spread (2.1), where the warp stays
+at E2.3's −13.6 and 0.3. At 5000 nodes the seeds keep 231–238 rows plain at
+δ = 0.0025 and none at δ ≤ 0.001, so they inherit plain's stiff mode at the
+first and are the warp at the others (§4.10). The seeded rows' least DDR,
+0.04–0.09 for the seeds and the warp, is E2.8's 0.08 on case 3; it does not see
+s.
 
 ![the smooth ring](figures/heat2d_ring_smooth.png)
 
@@ -4924,44 +4962,50 @@ of the nodes whose nearest fine node's stencil is unseeded (`far_read`; at
 
 | δ | s | n | seeds: probe | error | E2.3: error | naive: error | direct: error |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0.0025 | 10³ | 2500 | 5.21e-04 | 8.16e-04 | 6.62e-04 | 2.71e-03 | 3.83e-02 |
-| | | 5000 | 1.75e-04 | 1.98e-04 | 6.55e-04 | 1.58e-03 | 5.01e-03 |
-| | | 10000 | 6.04e-05 | 2.07e-05 | 6.55e-04 | 8.07e-04 | 5.24e-03 |
-| | | 20000 | 3.53e-05 | 6.85e-06 | 6.71e-04 | 2.71e-04 | 6.77e-02 |
-| | | 40000 | 1.68e-05 | 1.26e-06 | 6.67e-04 | 6.75e-04 | 1.97e-03 |
-| 0.0025 | 10¹¹ | 40000 | 1.72e-05 | 1.49e-06 | 7.03e-04 | 1.22e-04 | 2.08e-03 |
+| 0.0025 | 10³ | 2500 | 1.30e-03 | 4.76e-04 | 6.62e-04 | 2.71e-03 | 3.83e-02 |
+| | | 5000 | 2.66e-04 | 1.14e-04 | 6.55e-04 | 1.58e-03 | 5.01e-03 |
+| | | 10000 | 5.90e-05 | 2.04e-05 | 6.55e-04 | 8.07e-04 | 5.24e-03 |
+| | | 20000 | 1.08e-04 | 8.54e-06 | 6.71e-04 | 2.71e-04 | 6.77e-02 |
+| | | 40000 | 2.20e-05 | 8.24e-07 | 6.67e-04 | 6.75e-04 | 1.97e-03 |
+| 0.0025 | 10¹¹ | 40000 | 2.05e-05 | 1.49e-06 | 7.03e-04 | 1.22e-04 | 2.08e-03 |
 | 0.001 | 10³ | 2500 | 4.86e-04 | 5.15e-04 | 4.76e-04 | 4.12e-03 | 4.08e-03 |
 | | | 5000 | 1.69e-04 | 1.13e-04 | 3.71e-04 | 4.38e-03 | 4.35e-03 |
-| | | 10000 | 4.54e-05 | 2.57e-05 | 3.94e-04 | 4.17e-03 | 1.04e-02 |
-| | | 20000 | 1.38e-05 | **6.19e-05** | 4.11e-04 | 3.33e-03 | 5.12e-03 |
-| | | 40000 | 7.91e-06 | 1.85e-06 | 4.13e-04 | 1.53e-03 | 5.18e-03 |
-| 0.001 | 10¹¹ | 20000 | 1.45e-05 | **4.89e-05** | 4.61e-04 | 3.49e-03 | 5.60e-03 |
-| | | 40000 | 7.28e-06 | 3.01e-06 | 4.66e-04 | 1.69e-03 | 5.03e-03 |
-| 0.00025 | 10³ | 2500 | 5.87e-04 | 4.89e-04 | 4.33e-04 | 4.71e-03 | 4.68e-03 |
+| | | 10000 | 1.16e-04 | 2.35e-05 | 3.94e-04 | 4.17e-03 | 1.04e-02 |
+| | | 20000 | 4.70e-05 | 7.93e-06 | 4.11e-04 | 3.33e-03 | 5.12e-03 |
+| | | 40000 | 7.10e-06 | 7.10e-07 | 4.13e-04 | 1.53e-03 | 5.18e-03 |
+| 0.001 | 10¹¹ | 40000 | 6.38e-06 | **3.64e-06** | 4.65e-04 | 1.69e-03 | 5.03e-03 |
+| 0.00025 | 10³ | 2500 | 5.87e-04 | 4.90e-04 | 4.34e-04 | 4.71e-03 | 4.68e-03 |
 | | | 5000 | 2.16e-04 | 1.07e-04 | 1.14e-04 | 5.12e-03 | 5.11e-03 |
-| | | 10000 | 5.60e-05 | 2.19e-05 | 1.16e-04 | 5.39e-03 | 5.39e-03 |
-| | | 20000 | 2.02e-05 | 5.46e-06 | 1.22e-04 | 5.16e-03 | 5.15e-03 |
-| | | 40000 | 7.14e-06 | 1.67e-06 | 1.26e-04 | 5.13e-03 | 5.13e-03 |
-| 0.00025 | 10¹¹ | 40000 | 6.25e-06 | 3.76e-06 | 1.61e-04 | 5.16e-03 | 5.16e-03 |
+| | | 10000 | 5.60e-05 | 2.21e-05 | 1.16e-04 | 5.39e-03 | 5.39e-03 |
+| | | 20000 | 2.02e-05 | 5.54e-06 | 1.22e-04 | 5.16e-03 | 5.15e-03 |
+| | | 40000 | 7.14e-06 | 1.02e-06 | 1.26e-04 | 5.13e-03 | 5.13e-03 |
+| 0.00025 | 10¹¹ | 40000 | 6.25e-06 | 7.37e-07 | 1.61e-04 | 5.16e-03 | 5.16e-03 |
 
-(Every count at both s is in `heat2d_ring_results.json`; the s = 10¹¹ errors
-are 0.67–2.26× the s = 10³ ones at every count, the largest at 40,000 nodes and
-δ = 0.00025, where both are within a factor two of the fine runs' floor.)
+(Every count at both s is in `heat2d_ring_results.json`, and §4.10 tabulates
+the seeds, the warp and plain at every count; the bold entry is the one line
+that stops on its fine run's floor, §4.10.)
 
 - *The seeds are fourth order through a sub-grid smooth resistive layer.* Error
-  fits over 2500–40,000 (s = 10³, 10¹¹): 4.74 and 4.87 at δ = 0.0025, 4.16 and
-  3.75 at 0.00025, 3.45 and 3.30 at 0.001 (the outlier below). The last counts
-  are at or near the fine runs' own floor: the fine runs with the full and the
-  level-0 warp, on the same 160,000 nodes, differ by 1.5–2.2e-6 on the nodes the
-  far read uses at δ ≤ 0.001 (1.8e-6 and 1.5e-6 at δ = 0.001, 1.9e-6 and 2.2e-6
-  at 0.00025, for s = 10³ and 10¹¹; 3e-10 at 0.0025). At 40,000 nodes s = 10³
-  sits on it (1.9e-6 and 1.7e-6), s = 10¹¹ a little above it (3.0e-6 at
-  δ = 0.001, 3.8e-6 at 0.00025), and δ = 0.0025 below it (1.3e-6, 1.5e-6, where
-  the fine runs agree to 3e-10).
-- *The probe agrees, reference-free*: the seeds' rows converge at 2–4 per halving
-  at every (s, δ) (fits 2.46–3.48), slowest at δ = 0.0025 between 10,000 and
-  40,000 (1.6, 2.1),
-  where the grid passes `h ≈ 4δ` to `2δ`, the transition §4.5–§4.7 saw at 5 : 1.
+  fits over 2500–40,000 (s = 10³, 10¹¹): 4.45 and 4.36 at δ = 0.0025, 4.60 and
+  3.79 at 0.001, 4.44 and 4.81 at 0.00025. Five of the six lines reach
+  7.1e-7 to 1.5e-6 at 40,000 nodes. The sixth, s = 10¹¹ at δ = 0.001, stops at
+  3.6e-6, and so do the warp and plain there (3.7e-6): its 160,000-node run keeps
+  some tail rows warped, and against a fine run built with plain Gaussians
+  every line reaches 7.7–8.7e-7, the seeds' at a fit of 4.77 (§4.10).
+- *The fine runs are the seeds' own*, rebuilt with E4.12's rule (version 4).
+  E4.8's, the warp on every row, differ from them by 1.3–3.9e-6 on the nodes the
+  far read uses at δ ≤ 0.001 (1.74e-6 and 2.37e-6 at δ = 0.001, 1.34e-6 and
+  3.92e-6 at 0.00025, for s = 10³ and 10¹¹) and by 6e-9 at 0.0025: that was
+  E4.8's floor of "1.5–2.2e-6", the tail rows' failure inside the fine warp runs
+  (§4.10). At δ = 0.00025 every coarse count has the same seeds line in both
+  versions (no anchor in the tail); against the new fine runs it ends at 1.02e-6
+  and 7.4e-7 where against E4.8's it ended at 1.67e-6 and 3.76e-6.
+- *The probe agrees, reference-free*: the seeds' rows converge at every (s, δ)
+  (fits 2.62–3.48), with one step back at δ = 0.0025 between 10,000 and 20,000
+  (5.9e-5 to 1.1e-4), where the grid passes `h ≈ 4δ` to `3δ`, the transition
+  §4.5–§4.7 saw at 5 : 1, and the rows the seeds keep plain go from about 150
+  to 900. Where rows are kept plain the probe is up to 3.4× the warp's (§4.10),
+  the price of their stronger diagonal.
 - *E2.3 reads the smooth ring as a jump* and sits on an O(1) floor: its error is
   1.1–7.2e-4 at every count, the difference between the smooth ring and its jump
   (larger at the wider δ), and its rows diverge on the probe (0.1 to 830, fits
@@ -4972,30 +5016,29 @@ are 0.67–2.26× the s = 10³ ones at every count, the largest at 40,000 nodes 
   δ = 0.001 (1.5–1.7e-3 at 40,000) and at 0.0025 (1.2–6.8e-4 at 40,000,
   erratic), where its `Dx A Dx` reaches the layer's samples; the direct stencil
   does not (2e-3 to 7e-2).
-- *One outlier: δ = 0.001 at 20,000 nodes*, 6.2e-5 and 4.9e-5 between 2.6e-5 and
-  1.9e-6, at both s, where the probe keeps falling (1.4e-5). The rows anchored in
-  the ring's resistive tail (α_e 0.27–0.41 against 1, 3.75δ from its middle on
-  this count) have warped and plain weights 100 % apart (median 2 %); plain
-  Gaussians everywhere give 8.1e-6 there, and plain on the 50 most different
-  rows 1.1e-5. Elsewhere at δ > 0 the warp beats plain by 1.0–1.8× (δ = 0.0025:
-  2.07e-5 against 2.31e-5 at 10,000, 6.85e-6 against 1.22e-5 at 20,000;
-  δ = 0.00025: 1.67e-6 against 2.45e-6 at 40,000; δ = 0.001 at 40,000: 1.85e-6
-  against 1.89e-6). E4.6's warp turned at `h ≈ 2δ` at 5 : 1; at 1500 : 1 the
-  resistivity tail reaches several δ further. The rule for anchors inside a
-  smooth resistive layer is E4.12 (#84, Brad's decision on #39).
+- *E4.8's warp on every row had two outliers*: δ = 0.001 at 20,000 nodes, 6.2e-5
+  and 4.9e-5 between 2.6e-5 and 7e-7 at both s while the probe kept falling,
+  and s = 10¹¹, δ = 0.0025 at 5000 nodes, 3.8e-4 against plain's 1.05e-4. Both
+  are the warp on rows anchored in the ring's resistivity tail, which it
+  leaves stable only where the anchor sits on its piece; §4.10 diagnoses it,
+  and E4.12's rule (the seeds line above) removes both (7.9e-6, 6.0e-6 and
+  1.08e-4). E4.6's warp turned at `h ≈ 2δ` at 5 : 1; at 1500 : 1 the
+  resistivity tail reaches several δ further.
 
 **Cost.** One tangential row with the flux seeds: 24–42 ms at δ = 0 and 40–233 ms
 at δ > 0 (slowest at δ = 0.00025, where the edges are narrowest against the
 stencil), under up to 16 concurrent runs; about 15 ms at δ = 0 on a quiet
 machine (12 without the flux seeds; the degree-5 chain marches 252 states). The
-160,000-node seed runs seeded 8,163–40,265 rows and took 21–30 min each, of
-which the solve 30–45 s; the Fig. 19 sweep 10–12 min per s, Fig. 20 at 10,000
+160,000-node seed runs seeded 8,163–40,265 rows and took 19–28 min each as
+E4.12 rebuilt them (under about 11 concurrent runs), of which the solve
+31–46 s; the Fig. 19 sweep 10–12 min per s, Fig. 20 at 10,000
 nodes 5 min for three s at δ = 0 and 25 min per s over the three widths, the
 spectra 2–4 min per (s, δ), each smooth (s, δ) sweep with its fine run about
-70 min; everything is seconds from `heat2d_ring.json`. Three rounds of the sweep
-were run (the 15 seeds, the full warp, the final construction); the first two
-rounds' fine runs are kept under `outputs/heat2d_ring_seeds15/` and
-`outputs/heat2d_ring_fullwarp/`.
+70 min; everything is seconds from `heat2d_ring.json`. Four rounds of the sweep
+were run (the 15 seeds, the full warp, the level-0 warp on every row, E4.12's
+rule); the first three rounds' fine runs are kept under
+`outputs/heat2d_ring_seeds15/`, `outputs/heat2d_ring_fullwarp/` and
+`outputs/heat2d_ring_v3/` (with the version-3 cache).
 
 **H11 and where each construction fails, and why.**
 
@@ -5015,10 +5058,11 @@ rounds' fine runs are kept under `outputs/heat2d_ring_seeds15/` and
   stalls at 2.3–3.3 and ends 12× E2.3's); and, on a ring, `φ₀₁`'s level 0 as the
   warp (with every level, a 3e-6 floor at s = 10³). With them they are fourth
   order at every s, 0.48–0.97× E2.3 from 5000 nodes, and fourth order through a
-  smooth resistive layer, except where the warp misbehaves on anchors inside
-  the layer (E4.12). What limits them is not s and not the march: it is
-  `FOOT_CURVATURE` on the coarsest sets at δ > 0 and the Gaussians inside a
-  smooth resistive layer.
+  smooth resistive layer once E4.12's rule picks the Gaussians of the rows
+  anchored inside it (§4.10). What limits them is not s and not the march: it
+  is `FOOT_CURVATURE` on the coarsest sets at δ > 0 and, inside a smooth
+  resistive layer, the choice between a consistent row (the warp) and a stable
+  one (plain Gaussians), which the rule makes row by row.
 - *Fig. 19's breakdown near s = 10¹¹* is not reproduced by either construction;
   the seeds do not move it, because it is not there to move (port notes §2.9).
 
@@ -5028,14 +5072,14 @@ rounds' fine runs are kept under `outputs/heat2d_ring_seeds15/` and
   resistance composition being a harmonic blend already; `heat2d_ring.py`'s part
   4 gives any operator a probe and a far-field line on it.
 - *E4.10 (#41)*: the ring has its own driver (`scripts/heat2d_ring.py`, not a
-  `--ring` flag on `heat2d_stiff.py`), its cache `heat2d_ring.json` (version 3;
-  bump it after any change to the chains, their series, the ring's switches or
-  the composition), its results file `heat2d_ring_results.json` (with
+  `--ring` flag on `heat2d_stiff.py`), its cache `heat2d_ring.json` (version 4
+  since E4.12; bump it after any change to the chains, their series, the ring's
+  switches or the composition), its results file `heat2d_ring_results.json` (with
   `--data-dir`), and the figures `heat2d_ring_convergence.png`,
   `heat2d_ring_conditioning.png` and `heat2d_ring_smooth.png`. The regeneration
   commands are in the driver's docstring.
 - *E4.12 (#84)*: the δ = 0.001 outlier above, the diagnosis and the cached lines
-  to rerun.
+  to rerun. Done: §4.10.
 
 **Tests.** `tests/heat2d/test_ring.py`: the gap's validation and `case3(s)`'s;
 the stops as exact offsets from the outer circle; `layer_share` against the tanh
@@ -5371,3 +5415,226 @@ switches itself off, since `max(δ, m h)` knows δ.
   disc mean above naive at δ = 0.04, and the cache's round trip;
 - the case-2 sweep at the jump: its own cache and figure, the curved-over-flat
   table, and the tangential line below every treatment.
+
+### 4.10 The Gaussians on rows anchored in a smooth resistive layer (E4.12, #84)
+
+§4.8's outlier and its fix. The design is §3.11's last paragraph: a seed row
+anchored off its piece (`|ln(α_e/α_piece)| > 0.05`) is solved with both
+Gaussian blocks on its one march and keeps the weights with the stronger
+signed diagonal share `−w_e / Σ_{j≠e} |w_j|` (`seeds.gaussian_choice`); a row
+on its piece keeps the warp. The switch is on only on a band with a `gap`, so
+it changes the ring and nothing E4.4–E4.11 built. The driver is
+`scripts/heat2d_ring.py` (cache version 4): at δ > 0 its part 4 carries the
+seeds (the rule), `seeds-warp` (E4.8's warp on every row) and `seeds-plain`
+from one march per row, and `--plain-fine s:δ` adds a second fine run built
+with plain Gaussians. Off the ring the rule is an ablation line of
+`scripts/heat2d_stiff.py` (`seeds-edge`, `tangential-edge`).
+
+**The outlier, diagnosed** (one-off ablations of 2026-09-23 on the 20,000-node
+set at s = 10³, δ = 0.001, far error against E4.8's fine run; they call
+`gaussian_choice` and `weights_of(…, edge_rule=False)` row by row and are not
+committed as a driver):
+
+- *It is the rows anchored in the tail.* 588 of the 3,403 seeded rows are
+  anchored where `α_e/α_piece` is 0.20–0.43: the resistance composition's tail
+  `(1.5/δ) e^{−2z}` reaches several δ out. On the other 2,815 rows the warped
+  and plain weights differ by a median 0.9 %. The far error with the warp on
+  every row is 6.19e-5, with plain Gaussians on every row 8.12e-6, with plain on
+  the 588 alone 8.16e-6, and with the rule 7.98e-6.
+- *It is stability, not consistency.* The probe on those rows keeps falling
+  (the warp's rows are the more consistent, below). The warp squeezes the
+  anchor's side by `α_e/α_piece`, and the anchor's signed share of its row falls
+  to 0.08–0.13, against plain's 0.25–0.27 (a test pins both ranges on this
+  set). A ring of such rows is amplified by the inverse.
+- *Neither ε nor a warp that does not squeeze repairs it.* ε from the physical
+  spacing: 5.6e-2. The warp normalised to the anchor's piece instead of to
+  `α_e`, so that it leaves the anchor's side unsqueezed: 4.9e-3.
+- *Plain fails the other way where the edge is nearly resolved.* At
+  δ = 0.0025 and 20,000 nodes some tail rows get an anchor weight of the wrong
+  sign under plain Gaussians (a test pins two), and there the warp wins
+  (6.85e-6 against 1.22e-5).
+- *The rejected rules.* A threshold on `α_e/α_piece`: at τ = 0.25 it blows up
+  16× at s = 10¹¹, δ = 0.0025, 20,000 nodes. A floor on plain's diagonal
+  share: erratic, up to 62× worse. The diagonal comparison on every row, not
+  only off the piece: it moves the δ = 0 lines, where the warp is right.
+
+**The rerun.** Far error against each (s, δ)'s 160,000-node fine run (itself
+built with the rule), and the probe over the seeded rows, 2500–40,000 nodes,
+with the rows the rule keeps plain on eq. 40 (the probe's constant ring keeps
+a few more or fewer):
+
+| δ | s | n | kept plain / seeded | seeds (rule) | warp | plain | probe: rule | warp | plain |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.0025 | 10³ | 2500 | 210 / 1211 | 4.76e-04 | 8.16e-04 | 4.75e-04 | 1.30e-03 | 5.21e-04 | 1.29e-03 |
+| | | 5000 | 238 / 1984 | 1.14e-04 | 1.98e-04 | 1.25e-04 | 2.66e-04 | 1.75e-04 | 3.47e-04 |
+| | | 10000 | 162 / 3363 | 2.04e-05 | 2.07e-05 | 2.31e-05 | 5.90e-05 | 6.04e-05 | 1.31e-04 |
+| | | 20000 | 846 / 6099 | 8.54e-06 | 6.85e-06 | 1.22e-05 | 1.08e-04 | 3.53e-05 | 1.21e-04 |
+| | | 40000 | 1590 / 11252 | 8.24e-07 | 1.26e-06 | 8.78e-07 | 2.20e-05 | 1.68e-05 | 2.29e-05 |
+| 0.0025 | 10¹¹ | 2500 | 211 / 1211 | 6.09e-04 | 7.07e-04 | 6.10e-04 | 1.27e-03 | 5.84e-04 | 1.24e-03 |
+| | | 5000 | 231 / 1983 | 1.08e-04 | **3.83e-04** | 1.05e-04 | 3.34e-04 | 1.69e-04 | 3.73e-04 |
+| | | 10000 | 148 / 3325 | 1.81e-05 | 1.86e-05 | 2.12e-05 | 5.71e-05 | 5.41e-05 | 1.21e-04 |
+| | | 20000 | 818 / 6083 | 5.45e-06 | 4.57e-06 | 6.25e-06 | 1.12e-04 | 3.94e-05 | 1.22e-04 |
+| | | 40000 | 1621 / 11177 | 1.49e-06 | 1.49e-06 | 5.02e-06 | 2.05e-05 | 1.72e-05 | 2.19e-05 |
+| 0.001 | 10³ | 2500 | 0 / 828 | 5.15e-04 | 5.15e-04 | 5.89e-04 | 4.86e-04 | 4.86e-04 | 1.64e-03 |
+| | | 5000 | 0 / 1432 | 1.13e-04 | 1.13e-04 | 1.65e-04 | 1.69e-04 | 1.69e-04 | 5.08e-04 |
+| | | 10000 | 418 / 2029 | 2.35e-05 | 2.58e-05 | 2.35e-05 | 1.16e-04 | 4.54e-05 | 1.17e-04 |
+| | | 20000 | 577 / 3403 | 7.93e-06 | **6.24e-05** | 7.98e-06 | 4.70e-05 | 1.38e-05 | 5.61e-05 |
+| | | 40000 | 579 / 5834 | 7.10e-07 | 6.95e-07 | 7.52e-07 | 7.10e-06 | 7.91e-06 | 1.90e-05 |
+| 0.001 | 10¹¹ | 2500 | 0 / 832 | 5.61e-04 | 5.61e-04 | 4.07e-04 | 4.99e-04 | 4.99e-04 | 1.46e-03 |
+| | | 5000 | 0 / 1159 | 1.21e-04 | 1.21e-04 | 2.05e-04 | 2.37e-04 | 2.37e-04 | 5.82e-04 |
+| | | 10000 | 399 / 2035 | 1.72e-05 | 1.98e-05 | 1.78e-05 | 1.14e-04 | 4.69e-05 | 1.14e-04 |
+| | | 20000 | 578 / 3418 | 6.04e-06 | **4.91e-05** | 6.20e-06 | 4.86e-05 | 1.45e-05 | 5.50e-05 |
+| | | 40000 | 627 / 5730 | 3.64e-06 | 3.69e-06 | 3.73e-06 | 6.38e-06 | 7.28e-06 | 1.42e-05 |
+| 0.00025 | 10³ | 2500 | 0 / 627 | 4.90e-04 | 4.90e-04 | 5.02e-04 | 5.87e-04 | 5.87e-04 | 2.35e-03 |
+| | | 5000 | 0 / 877 | 1.07e-04 | 1.07e-04 | 1.80e-04 | 2.16e-04 | 2.16e-04 | 1.01e-03 |
+| | | 10000 | 0 / 1647 | 2.21e-05 | 2.21e-05 | 3.46e-05 | 5.60e-05 | 5.60e-05 | 2.35e-04 |
+| | | 20000 | 0 / 2324 | 5.54e-06 | 5.54e-06 | 6.62e-06 | 2.02e-05 | 2.02e-05 | 6.06e-05 |
+| | | 40000 | 0 / 3305 | 1.02e-06 | 1.02e-06 | 2.09e-06 | 7.14e-06 | 7.14e-06 | 1.37e-05 |
+| 0.00025 | 10¹¹ | 2500 | 0 / 634 | 5.63e-04 | 5.63e-04 | 3.87e-04 | 6.17e-04 | 6.17e-04 | 2.07e-03 |
+| | | 5000 | 0 / 878 | 1.18e-04 | 1.18e-04 | 2.11e-04 | 3.03e-04 | 3.03e-04 | 1.04e-03 |
+| | | 10000 | 0 / 1254 | 2.00e-05 | 2.00e-05 | 2.29e-05 | 6.39e-05 | 6.39e-05 | 2.78e-04 |
+| | | 20000 | 0 / 2335 | 4.39e-06 | 4.39e-06 | 8.91e-06 | 1.82e-05 | 1.82e-05 | 8.01e-05 |
+| | | 40000 | 0 / 3312 | 7.37e-07 | 7.37e-07 | 8.61e-07 | 6.25e-06 | 6.25e-06 | 1.79e-05 |
+
+Error fits over 2500–40,000, s = 10³ / 10¹¹: the rule 4.45 / 4.36, 4.60 / 3.79
+and 4.44 / 4.81 at δ = 0.0025, 0.001 and 0.00025; the warp 4.74 / 4.87,
+4.01 / 3.18 and 4.44 / 4.81; plain 4.33 / 3.60, 4.75 / 3.74 and 4.14 / 4.47.
+
+- *Both outliers are gone*: at δ = 0.001 and 20,000 nodes the rule gives 7.9e-6
+  and 6.0e-6 where the warp gave 6.2e-5 and 4.9e-5, and at s = 10¹¹,
+  δ = 0.0025, 5000 nodes 1.08e-4 where it gave 3.83e-4 (bold).
+- *Where no row is anchored in the tail, the rule is the warp, and the warp
+  helps.* That is every count at δ = 0.00025 and 2500–5000 nodes at
+  δ = 0.001, 14 of the 30 (s, δ, n); the rule is the warp there bit for bit.
+  There plain is 1.02–2.05× the warp's error, except at 2500 nodes and
+  s = 10¹¹ (0.72 and 0.69), and its probe is 1.9–4.7× the warp's. That is the
+  ticket's last question answered for the ring: on a smooth resistive layer
+  the warp helps wherever no row is anchored in the tail, and where rows are,
+  it is the more consistent and the less stable choice (below). On the flat
+  band E4.6 found it turning at `h ≈ 2δ` (H7, §4.5), a different question.
+- *Where rows are anchored in the tail, the rule is within 0.91–1.25× of the
+  better of the warp and plain* at each of the 16 (s, δ, n) and the best of the
+  three at 10. It loses to the warp only at δ = 0.0025 and 20,000 nodes (1.25×
+  and 1.19×), where it keeps 820–850 rows plain that the warp would have kept
+  stable. Plain alone would have been 3.4× the warp at s = 10¹¹, δ = 0.0025,
+  40,000 nodes, the warp alone 8× plain at δ = 0.001, 20,000.
+- *The trade-off is visible on the probe*: where the rule keeps rows plain, its
+  probe over the seeded rows is 0.88–3.4× the warp's, 2.2–3.4× where it keeps
+  the most (δ = 0.001 at 10,000–20,000 nodes, δ = 0.0025 at 2500 and 20,000),
+  while its error is the lower one. The warped tail rows are the more consistent
+  and the less stable: the rule gives up at most a factor 3.4 on the probe
+  where the warp lost a factor 8 in the error.
+- *The spectrum* (§4.8's table, 5000 nodes): no positive eigenvalue at any
+  (s, δ) for any of the three. At δ = 0.0025 the rule keeps 231–238 rows plain
+  and inherits plain's stiffer mode (`h² min Re` −25.5 and −26.5 against the
+  warp's −13.6 and −13.5, max `|Im|` 1.49 and 0.93 against 0.28 and 0.38); its
+  seeded rows' least DDR, 0.067 and 0.057, is between the warp's (0.052,
+  0.044) and plain's (0.040, 0.012).
+- *The fine runs move where E4.8's floor was*: rebuilt with the rule, they
+  differ from E4.8's by 1.74e-6 and 2.37e-6 at δ = 0.001 and 1.34e-6 and
+  3.92e-6 at δ = 0.00025 (s = 10³, 10¹¹) on the nodes the far read uses, and by
+  5.6e-9 and 6.1e-9 at 0.0025. E4.8's floor at δ ≤ 0.001 was the same failure
+  inside the 160,000-node warp runs (h = 0.0026 is 10δ at δ = 0.00025: the
+  fine runs have tail anchors where no coarse count does).
+
+**The one floor left: s = 10¹¹, δ = 0.001.**
+
+At 160,000 nodes (h = 0.0026) the rule keeps some tail rows warped in the fine
+run itself where plain's diagonal is weaker still (a one-off count: 483 of its
+3,344 tail rows), and those rows carry the warp's failure into the reference.
+Against it every coarse line stops at 3.6–3.7e-6 at 40,000 nodes, the seeds,
+the warp and plain alike (the table above). `--plain-fine 1e11:0.001` builds a
+second fine run on the same nodes with plain Gaussians on all 18,790 seeded
+rows (17 min alone, 2026-09-23) and reads every line against it too:
+
+| n | seeds (rule): against the seeds' run | against the plain-built run | warp | | plain | | E2.3 | |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2500 | 5.61e-04 | 5.62e-04 | 5.61e-04 | 5.62e-04 | 4.07e-04 | 4.07e-04 | 5.07e-04 | 5.08e-04 |
+| 5000 | 1.21e-04 | 1.22e-04 | 1.21e-04 | 1.22e-04 | 2.05e-04 | 2.05e-04 | 4.27e-04 | 4.28e-04 |
+| 10000 | 1.72e-05 | 1.76e-05 | 1.98e-05 | 2.07e-05 | 1.78e-05 | 1.80e-05 | 4.44e-04 | 4.45e-04 |
+| 20000 | 6.04e-06 | 4.42e-06 | 4.91e-05 | 4.87e-05 | 6.20e-06 | 4.55e-06 | 4.61e-04 | 4.61e-04 |
+| 40000 | 3.64e-06 | **8.03e-07** | 3.69e-06 | 7.73e-07 | 3.73e-06 | 8.69e-07 | 4.65e-04 | 4.65e-04 |
+| fit | 3.79 | **4.77** | 3.18 | 4.09 | 3.74 | 4.68 | 0.03 | 0.03 |
+
+(Each pair of columns is one line read against the two fine runs.)
+
+- *The two fine runs differ by 3.55e-6 RMS* (4.1e-5 max) on the 88 % of their
+  nodes the far read uses. That is the stall: against the plain-built run
+  every seed line reaches 7.7–8.7e-7 at 40,000 nodes, the level of the other
+  five (s, δ), and the rule's fit is 4.77.
+- *The floor is the rows the rule keeps warped.* A one-off fine run with
+  plain on every tail row and the warp elsewhere (option B, below) agrees with
+  the plain-built one to 4.8e-8. On those 483 rows plain's diagonal share is
+  lower still than the warp's (a median 0.02, some negative), which is why the
+  rule keeps the warp; plain is nevertheless what the two other fine runs
+  agree on. At 160,000 nodes the diagonal share misjudges them. It is a proxy
+  for stability, and the coarse counts, where the rule is within 0.91–1.25× of
+  the better line, never showed it wrong.
+- *The plain-built run is the better reference here, not a better method*: on
+  the coarse sets at this (s, δ) plain is 0.73–1.69× the rule, and at
+  δ = 0.0025 up to 3.4× the warp.
+- *The other five (s, δ) show no floor this large*: their lines reach
+  7.1e-7 to 1.5e-6 at 40,000 nodes against the rule-built runs; no
+  plain-built run was made for them. §4.8 quotes the rule-built fine runs and,
+  for s = 10¹¹, δ = 0.001, both.
+
+**Off the ring, as an ablation.** The rule forced on (`seeds-edge` on case 1's
+flat band, `tangential-edge` on case 2's sine pair), its RMS error over the
+warped line's (E4.6's and E4.11's lines), 1250–40,000 nodes, equilibrium
+(parabolic in brackets where it differs by more than 0.03):
+
+| case | δ | 1250 | 2500 | 5000 | 10000 | 20000 | 40000 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 0 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+| | 0.04 | 1.06 | 0.92 | 0.76 | 0.69 | 0.78 | 0.85 |
+| | 0.01 | 1.00 | 0.97 | 0.56 | 0.50 | 0.58 | 0.62 |
+| | 0.005 | 1.00 | 1.00 | 1.00 | 0.91 (0.80) | 0.43 (0.39) | 0.41 |
+| | 0.0025 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 0.54 (0.48) |
+| 2 | 0 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+| | 0.01 | 1.00 | 1.42 (1.21) | 0.82 | 1.02 | 0.95 | 1.01 |
+| | 0.005 | 1.00 | 1.00 | 1.00 | 1.41 (1.37) | 0.70 | 0.83 (0.91) |
+| | 0.0025 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.04 (0.99) |
+
+- *It fires where the ring's does*: rows are kept plain from `h ≈ 2δ` on (at
+  δ = 0.04 at every count), 92–5957 of them; the ratio is 1.00 exactly where
+  none is (δ = 0 and the unresolved coarse counts).
+- *On the flat band it helps wherever it fires*: 0.41–0.97, up to 2.4× better
+  at δ = 0.005 and 40,000 nodes. The one loss is 1.06 at δ = 0.04 on 1250
+  nodes.
+- *On case 2 it is mixed*: 0.70–1.04 at most counts where it fires, but 1.42
+  (δ = 0.01, 2500 nodes) and 1.41 (δ = 0.005, 10,000), both at the first count
+  where it fires; not explained here.
+- So the rule stays a ring's switch (Brad's decision on #84, §3.11); making it
+  a default off the ring would need case 2's two losses explained first. That
+  is E4.10's call (#41), which regenerates the lines the manuscript quotes.
+
+**Cost.** The δ > 0 rerun on the ring: three lines from one march per row,
+35–190 s per line and count (a third of the shared march, under up to 11
+concurrent runs); the six 160,000-node fine runs 19–28 min each (operator
+18–27 min, solve 31–46 s). The rule costs a second Gaussian solve on the rows
+off their piece only. Off the ring, the case-1 ablation sweep took about 25 min
+and the case-2 one 61 min, cold. Everything reprints in seconds from the
+caches.
+
+**Tests.** `tests/heat2d/test_ring.py`: the diagonal share keeps the anchor's
+sign; at δ = 0 on the ring every anchor is on its piece and the rule is the warp
+bit for bit; on the 20,000-node set at δ = 0.001 the tail rows' warped share is
+0.08–0.13 against plain's 0.25–0.27 and the rule keeps plain (and
+`saddle_system` follows it); at δ = 0.0025 two rows where plain's anchor weight
+has the wrong sign keep the warp; the rule is on by default on a ring only.
+`tests/test_heat2d_ring.py`: the three seed lines are `seed_operator`'s rows
+from one march; the plain-built fine run read as a second reference (its file,
+its keys beside E4.8's, the gap, the cache round trip) and its refusals.
+`tests/test_heat2d_stiff.py`: the `-edge` labels and their cache.
+
+**Decision (E4.12, Brad on #84, 2026-09-23).** Keep the diagonal rule on the
+ring (option A) and document the one floor it leaves, rather than plain
+Gaussians on every tail row (option B, 1.35–1.93× the warp at δ = 0.0025 and
+20,000 nodes); read s = 10¹¹, δ = 0.001 against a second, plain-built fine run
+as well, reproducibly (`--plain-fine`).
+
+**What E4.10 inherits.** The ring's documented command now carries
+`--plain-fine 1e11:0.001`; the smooth ring figure draws the seeds against the
+plain-built run as open squares in that panel. Whether the rule becomes the
+default off the ring is E4.10's decision (above). This section is E4.12's
+though it is numbered 4.10, as §4.7 is E4.11's.

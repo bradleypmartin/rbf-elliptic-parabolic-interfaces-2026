@@ -153,7 +153,13 @@ is parabolic; the headline 2-D figures are elliptic and parabolic both.
   warped RBFs enforce flux continuity to first order in the RBF part. The
   seeds only touch the polynomial part, as the jump construction does; the
   ablation "seeds with plain vs warped RBFs" is cheap and belongs in the
-  2-D results.
+  2-D results. *Answered by E4.6, E4.8 and E4.12 (#37, #39, #84; stiff note
+  §4.5, §4.8, §4.10):* on the flat band the warp turns at `h ≈ 2δ` (H7); on
+  the smooth ring it helps wherever no row is anchored in the layer's tail,
+  and a row anchored there, where the warp squeezes the anchor's side and
+  weakens the row's diagonal, keeps whichever Gaussians give the stronger
+  diagonal. That rule is on for a ring only; off the ring it is an ablation
+  line and E4.10 decides.
 
 ### 3.4 The standing alternatives to measure against
 
