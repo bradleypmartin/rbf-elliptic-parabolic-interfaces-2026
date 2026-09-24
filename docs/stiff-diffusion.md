@@ -6437,7 +6437,10 @@ tables are a results file of §5.1. For E5:
   7), the curved feature (§4.6–§4.7; 8), the ring and the s-sweep (§4.8, §4.10;
   9), the treatments (§4.9; 10), the snapshot (§5.1; 11).
 - *E5.9 (#50)*: §5.5's limitations, and §5.6's list of what the referees
-  proposed and was left for later.
+  proposed and was left for later. *Done: the manuscript's §7.1 gathers
+  §5.5 with §2.5's 1-D limitations, and §7.2's first item is §5.6's list,
+  split into the runs the drivers take as they stand and those that need
+  driver changes (the reach is `heat1d.domain.TANH_REACH`, not a flag).*
 - *E5.2 (#43)*: the scattered-node form of the conductance rule and T3 (§4.9),
   and the contact-resistance literature for the ring's `s w = 1` (§4.8).
   *Done: `LITERATURE.md` §1a K9–K10 and §1d; the flux seeds meet Lombard &

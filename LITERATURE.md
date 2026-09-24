@@ -1259,3 +1259,10 @@ Not to be used:
 - "arbitrary contrast", "any order" (only degree 4 / FD4 was run);
 - "the flux must be one degree higher" as a general fact (K9);
 - "Kapitza resistance" for the ring (a contact resistance; K9).
+
+*Placed by #50 (2026-09-24) in the manuscript's conclusions (§7.3): all four
+sentences verbatim, the flux-seed sentence with the Lombard–Piraux `\cite`
+§1 uses. `tests/test_literature.py` checks that §7.3 carries the four and
+that the manuscript's prose uses none of the wording above that cannot occur
+as a measurement ("first" and "any order" can, and are left to review).
+§7.1 names §1c's unswept areas as the bound on "to our knowledge".*

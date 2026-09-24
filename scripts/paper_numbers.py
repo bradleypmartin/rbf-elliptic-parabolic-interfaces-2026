@@ -471,7 +471,7 @@ def one_d(f: Files, b: Book) -> None:
     )
     # δ = 0's is LITERATURE.md §6b's caveat, which the abstract and §1 quote.
     for delta, quoted, where in (
-        (0.0, "801", cited(w, "abstract", "§1", "§4.5")),
+        (0.0, "801", cited(w, "abstract", "§1", "§4.5", "§7.1", "§7.3")),
         (0.0025, "201", cited(w, "§4.5")),
     ):
         rows = comparators_1d(f, "ramp", "eq75", delta)
@@ -1387,7 +1387,7 @@ def seeds_flat(f: Files, b: Book) -> None:
         "4.77",
     )
     for problem, quoted, where in (
-        ("elliptic", ("4.23", "4.31", "4.23", "4.48"), cited(w, "§1", "§6.4")),
+        ("elliptic", ("4.23", "4.31", "4.23", "4.48"), cited(w, "§1", "§6.4", "§7.3")),
         ("parabolic", ("4.22", "4.28", "4.18", "4.44"), w6),
     ):
         b.each(
@@ -1427,7 +1427,7 @@ def seeds_flat(f: Files, b: Book) -> None:
             n: max(c[n] for c in lines) / min(c[n] for c in lines) for n in COUNTS_40K
         }
     b.span(
-        cited(w, "§1", "§6.4"),
+        cited(w, "§1", "§6.4", "§7.3"),
         "the five widths' spread at every count, elliptic",
         spreads["elliptic"].values(),
         "1.2",
@@ -1440,13 +1440,13 @@ def seeds_flat(f: Files, b: Book) -> None:
     )
     row = at(sweep(f, SEEDS, "elliptic", 0.0025), 40000)
     b.eq(
-        cited(w, "§1", "§6.4"),
+        cited(w, "§1", "§6.4", "§7.3"),
         "seeds at 40,000, δ = 0.0025",
         row["seeds/rms"],
         "7.99e-9",
     )
     b.eq(
-        cited(w, "§1", "§6.4"),
+        cited(w, "§1", "§6.4", "§7.3"),
         "naive at 40,000, δ = 0.0025",
         row["naive/rms"],
         "8.36e-5",
@@ -1842,7 +1842,7 @@ def curved_feature(f: Files, b: Book) -> None:
         if r["n"] >= 5000 and r["problem"] == "elliptic"
     ]
     b.span(
-        cited(w, "§1", "§6.5"),
+        cited(w, "§1", "§6.5", "§7.3"),
         "the chain over the flat seeds from 5000, RMS",
         flat_ratio(chain, "tangential"),
         "1.4",
@@ -1921,7 +1921,7 @@ def curved_feature(f: Files, b: Book) -> None:
     # Corrected by E5.3: the notes had 2.8–8.1; the largest is 8.047 (δ = 0.0025
     # at 1250).
     b.span(
-        w6,
+        cited(w, "§6.5", "§7.1"),
         "the chain over the flat seeds at the coarsest two counts",
         flat_ratio(coarse, "tangential"),
         "2.8",
@@ -1981,7 +1981,7 @@ def ring(f: Files, b: Book) -> None:
     b.eq(w6, "E2.3's system at s = 1e11", top["e23-system-mean"], "2.7e13")
     convergence = {float(s): rows for s, rows in f(RING, "convergence").items()}
     b.span(
-        w6,
+        cited(w, "§6.6", "§7.3"),
         "seeds ÷ E2.3, 5000–40,000, every s",
         [
             r["seeds"]["full"] / r["construction"]["full"]
@@ -1993,7 +1993,7 @@ def ring(f: Files, b: Book) -> None:
         "0.97",
     )
     for label, low, high, where in (
-        ("seeds", "4.43", "4.71", cited(w, "§1", "§6.6")),
+        ("seeds", "4.43", "4.71", cited(w, "§1", "§6.6", "§7.3")),
         ("construction", "4.08", "4.13", w6),
     ):
         b.span(
@@ -2034,7 +2034,7 @@ def ring(f: Files, b: Book) -> None:
         smooth[(float(s), float(d))] = rows
     widths = {k: v for k, v in smooth.items() if k[1] > 0}
     b.span(
-        w6,
+        cited(w, "§6.6", "§7.1"),
         "the far field's share of the nodes, %",
         [100 * r["error-seeds"]["far-share"] for rows in widths.values() for r in rows],
         "74",
@@ -2125,7 +2125,7 @@ def ring(f: Files, b: Book) -> None:
     )
     gap = f(RING, "fine-gap")["1e11|0.001"]
     b.eq(
-        w6,
+        cited(w, "§6.6", "§7.1"),
         "the rule's fine run against the plain-built one, s = 1e11, δ = 0.001",
         gap["rms"],
         "3.55e-6",
@@ -2172,7 +2172,7 @@ def treatments(f: Files, b: Book) -> None:
                     continue
                 gains.extend(1 / r[label] for label in TREATMENT_LABELS)
     b.le(
-        cited(w, "abstract", "§1", "§1.1", "§6.7"),
+        cited(w, "abstract", "§1", "§1.1", "§6.7", "§7.3"),
         "the most a treatment beats sampling by, RMS, anywhere",
         max(gains),
         "1.75",
@@ -2274,12 +2274,17 @@ def treatments(f: Files, b: Book) -> None:
         if r["delta"] == 0.0
     }
     b.eq(
-        cited(w, "abstract", "§1", "§6.7"),
+        cited(w, "abstract", "§1", "§6.7", "§7.3"),
         "the seeds' lead over the best treatment at 1250, orders",
         orders[1250],
         "2.3",
     )
-    b.eq(cited(w, "abstract", "§1", "§6.7"), "… at 40,000", orders[40000], "4.7")
+    b.eq(
+        cited(w, "abstract", "§1", "§6.7", "§7.3"),
+        "… at 40,000",
+        orders[40000],
+        "4.7",
+    )
 
 
 def results_2d(f: Files, b: Book) -> None:
@@ -2324,7 +2329,7 @@ def results_2d(f: Files, b: Book) -> None:
             values = [c[n] for c in sets]
             spread.append(max(values) / min(values))
     b.span(
-        cited("stiff §4.2 H10", "§6", "§6.2"),
+        cited("stiff §4.2 H10", "§6", "§6.2", "§7.1"),
         "the naive error's spread over three node sets at one count and width",
         spread,
         "1.03",

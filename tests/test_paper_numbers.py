@@ -101,11 +101,12 @@ def test_every_where_is_the_notes_statement_after_any_quoting_sections():
     assert all(WHERE.match(c.where) for c in checks), [
         c.where for c in checks if not WHERE.match(c.where)
     ]
-    # The drafts so far (E5.4, #45; E5.5, #46; E5.6, #47; E5.7, #48; E5.8, #49)
-    # quote from the abstract and §1–6; §3 and §4 quote the 1-D study's own
-    # tables too, keyed by the prediction of stiff §1.9 each answers, §4.6 the
-    # snapshot, and §5 and §6 the 2-D study's, keyed by the hypothesis of stiff
-    # §3.7 or §3.10 each answers.
+    # The drafts so far (E5.4, #45; E5.5, #46; E5.6, #47; E5.7, #48; E5.8, #49;
+    # E5.9, #50) quote from the abstract and §1–7; §3 and §4 quote the 1-D
+    # study's own tables too, keyed by the prediction of stiff §1.9 each
+    # answers, §4.6 the snapshot, and §5 and §6 the 2-D study's, keyed by the
+    # hypothesis of stiff §3.7 or §3.10 each answers; §7.1 and §7.3 re-quote
+    # §6's numbers and the caveat's, and §7.2 quotes none.
     quoting = {
         s for c in checks if "; " in c.where for s in c.where.split("; ")[0].split(", ")
     }
@@ -113,6 +114,7 @@ def test_every_where_is_the_notes_statement_after_any_quoting_sections():
     assert {f"§4.{k}" for k in range(1, 7)} <= quoting
     assert {"§5.1", "§5.2", "§5.3"} <= quoting
     assert {"§6", *(f"§6.{k}" for k in range(1, 9))} <= quoting
+    assert {"§7.1", "§7.3"} <= quoting
     notes = {c.where.split("; ")[-1] for c in checks}
     assert {
         "stiff §4.2 H10",
