@@ -117,7 +117,8 @@ curved bands and a thin resistive ring in two.
 % LITERATURE.md 6a for the prior-work paragraph and 6b for the claim
 % sentences (#43). Drafted by #45. Numbers are traced paragraph by
 % paragraph below; every cache-backed one is a check in
-% scripts/paper_numbers.py whose `where` starts with "§1" (or "abstract").
+% scripts/paper_numbers.py whose `where` starts with "§1" (the abstract
+% quotes none since #51).
 
 Heat conduction through a composite material is governed by
 \begin{equation}
@@ -353,7 +354,7 @@ equilibrium is a real test.
 % words: 6a's 250-350 target is retired (its note, Brad, 2026-09-24). Any
 % change to the novelty language re-opens the ledger first.
 % TRACE: 1.75, stiff 5.3 (10), paper/data/heat2d_stiff_treatments*.json
-% (paper_numbers.py, where "abstract, §1; stiff §5.3 (10)").
+% (paper_numbers.py, where "§1, §1.1, §6.7, §7.3; stiff §5.3 (10)").
 In one dimension the construction is classical in every part, and we claim
 nothing for it. The first seed, the constant-flux function
 $\alpha_e \int d\xi/\alpha$, is over one cell the exact face conductance of
@@ -1712,11 +1713,12 @@ $101$ nodes so that all three operators share its grids.
 % cites nothing), K10 (ii) and 1d (T3 dropped; Mittet 2017, Koene et al.
 % 2022, waves only), K10 (iii) and the regularised coefficients (Tornberg-
 % Engquist 2003; 2006's "second order error component originating from the
-% discontinuities", the wave precedent for the cap). The last sentence of
-% the first paragraph is the first sentence of LITERATURE.md 6b's required
-% caveat, verbatim; its 1-D content follows as measurements, in this
-% section's words, the whole caveat standing where the comparison is a
-% headline (abstract, section 1, section 7).
+% discontinuities", the wave precedent for the cap). #51 dropped the
+% first sentence of LITERATURE.md 6b's required caveat from the end of the
+% first paragraph (the full-draft review: this section is the comparison
+% itself, not a headline); its 1-D content follows as measurements, in
+% this section's words, the whole caveat standing where the comparison is
+% a headline (section 1 and section 7.3).
 The standing alternative to a new stencil changes the coefficient and
 keeps the scheme (Section~\ref{sec:priorwork}). We ran four such treatments
 on the grids and problems above, against the same references:
@@ -1782,7 +1784,7 @@ diffusion and is left out.
 % edges, and T1-FV leads the seeds below 801 at delta = 0 and at 101 for
 % delta = 0.0025) and 2.5 (3). Checks: the eight errors at 200, where "§4.5;
 % stiff §2.5 (3)" (the seeds' and naive's "§4.4, §4.5"); 801 and 201,
-% "abstract, §1, §4.5" and "§4.5"; in paper_numbers.results_1d, where
+% "§1, §4.5, §7.1, §7.3" and "§4.5"; in paper_numbers.results_1d, where
 % "§4.5; stiff §2.4 P10": no row out of order, the middle three at most
 % 2.02 apart, 53 and 2.1e4, 9-35, 440. The chain is the ramp problem's: at
 % equilibrium the seeds and T1-FV are both exact and nine rows fall out of
@@ -3502,9 +3504,9 @@ $\delta$ the diagonal rule's convergence past $40{,}000$ nodes is unresolved.
 % scattered-node analogue; Patankar 1980, Kraus et al. 2023, Cleary-Monaghan
 % 1999; Kraus-Kuhnert-Suchde 2025's first order at an interface; no source
 % averages over a disc about each node) and (ii) (T3 not found in use for
-% diffusion, section 4.5). The first sentence of the second paragraph is the
-% first sentence of LITERATURE.md 6b's required caveat, verbatim, as in
-% section 4.5 (#47's spar judged that within the ledger's rule); its
+% diffusion, section 4.5). #51 dropped the first sentence of LITERATURE.md
+% 6b's required caveat from the second paragraph, as from section 4.5 (the
+% full-draft review: the comparison itself, not a headline); its
 % scattered-node clauses follow as measurements. Checks where "§6.7; stiff
 % §5.3 (10)": 1.75; 3.1 and 2.4; 1.60 and 1.55; 2.3 and 4.7; 1.8-3.5;
 % 1.6-3.4 and 1.3-3.0; 584-3100. In results_2d, where "§6.7; stiff §4.9
@@ -3791,8 +3793,8 @@ smooth ring, and any ring's error in the maximum norm, were not measured.
 % BD4 steps, t = 0.1 over h at 1250 and 40,000, arithmetic; stiff 5.5);
 % rem:elliptic1d and sec:elliptic1d (the 1-D equilibrium on constant pieces
 % ranks nothing, plan 3.2); sec:seedrates1d and sec:treatments1d (the
-% sinusoidal medium: the standard rows' pre-asymptotic line; T1-FV ahead at
-% delta = 0 below 801 nodes, paper_numbers "abstract, §1, §4.5, §7.1, §7.3;
+% sinusoidal medium: the direct rows' pre-asymptotic line; T1-FV ahead at
+% delta = 0 below 801 nodes, paper_numbers "§1, §4.5, §7.1, §7.3;
 % stiff §2.5 (3)"); the reach of 20 delta the operator's one parameter,
 % never varied, sec:seedrates1d and sec:flat2d (stiff 5.5).
 \para{The test problems}
@@ -4051,7 +4053,7 @@ In the order we would do them.
 % (required wherever the flux seeds are named; K9, with section 1's
 % Lombard-Piraux cite) and the contributions / conclusions sentence (the
 % last two of the second), and the required caveat (the third paragraph
-% after its first sentence, the abstract's lead-in). The first two
+% after its first sentence). The first two
 % sentences are the abstract's and section 1's framing: stiff 2.5 (1) and
 % 5.3 (2) (the knee), 2.5 (1) and 5.3 (3) (the construction's floor of
 % order delta and its switch-off). #51 (the full-draft review) took the
