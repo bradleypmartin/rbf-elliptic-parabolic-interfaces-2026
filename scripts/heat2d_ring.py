@@ -45,6 +45,10 @@ Four parts, each skipped by an empty or zero flag:
    eq. 40 itself against a fine seed run at the same (s, δ) (cached under
    ``outputs/``, s from ``--fine-s``), read ``far`` from the ring (a
    self-convergence line: at δ > 0 there is no independent reference, §3.6).
+   ``--plain-fine s:δ`` adds a second fine run at that pair, built with plain
+   Gaussians on every seeded row, reads every line against it too, and gives
+   the two fine runs' difference away from the ring: at s = 10¹¹, δ = 0.001 the
+   seeds' fine run keeps rows warped that stall every line (§4.10).
 
 Figures ``heat2d_ring_convergence.png``, ``heat2d_ring_conditioning.png`` and
 ``heat2d_ring_smooth.png``; the numbers are cached in ``heat2d_ring.json`` keyed
@@ -58,12 +62,13 @@ the tables are written to ``heat2d_ring_results.json`` (and ``--data-dir``).
         --conditioning-smooth-s 1e3 1e7 1e11 --conditioning-n 10000 \
         --deltas 0.0025 0.001 0.00025 --smooth-s 1e3 1e11 \
         --probe-counts 2500 5000 10000 20000 40000 --fine-n 160000 \
-        --spectrum-n 5000                                    # stiff note §4.8
+        --plain-fine 1e11:0.001 --spectrum-n 5000        # stiff note §4.8, §4.10
 
 The last is some 20 CPU-hours cold: one part and one (s, δ) at a time, as
 concurrent processes sharing ``outputs/`` (the cache merges under a lock), it
-took about 75 min on 14 cores (2026-09-23), the six 160,000-node seed runs 21–30
-min each; stiff note §4.8 has the times per part.
+took about 75 min on 14 cores (2026-09-23), the six 160,000-node seed runs 19–28
+min each and the plain-built one 17 min; stiff note §4.8 and §4.10 have the
+times per part.
 """
 
 from __future__ import annotations
@@ -436,27 +441,47 @@ def far_read(
     return got, keep
 
 
-def reference_file(outputs: Path, s: float, delta: float, n: int, seed: int) -> Path:
-    return outputs / f"heat2d_ring_reference_s{tag(s)}_d{delta:g}_n{n}_seed{seed}.npz"
+FINE_LABELS = ("seeds", "seeds-plain")
+"""The lines a fine run is built with: the seeds, and plain Gaussians on every
+seeded row, the second reference ``--plain-fine`` adds (E4.12, stiff note §4.10)."""
+
+
+def reference_file(
+    outputs: Path, s: float, delta: float, n: int, seed: int, label: str = "seeds"
+) -> Path:
+    suffix = "" if label == "seeds" else "_" + label.removeprefix("seeds-")
+    stem = f"heat2d_ring_reference_s{tag(s)}_d{delta:g}_n{n}_seed{seed}{suffix}"
+    return outputs / f"{stem}.npz"
 
 
 def seed_reference(
-    s: float, delta: float, n: int, seed: int, iterations: int, outputs: Path
+    s: float,
+    delta: float,
+    n: int,
+    seed: int,
+    iterations: int,
+    outputs: Path,
+    label: str = "seeds",
 ) -> tuple[Reference, bool]:
-    """The fine seed run on eq. 40 at (s, δ), solved and cached if absent."""
-    path = reference_file(outputs, s, delta, n, seed)
+    """The fine run of ``label`` (``FINE_LABELS``) on eq. 40 at (s, δ), solved and
+    cached if absent."""
+    path = reference_file(outputs, s, delta, n, seed, label)
     if path.exists():
         ref = Reference.load(path)
         meta = ref.meta
-        if (meta.get("iterations"), meta.get("cache")) == (iterations, CACHE_META):
+        if (
+            meta.get("iterations"),
+            meta.get("cache"),
+            meta.get("label", "seeds"),
+        ) == (iterations, CACHE_META, label):
             return ref, True
     domain = ring_domain(s, delta)
     t0 = time.perf_counter()
     nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
     t1 = time.perf_counter()
-    op, info = build("seeds", nodes, domain)
+    op, info = build(label, nodes, domain)
     t2 = time.perf_counter()
-    u = solve("seeds", op, nodes)
+    u = solve(label, op, nodes)
     t3 = time.perf_counter()
     meta = {
         "s": s,
@@ -464,7 +489,9 @@ def seed_reference(
         "seed": seed,
         "iterations": iterations,
         "cache": CACHE_META,
+        "label": label,
         "rows": info["rows"],
+        "plain": info["plain"],
         "seconds": {"nodes": t1 - t0, "operator": t2 - t1, "solve": t3 - t2},
     }
     ref = Reference(nodes, u, meta)
@@ -656,19 +683,40 @@ def probe_masks(nodes: NodeSet, domain: Domain) -> dict[str, np.ndarray]:
     return {"seeded": seeded, "crossing": crossing}
 
 
+def error_field(label: str, fine: str) -> str:
+    """A row's field for ``label``'s error against the fine run of ``fine``."""
+    return f"error-{label}" if fine == "seeds" else f"error-{label}|{fine}"
+
+
+def error_key(
+    s: float,
+    delta: float,
+    n: int,
+    label: str,
+    fine_n: int,
+    fine: str,
+    seed: int,
+    iterations: int,
+) -> str:
+    """The error's cache key; against the seeds' fine run it is E4.8's key."""
+    extra = () if fine == "seeds" else (fine,)
+    return key("error", s, delta, n, label, fine_n, seed, iterations, *extra)
+
+
 def smooth_ring(
     s: float,
     delta: float,
     counts: Sequence[int],
-    fine: tuple[Reference, Stencils] | None,
+    fines: dict[str, tuple[Reference, Stencils]],
     fine_n: int,
     seed: int,
     iterations: int,
     outputs: Path,
     cache: dict[str, dict],
 ) -> list[dict]:
-    """Per count: each operator's probe on the constant ring and, with a fine
-    run, its far-field error on eq. 40, at (s, δ)."""
+    """Per count: each operator's probe on the constant ring and its far-field
+    error on eq. 40 against each fine run of ``fines`` (``{label: (run, its
+    stencils)}``, ``FINE_LABELS``), at (s, δ); one solve per line reads them all."""
     rows = []
     for n in counts:
         row: dict = {"s": s, "delta": delta, "n": n}
@@ -699,34 +747,55 @@ def smooth_ring(
             row[f"probe-{label}"] = cache[
                 key("probe", s, delta, n, label, seed, iterations)
             ]
-        if fine is not None:
-            ref, stencils = fine
-            todo = [
-                lab
-                for lab in probe_labels(delta)
-                if key("error", s, delta, n, lab, fine_n, seed, iterations) not in cache
-            ]
-            if todo:
-                domain = ring_domain(s, delta)
-                nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
-                far, keep = far_read(ref.u, ref.nodes, stencils, domain.material, nodes)
-                for label, (op, info) in build_all(todo, nodes, domain).items():
-                    u = solve(label, op, nodes)
-                    cache[
-                        key("error", s, delta, n, label, fine_n, seed, iterations)
-                    ] = {
+        keys = {
+            (lab, fine): error_key(s, delta, n, lab, fine_n, fine, seed, iterations)
+            for lab in probe_labels(delta)
+            for fine in fines
+        }
+        todo = list(
+            dict.fromkeys(lab for (lab, _), k in keys.items() if k not in cache)
+        )
+        if todo:
+            domain = ring_domain(s, delta)
+            nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
+            reads = {
+                fine: far_read(ref.u, ref.nodes, stencils, domain.material, nodes)
+                for fine, (ref, stencils) in fines.items()
+            }
+            for label, (op, info) in build_all(todo, nodes, domain).items():
+                u = solve(label, op, nodes)
+                for fine, (far, keep) in reads.items():
+                    cache[keys[label, fine]] = {
                         "n": nodes.n,
                         "h": nodes.h,
                         "far": rms_error(u[keep], far),
                         "far-share": float(keep.mean()),
                         **info,
                     }
-                save_cache(outputs, cache)
-            for label in probe_labels(delta):
-                k = key("error", s, delta, n, label, fine_n, seed, iterations)
-                row[f"error-{label}"] = cache[k]
+            save_cache(outputs, cache)
+        for (label, fine), k in keys.items():
+            row[error_field(label, fine)] = cache[k]
         rows.append(row)
     return rows
+
+
+def fine_gap(fines: dict[str, tuple[Reference, Stencils]]) -> dict[str, float]:
+    """How far the plain-built fine run is from the seeds' away from the ring.
+
+    Both are solved on one node set; the difference is read over the fine nodes
+    whose stencils see no interface, the nodes ``far_read`` reads through.
+    """
+    (seeds, stencils), (plain, _) = fines["seeds"], fines["seeds-plain"]
+    if not np.array_equal(seeds.nodes.xy, plain.nodes.xy):
+        raise ValueError("the two fine runs are on different node sets")
+    far = ~stencils.near_interface
+    diff = seeds.u[far] - plain.u[far]
+    return {
+        "rms": float(np.sqrt(np.mean(diff**2))),
+        "max": float(np.abs(diff).max()),
+        "far-share": float(far.mean()),
+        "rows": int(seeds.meta["rows"]),
+    }
 
 
 # --- tables --------------------------------------------------------------------------
@@ -857,12 +926,45 @@ def print_spectrum(rows: list[dict]) -> None:
         )
 
 
-def print_smooth(results: dict[tuple[float, float], list[dict]]) -> None:
+FINE_NAMES = {"seeds": "the fine seed run", "seeds-plain": "the plain-built fine run"}
+
+
+def print_errors(rows: list[dict], labels: Sequence[str], fine: str) -> None:
+    """One (s, δ)'s error table against the fine run of ``fine``."""
+    head = "     n       h   far |" + "".join(
+        f"  {NAMES[lab]:>10s}  order" for lab in labels
+    )
+    print(f"error against {FINE_NAMES[fine]}:\n       " + head)
+    for i, r in enumerate(rows):
+        cells = []
+        for lab in labels:
+            e = r[error_field(lab, fine)]
+            prev = rows[i - 1][error_field(lab, fine)] if i else None
+            rate = _rate(prev, e, "far") if prev else float("nan")
+            cells.append(f"  {e['far']:10.2e}  {_order(rate)}")
+        e = r[error_field("seeds", fine)]
+        print(
+            f"       {int(e['n']):6d}  {e['h']:.4f}  {e['far-share']:.2f} |"
+            + "".join(cells)
+        )
+    fits = ", ".join(
+        f"{NAMES[lab]} {_fit([r[error_field(lab, fine)] for r in rows], 'far'):.2f}"
+        for lab in labels
+    )
+    print("       fit: " + fits)
+
+
+def print_smooth(
+    results: dict[tuple[float, float], list[dict]],
+    gaps: dict[tuple[float, float], dict] | None = None,
+) -> None:
     print(
         "\nthe smooth ring: per (s, δ), each operator's truncation probe (RMS of its"
         " rows on the exact mode through the constant ring, over the rows the seeds"
         " rebuild) and, with a fine run, its RMS error on eq. 40 against the fine"
-        " seed run, read away from the ring; order per halving of h"
+        " seed run (and, with --plain-fine, against the fine run built with plain"
+        " Gaussians on every seeded row), read away from the ring; order per"
+        " halving of h"
     )
     for (s, delta), rows in results.items():
         print(f"\ns = {tag(s)}, δ = {delta:g}")
@@ -893,32 +995,16 @@ def print_smooth(results: dict[tuple[float, float], list[dict]]) -> None:
                 f"{NAMES[lab]} {_fit(entries[lab], 'seeded'):.2f}" for lab in labels
             )
         )
-        if "error-seeds" not in rows[0]:
-            continue
-        head = "     n       h   far |" + "".join(
-            f"  {NAMES[lab]:>10s}  order" for lab in labels
-        )
-        print("error: " + head)
-        for i, r in enumerate(rows):
-            cells = []
-            for lab in labels:
-                e = r[f"error-{lab}"]
-                rate = (
-                    _rate(rows[i - 1][f"error-{lab}"], e, "far") if i else float("nan")
-                )
-                cells.append(f"  {e['far']:10.2e}  {_order(rate)}")
-            e = r["error-seeds"]
+        for fine in FINE_LABELS:
+            if error_field("seeds", fine) in rows[0]:
+                print_errors(rows, labels, fine)
+        gap = (gaps or {}).get((s, delta))
+        if gap:
             print(
-                f"       {int(e['n']):6d}  {e['h']:.4f}  {e['far-share']:.2f} |"
-                + "".join(cells)
+                f"the two fine runs differ by {gap['rms']:.2e} RMS ({gap['max']:.2e}"
+                f" max) over the {gap['far-share']:.2f} of their nodes read"
+                " away from the ring"
             )
-        entries = {lab: [r[f"error-{lab}"] for r in rows] for lab in labels}
-        print(
-            "       fit: "
-            + ", ".join(
-                f"{NAMES[lab]} {_fit(entries[lab], 'far'):.2f}" for lab in labels
-            )
-        )
 
 
 # --- figures -------------------------------------------------------------------------
@@ -1094,6 +1180,19 @@ def figure_smooth(results: dict[tuple[float, float], list[dict]]):
                         color=COLOURS[lab],
                         markersize=3,
                     )
+            plain = error_field("seeds", "seeds-plain")
+            if has_error and plain in rows[0]:
+                axes[1, j].loglog(
+                    [r[plain]["n"] for r in rows],
+                    [r[plain]["far"] for r in rows],
+                    "s" + styles[s],
+                    color=COLOURS["seeds"],
+                    markerfacecolor="none",
+                    markersize=4,
+                    linewidth=0.8,
+                    label=f"seeds against the plain-built run, {power(s)}",
+                )
+                axes[1, j].legend(fontsize=6, loc="lower left")
         title = "the jump" if d == 0.0 else f"δ = {d:g}"
         axes[0, j].set_title(f"probe, {title}", fontsize=9)
         counts = [
@@ -1122,6 +1221,12 @@ def figure_smooth(results: dict[tuple[float, float], list[dict]]):
 # --- main ----------------------------------------------------------------------------
 
 
+def pair(text: str) -> tuple[float, float]:
+    """``--plain-fine``'s ``s:δ``."""
+    s, delta = text.split(":")
+    return float(s), float(delta)
+
+
 def main(argv: Sequence[str] | None = None) -> dict:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--s", type=float, nargs="+", default=[1e3, 1e11])
@@ -1135,6 +1240,7 @@ def main(argv: Sequence[str] | None = None) -> dict:
     parser.add_argument("--probe-counts", type=int, nargs="*", default=[2500])
     parser.add_argument("--fine-n", type=int, default=0)
     parser.add_argument("--fine-s", type=float, nargs="*", default=None)
+    parser.add_argument("--plain-fine", type=pair, nargs="*", default=[])
     parser.add_argument("--spectrum-n", type=int, default=0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--iterations", type=int, default=100)
@@ -1153,6 +1259,11 @@ def main(argv: Sequence[str] | None = None) -> dict:
         parser.error("s must exceed 1/0.3, the ring reaching the cooling circle")
     if any(d <= 0.0 for d in args.deltas):
         parser.error("the smooth widths must be positive (δ = 0 always runs)")
+    fine_pairs = {(s, d) for s in fine_s if s in args.smooth_s for d in args.deltas}
+    if args.plain_fine and not (args.fine_n and args.probe_counts):
+        parser.error("--plain-fine reads the smooth ring's lines: give --fine-n")
+    if not set(args.plain_fine) <= fine_pairs:
+        parser.error("--plain-fine takes s:δ pairs that have a fine seed run")
     args.outputs.mkdir(parents=True, exist_ok=True)
     cache = load_cache(args.outputs)
     results = ResultsCache("heat2d_ring", vars(args))
@@ -1226,26 +1337,42 @@ def main(argv: Sequence[str] | None = None) -> dict:
     if args.probe_counts and args.smooth_s:
         t0 = time.perf_counter()
         smooth: dict[tuple[float, float], list[dict]] = {}
+        gaps: dict[tuple[float, float], dict] = {}
         for s in args.smooth_s:
             for delta in (0.0, *args.deltas):
-                fine = None
-                if args.fine_n and s in fine_s and delta > 0.0:
-                    ref, _ = seed_reference(
-                        s, delta, args.fine_n, args.seed, args.iterations, args.outputs
+                fines: dict[str, tuple[Reference, Stencils]] = {}
+                if args.fine_n and (s, delta) in fine_pairs:
+                    wanted = (
+                        FINE_LABELS if (s, delta) in args.plain_fine else ("seeds",)
                     )
-                    fine = (ref, reach_stencils(ref.nodes, ring_domain(s, delta)))
+                    stencils = None
+                    for fine in wanted:
+                        ref, _ = seed_reference(
+                            s,
+                            delta,
+                            args.fine_n,
+                            args.seed,
+                            args.iterations,
+                            args.outputs,
+                            fine,
+                        )
+                        if stencils is None:
+                            stencils = reach_stencils(ref.nodes, ring_domain(s, delta))
+                        fines[fine] = (ref, stencils)
+                    if len(fines) > 1:
+                        gaps[(s, delta)] = fine_gap(fines)
                 smooth[(s, delta)] = smooth_ring(
                     s,
                     delta,
                     args.probe_counts,
-                    fine,
+                    fines,
                     args.fine_n,
                     args.seed,
                     args.iterations,
                     args.outputs,
                     cache,
                 )
-        print_smooth(smooth)
+        print_smooth(smooth, gaps)
         results.time("smooth", time.perf_counter() - t0)
         fig = figure_smooth(smooth)
         fig.savefig(args.outputs / "heat2d_ring_smooth.png", dpi=150)
@@ -1253,6 +1380,10 @@ def main(argv: Sequence[str] | None = None) -> dict:
         table = {f"{tag(s)}|{d:g}": rows for (s, d), rows in smooth.items()}
         tables["smooth"] = table
         results.add("smooth", table)
+        if gaps:
+            gap_table = {f"{tag(s)}|{d:g}": gap for (s, d), gap in gaps.items()}
+            tables["fine-gap"] = gap_table
+            results.add("fine-gap", gap_table)
 
     paths = [args.outputs / RESULTS]
     if args.data_dir is not None:

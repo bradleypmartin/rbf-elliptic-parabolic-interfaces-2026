@@ -1,5 +1,6 @@
 """The E4.8 driver: the ring's sweeps, their cache, the far read, the refusals."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -102,6 +103,62 @@ def test_main_runs_the_four_parts_and_reuses_its_cache(tmp_path, capsys):
     assert again["conditioning"] == tables["conditioning"]
 
 
+def test_the_plain_built_fine_run_is_read_as_a_second_reference(
+    tmp_path, capsys, monkeypatch
+):
+    # One seeded row in 20 keeps the four fine and coarse builds to seconds; the
+    # rows themselves are pinned by the seed-variant test below.
+    every = operators.seeded_rows
+
+    def sparse(nodes_, material_, index, reach=operators.TANH_REACH):
+        seen = every(nodes_, material_, index, reach)
+        kept = np.zeros_like(seen)
+        kept[np.flatnonzero(seen)[::20]] = True
+        return kept
+
+    monkeypatch.setattr(heat2d_ring, "seeded_rows", sparse)
+    monkeypatch.setattr(operators, "seeded_rows", sparse)
+    argv = [
+        "--counts",
+        "--conditioning-n",
+        "0",
+        "--deltas",
+        "0.00025",
+        "--smooth-s",
+        "1e3",
+        "--probe-counts",
+        "1250",
+        "--fine-n",
+        "2500",
+        "--plain-fine",
+        "1e3:0.00025",
+        "--iterations",
+        "20",
+        "--outputs",
+        str(tmp_path),
+    ]
+    tables = main(argv)
+    out = capsys.readouterr().out
+    assert "error against the plain-built fine run" in out
+    assert "the two fine runs differ" in out
+    plain = heat2d_ring.reference_file(tmp_path, 1e3, 0.00025, 2500, 0, "seeds-plain")
+    assert plain.name.endswith("_seed0_plain.npz") and plain.exists()
+    (row,) = tables["smooth"]["1e3|0.00025"]
+    seeds, against = row["error-seeds"], row["error-seeds|seeds-plain"]
+    # One solve, two reads through the same fine nodes: the share is the same,
+    # the error is not.
+    assert against["far-share"] == seeds["far-share"]
+    assert against["far"] != seeds["far"]
+    gap = tables["fine-gap"]["1e3|0.00025"]
+    assert 0.0 < gap["rms"] <= gap["max"]
+    # The seeds' fine run keeps E4.8's key; the second one's is suffixed.
+    keys = json.loads((tmp_path / CACHE).read_text())["entries"]
+    assert "error|1000.0|0.00025|1250|seeds|2500|0|20" in keys
+    assert "error|1000.0|0.00025|1250|seeds|2500|0|20|seeds-plain" in keys
+    again = main(argv)
+    assert again["smooth"] == tables["smooth"]
+
+
 @pytest.mark.parametrize(
     "argv",
     [
@@ -112,6 +169,9 @@ def test_main_runs_the_four_parts_and_reuses_its_cache(tmp_path, capsys):
         ["--counts", "--probe-counts", "2500", "--fine-n", "2500"],
         ["--counts", "--conditioning-n", "900"],
         ["--counts", "--spectrum-n", "900"],
+        ["--counts", "--plain-fine", "1e3:0.001"],
+        ["--counts", "--fine-n", "5000", "--plain-fine", "1e11:0.001"],
+        ["--counts", "--fine-n", "5000", "--plain-fine", "1e3"],
     ],
 )
 def test_main_refuses_what_it_cannot_run(tmp_path, argv):
