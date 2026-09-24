@@ -453,13 +453,16 @@ ramp problem the errors are:
 2-D, on scattered nodes, the treatments are the harmonic and arithmetic
 disc means at radii h/2 and h, and T0 with m = 1, 2:
 
-- none beats plain sampling by more than 1.75× in the RMS norm (in the max
-  norm up to 3.1× on the coarsest sets, 1.55× from 5000 nodes on);
+- none beats plain sampling by more than 1.75× in the RMS norm, case 1's
+  parabolic 1250-node set aside (in the max norm up to 3.1× on the coarsest
+  sets, 1.55× from 5000 nodes on);
 - the radius-h means are *worse* than sampling at the jump from 5000 nodes
   on, the harmonic one 1.6–3.4× and the arithmetic one 1.3–3.0× (#49: this
   had read 1.6–3.4× for both, the notes' figure before E5.3's number check);
 - the seeds' lead over the best of them grows from 2.3 to 4.7 orders over
-  1250–40,000 nodes.
+  1250–40,000 nodes at the jump on case 1's parabolic problem, and is 1.6–4.9
+  orders over both cases, both problems and every unresolved width measured
+  (E5.10's number check; §6b's caveat had the first range unscoped).
 
 No conservative scattered-node scheme was built.
 
@@ -535,13 +538,14 @@ layer as such.
 **O4. The measurements.**
 
 - The δ-parametrised knee of the naive product through a smooth edge:
-  - in 1-D, 100–200× on the MATLAB problem and 800–1000× on eq. 75, at
-    h ≈ δ (§2.5 statement 1);
+  - in 1-D, 100–200× on the MATLAB problem and 770–980× on eq. 75, at
+    h ≈ δ (§2.5 statement 1; E5.6 corrected "800–1000");
   - on scattered nodes, 34–38× deep, over `4δ ≳ h ≳ 0.75δ` (§5.3
     statement 2).
 - The δ = 0 construction (the 2016 method):
-  - it sits on the `c δ` floor, `c = (a − b) ln(a/b)/(2ab)`, while
-    `h ≳ 2δ`;
+  - it sits on a floor of order δ while `h ≳ 2δ` (elliptic 0.73–0.75 δ,
+    ramp 0.29 δ on the MATLAB medium; §2.5 statement 1 as corrected by
+    E5.4, not the resistance deficit `c δ`);
   - it grows to O(1) once the grid resolves the edge, so using it
     requires knowing δ (statements 1 and 3).
 
@@ -1183,11 +1187,11 @@ smooth edge by ordinary differential equations, nor of such stencils
 reducing to a jump construction as $\delta \to 0$; the search is logged in
 the repository's \texttt{LITERATURE.md}. We ran the cell means, a widened
 edge and, in one dimension, the conservative scheme with exact face
-conductances, as our implementation of each on one problem per dimension:
+conductances, as our implementation of each on two problems per dimension:
 through an edge the grid does not resolve none is better than second order,
 and on the scattered nodes none improves on sampling the coefficient by more
-than a factor of $1.75$ in the root-mean-square error. We claim nothing beyond
-that measurement.
+than a factor of $1.75$ in the root-mean-square error outside one coarse
+parabolic run. We claim nothing beyond that measurement.
 ```
 
 (About 500 words, longer than §1 of the manuscript can carry. #45 cuts it
@@ -1234,15 +1238,16 @@ Bucket §1b, worded as "no prior instance found":
   a headline.* "The comparison is against coefficient sampling on the same
   nodes and against our implementation of the cell harmonic and arithmetic
   means, a widened edge and, in one dimension, the conservative scheme with
-  exact face conductances, on one contrast and one test problem per
-  dimension. Through an edge the grid does not resolve none of them is
-  better than second order; the conservative scheme is exact at the
-  one-dimensional equilibrium and, on the sinusoidal medium at
-  $\delta = 0$, ahead of the seeds below 801 nodes, where the seeds' line
-  is pre-asymptotic;
+  exact face conductances, on two media or test cases per dimension, with
+  no sweep in contrast. Through an edge the grid does not resolve none of
+  them is better than second order; the conservative scheme is exact at the
+  one-dimensional equilibrium and, on the sinusoidal medium, ahead of the
+  seeds below 801 nodes at $\delta = 0$ and at 101 nodes at
+  $\delta = 0.0025$, where the seeds' line is pre-asymptotic;
   on the scattered nodes none improves on sampling by more than a factor of
-  1.75 in the RMS norm, and the seeds lie 2.3 to 4.7 orders below the best
-  of them over 1250 to 40,000 nodes."
+  1.75 in the RMS norm outside one coarse parabolic run with a growing
+  mode, and while the grid does not resolve the edge the seeds lie 1.6 to
+  4.9 orders below the best of them over 1250 to 40,000 nodes."
 - *Required wherever the flux seeds are named.* "An imperfect contact costs
   strong-form schemes a derivative in the jump conditions, as Lombard and
   Piraux observed for elastic waves; the flux seeds add the functions of

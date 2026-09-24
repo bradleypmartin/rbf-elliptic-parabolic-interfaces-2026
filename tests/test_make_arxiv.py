@@ -254,13 +254,10 @@ def test_manuscript_date_is_fixed_by_hand():
     assert date and re.fullmatch(r"[A-Z][a-z]+ \d{1,2}, \d{4}", date), date
 
 
-def test_manuscript_stubs_name_their_e5_ticket():
-    """Every stub says which of #43-#52 replaces it (vacuous once none remain)."""
+def test_manuscript_has_no_draft_markers():
+    """E5.10 (#51) removed the last stub and the scaffold's \\nocite{*}."""
     tex = (PAPER / "main.tex").read_text(encoding="utf-8")
-    body = tex.split("\\begin{document}", 1)[1]
-    stubs = re.findall(r"\\stub\{\\#(\d+)", body)
-    assert len(stubs) == body.count("\\stub{")
-    assert all(43 <= int(n) <= 52 for n in stubs), stubs
+    assert make_arxiv.draft_markers(tex) == []
 
 
 def test_manuscript_is_safe_for_pdftex():
