@@ -1,12 +1,12 @@
 {
  "schema": 2,
  "driver": "heat2d_stiff",
- "date": "2026-09-24T12:46:37Z",
+ "date": "2026-09-24T15:12:59Z",
  "git": {
-  "sha": "ab76241732ef032305dfb5ffbafe78068c2e087a",
+  "sha": "cd963bac92e703a1a660cc6bdb853b96e2818488",
   "dirty": false
  },
- "argv": ["--mode", "stencils", "--data-dir", "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data"],
+ "argv": ["--mode", "stencils", "--data-dir", "paper/data"],
  "args": {
   "mode": "stencils",
   "deltas": [0.0, 0.04, 0.01, 0.005, 0.0025],
@@ -22,13 +22,14 @@
   "amplitude": 0.0,
   "inside": null,
   "outputs": "outputs",
-  "data_dir": "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data",
+  "data_dir": "paper/data",
   "geometry": "case 1"
  },
  "timings": {
-  "stencils": 16.352292875002604,
-  "total": 16.352541250002105
+  "stencils": 15.828490166997653,
+  "total": 15.828738457996224
  },
+ "tables_sha256": "29d909341441eb8073b83f5191e4887ae9349d1950c04c046e0be7305dbada46",
  "tables": {
   "stencils": {
    "chain_anchor": 0.5895833333333333,
@@ -454,34 +455,34 @@
     {
      "ratio": 0.0,
      "stencils": 576,
-     "median_ms": 1.7957499985641334,
-     "max_ms": 2.700291996006854,
-     "total_s": 1.0618111529838643,
-     "e23_ms": 1.2320319010415106
+     "median_ms": 1.6951454999798443,
+     "max_ms": 2.6303339982405305,
+     "total_s": 1.007365284000116,
+     "e23_ms": 1.2042123836787748
     },
     {
      "ratio": 0.125,
      "stencils": 576,
-     "median_ms": 6.535958498716354,
-     "max_ms": 7.494375000533182,
-     "total_s": 3.7216577731087455,
-     "e23_ms": 1.2320319010415106
+     "median_ms": 6.307250001555076,
+     "max_ms": 7.345874997554347,
+     "total_s": 3.5897844219070976,
+     "e23_ms": 1.2042123836787748
     },
     {
      "ratio": 1.0,
      "stencils": 576,
-     "median_ms": 4.3283329978294205,
-     "max_ms": 5.1003340049646795,
-     "total_s": 2.514003302982019,
-     "e23_ms": 1.2320319010415106
+     "median_ms": 4.191000498394715,
+     "max_ms": 5.375999993702862,
+     "total_s": 2.429771209957835,
+     "e23_ms": 1.2042123836787748
     },
     {
      "ratio": 8.0,
      "stencils": 576,
-     "median_ms": 2.728395498706959,
-     "max_ms": 3.9114579994929954,
-     "total_s": 1.607460149025428,
-     "e23_ms": 1.2320319010415106
+     "median_ms": 2.6191460019617807,
+     "max_ms": 3.692040998430457,
+     "total_s": 1.5408659949607681,
+     "e23_ms": 1.2042123836787748
     }
    ]
   }

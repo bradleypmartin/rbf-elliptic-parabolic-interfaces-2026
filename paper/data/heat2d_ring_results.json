@@ -1,12 +1,12 @@
 {
  "schema": 2,
  "driver": "heat2d_ring",
- "date": "2026-09-24T12:56:22Z",
+ "date": "2026-09-24T15:22:36Z",
  "git": {
-  "sha": "ab76241732ef032305dfb5ffbafe78068c2e087a",
+  "sha": "cd963bac92e703a1a660cc6bdb853b96e2818488",
   "dirty": false
  },
- "argv": ["--s", "1e3", "1e8", "1e9", "1e10", "1e11", "--counts", "1250", "2500", "5000", "10000", "20000", "40000", "80000", "--reference-n", "160000", "--conditioning-s", "1e3", "1e4", "1e5", "1e6", "1e7", "1e8", "1e9", "1e10", "1e11", "--conditioning-smooth-s", "1e3", "1e7", "1e11", "--conditioning-n", "10000", "--deltas", "0.0025", "0.001", "0.00025", "--smooth-s", "1e3", "1e11", "--probe-counts", "2500", "5000", "10000", "20000", "40000", "--fine-n", "160000", "--plain-fine", "1e11:0.001", "--spectrum-n", "5000", "--data-dir", "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data"],
+ "argv": ["--s", "1e3", "1e8", "1e9", "1e10", "1e11", "--counts", "1250", "2500", "5000", "10000", "20000", "40000", "80000", "--reference-n", "160000", "--conditioning-s", "1e3", "1e4", "1e5", "1e6", "1e7", "1e8", "1e9", "1e10", "1e11", "--conditioning-smooth-s", "1e3", "1e7", "1e11", "--conditioning-n", "10000", "--deltas", "0.0025", "0.001", "0.00025", "--smooth-s", "1e3", "1e11", "--probe-counts", "2500", "5000", "10000", "20000", "40000", "--fine-n", "160000", "--plain-fine", "1e11:0.001", "--spectrum-n", "5000", "--data-dir", "paper/data"],
  "args": {
   "s": [1000.0, 100000000.0, 1000000000.0, 10000000000.0, 100000000000.0],
   "counts": [1250, 2500, 5000, 10000, 20000, 40000, 80000],
@@ -26,14 +26,15 @@
   "seed": 0,
   "iterations": 100,
   "outputs": "outputs",
-  "data_dir": "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data"
+  "data_dir": "paper/data"
  },
  "timings": {
-  "convergence": 0.04265862500324147,
-  "conditioning": 0.0001277920018765144,
-  "spectrum": 8.291700214613229e-05,
-  "smooth": 0.7610655829994357
+  "convergence": 0.041445875001954846,
+  "conditioning": 0.00012191599671496078,
+  "spectrum": 9.100000170292333e-05,
+  "smooth": 0.7749919580019196
  },
+ "tables_sha256": "1c64cdf13f9a8a0cf5bfc12d5472614f9f3839a6c3ac2db577dcec641463e04f",
  "tables": {
   "convergence": {
    "1000": [

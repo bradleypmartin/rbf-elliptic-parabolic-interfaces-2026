@@ -1,12 +1,12 @@
 {
  "schema": 2,
  "driver": "heat2d_stiff",
- "date": "2026-09-24T12:46:48Z",
+ "date": "2026-09-24T15:13:09Z",
  "git": {
-  "sha": "ab76241732ef032305dfb5ffbafe78068c2e087a",
+  "sha": "cd963bac92e703a1a660cc6bdb853b96e2818488",
   "dirty": false
  },
- "argv": ["--mode", "seeds", "--deltas", "0", "--operators", "naive", "construction", "seeds", "--counts", "1250", "2500", "5000", "10000", "20000", "40000", "80000", "160000", "--data-dir", "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data"],
+ "argv": ["--mode", "seeds", "--deltas", "0", "--operators", "naive", "construction", "seeds", "--counts", "1250", "2500", "5000", "10000", "20000", "40000", "80000", "160000", "--data-dir", "paper/data"],
  "args": {
   "mode": "seeds",
   "deltas": [0.0],
@@ -22,13 +22,14 @@
   "amplitude": 0.0,
   "inside": null,
   "outputs": "outputs",
-  "data_dir": "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data",
+  "data_dir": "paper/data",
   "geometry": "case 1"
  },
  "timings": {
-  "seeds": 0.1855485830019461,
-  "total": 0.18590958300046623
+  "seeds": 0.16674929200235056,
+  "total": 0.16709612500562798
  },
+ "tables_sha256": "3b7a233f438a564a35c4f6b278745276f3dda2ed5c3bf115ca5a4d02dce0d895",
  "tables": {
   "sweep": {
    "elliptic": {

@@ -1,12 +1,12 @@
 {
  "schema": 2,
  "driver": "heat2d_stiff",
- "date": "2026-09-24T12:46:17Z",
+ "date": "2026-09-24T15:12:39Z",
  "git": {
-  "sha": "ab76241732ef032305dfb5ffbafe78068c2e087a",
+  "sha": "cd963bac92e703a1a660cc6bdb853b96e2818488",
   "dirty": false
  },
- "argv": ["--mode", "references", "--deltas", "0", "0.04", "0.01", "0.005", "0.0025", "0.002", "0.001", "0.0005", "--data-dir", "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data"],
+ "argv": ["--mode", "references", "--deltas", "0", "0.04", "0.01", "0.005", "0.0025", "0.002", "0.001", "0.0005", "--data-dir", "paper/data"],
  "args": {
   "mode": "references",
   "deltas": [0.0, 0.04, 0.01, 0.005, 0.0025, 0.002, 0.001, 0.0005],
@@ -22,13 +22,14 @@
   "amplitude": 0.0,
   "inside": null,
   "outputs": "outputs",
-  "data_dir": "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data",
+  "data_dir": "paper/data",
   "geometry": "case 1"
  },
  "timings": {
-  "references": 0.17126587500388268,
-  "total": 0.17136008299712557
+  "references": 0.17012908299511764,
+  "total": 0.17021820800437126
  },
+ "tables_sha256": "de7080bf46427a9d697e7105d0563b166256d144bbce2b1084ad7d2ff5750513",
  "tables": {
   "references": [
    {
@@ -36,7 +37,7 @@
     "growth": 0.0,
     "elements": 10,
     "unknowns": 190,
-    "ms": 0.4166250000707805,
+    "ms": 0.4207090023555793,
     "agreement": 7.200906537718765e-13,
     "distance": 3.8352654385676033e-13,
     "plateau": 0.0
@@ -46,7 +47,7 @@
     "growth": 0.0,
     "elements": 15,
     "unknowns": 285,
-    "ms": 2.2920420014997944,
+    "ms": 2.263624999613967,
     "agreement": 1.091571277811454e-12,
     "distance": 0.028186489493004452,
     "plateau": 0.010672726076059985
@@ -56,7 +57,7 @@
     "growth": 0.0,
     "elements": 21,
     "unknowns": 399,
-    "ms": 3.554084003553726,
+    "ms": 3.5198749974370003,
     "agreement": 3.1136759837124828e-12,
     "distance": 0.011691267811478556,
     "plateau": 3.2978457742416367e-09
@@ -66,7 +67,7 @@
     "growth": 0.0,
     "elements": 21,
     "unknowns": 399,
-    "ms": 3.4651249952730723,
+    "ms": 3.4056250005960464,
     "agreement": 4.4383940966952196e-12,
     "distance": 0.00679723787133979,
     "plateau": 0.0
@@ -76,7 +77,7 @@
     "growth": 0.0,
     "elements": 23,
     "unknowns": 437,
-    "ms": 4.044125002110377,
+    "ms": 4.031959004350938,
     "agreement": 1.2136791571748518e-11,
     "distance": 0.0036791181119238403,
     "plateau": 0.0
@@ -86,7 +87,7 @@
     "growth": 0.0,
     "elements": 23,
     "unknowns": 437,
-    "ms": 3.8776250003138557,
+    "ms": 3.83437499840511,
     "agreement": 1.2673639915306012e-11,
     "distance": 0.0029926239146630396,
     "plateau": 0.0
@@ -96,7 +97,7 @@
     "growth": 0.0,
     "elements": 24,
     "unknowns": 456,
-    "ms": 3.933875006623566,
+    "ms": 3.9046660021995194,
     "agreement": 9.437506331977374e-12,
     "distance": 0.0015491402389572473,
     "plateau": 0.0
@@ -106,7 +107,7 @@
     "growth": 0.0,
     "elements": 24,
     "unknowns": 456,
-    "ms": 3.912249994755257,
+    "ms": 3.9634580025449395,
     "agreement": 2.098898832514351e-11,
     "distance": 0.000789084240479021,
     "plateau": 0.0
@@ -116,7 +117,7 @@
     "growth": 1.0,
     "elements": 10,
     "unknowns": 190,
-    "ms": 0.38016599864931777,
+    "ms": 0.38137500087032095,
     "agreement": 4.059530489541885e-13,
     "distance": 8.981704269217516e-14,
     "plateau": 0.0
@@ -126,7 +127,7 @@
     "growth": 1.0,
     "elements": 15,
     "unknowns": 285,
-    "ms": 2.218665998952929,
+    "ms": 2.251958998385817,
     "agreement": 1.4094281297616362e-12,
     "distance": 0.028209606332193105,
     "plateau": 0.010672726076059985
@@ -136,7 +137,7 @@
     "growth": 1.0,
     "elements": 21,
     "unknowns": 399,
-    "ms": 3.4262499975739047,
+    "ms": 3.403916001843754,
     "agreement": 2.057243264630415e-12,
     "distance": 0.01195682835047357,
     "plateau": 3.2978457742416367e-09
@@ -146,7 +147,7 @@
     "growth": 1.0,
     "elements": 21,
     "unknowns": 399,
-    "ms": 3.7540000048466027,
+    "ms": 3.8197910034796223,
     "agreement": 9.183764859699295e-13,
     "distance": 0.00694536981461652,
     "plateau": 0.0
@@ -156,7 +157,7 @@
     "growth": 1.0,
     "elements": 23,
     "unknowns": 437,
-    "ms": 4.16475000383798,
+    "ms": 4.000417000497691,
     "agreement": 4.7372106237730804e-12,
     "distance": 0.0037592703335864175,
     "plateau": 0.0
@@ -166,7 +167,7 @@
     "growth": 1.0,
     "elements": 23,
     "unknowns": 437,
-    "ms": 3.915625005902257,
+    "ms": 3.9496250028605573,
     "agreement": 1.6886270159943706e-11,
     "distance": 0.0030579557162366267,
     "plateau": 0.0
@@ -176,7 +177,7 @@
     "growth": 1.0,
     "elements": 24,
     "unknowns": 456,
-    "ms": 3.961375005019363,
+    "ms": 3.9465000008931383,
     "agreement": 1.797778592660393e-11,
     "distance": 0.0015831531221956463,
     "plateau": 0.0
@@ -186,7 +187,7 @@
     "growth": 1.0,
     "elements": 24,
     "unknowns": 456,
-    "ms": 4.049541996209882,
+    "ms": 4.015082995465491,
     "agreement": 2.3921475911237167e-11,
     "distance": 0.0008065011336281791,
     "plateau": 0.0

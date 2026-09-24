@@ -1,12 +1,12 @@
 {
  "schema": 2,
  "driver": "heat2d_stiff",
- "date": "2026-09-24T12:56:15Z",
+ "date": "2026-09-24T15:22:29Z",
  "git": {
-  "sha": "ab76241732ef032305dfb5ffbafe78068c2e087a",
+  "sha": "cd963bac92e703a1a660cc6bdb853b96e2818488",
   "dirty": false
  },
- "argv": ["--mode", "tangential", "--counts", "1250", "2500", "5000", "10000", "20000", "40000", "--data-dir", "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data"],
+ "argv": ["--mode", "tangential", "--counts", "1250", "2500", "5000", "10000", "20000", "40000", "--data-dir", "paper/data"],
  "args": {
   "mode": "tangential",
   "deltas": [0.0, 0.04, 0.01, 0.005, 0.0025],
@@ -22,13 +22,14 @@
   "amplitude": 0.0,
   "inside": null,
   "outputs": "outputs",
-  "data_dir": "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data",
+  "data_dir": "paper/data",
   "geometry": "case 1"
  },
  "timings": {
-  "tangential": 498.5000379999983,
-  "total": 498.50014545799786
+  "tangential": 493.8494515420025,
+  "total": 493.84955829200044
  },
+ "tables_sha256": "0c3a1ed838f6620d31ec8a8b7ebcea564e0025e53b8eba4e55e87908c66017cc",
  "tables": {
   "tangential": {
    "circles": [
@@ -39,7 +40,7 @@
      "construction": 0.017680580421432106,
      "seeds": 0.4855292919429387,
      "tangential": 0.003811138287995414,
-     "ms": 10.544876629990725
+     "ms": 10.5291553158875
     },
     {
      "n": 5000,
@@ -48,7 +49,7 @@
      "construction": 0.005166025216025764,
      "seeds": 0.384457493077994,
      "tangential": 0.0010368800280768121,
-     "ms": 10.326677968081023
+     "ms": 10.257102723500848
     },
     {
      "n": 10000,
@@ -57,7 +58,7 @@
      "construction": 0.0018984480605351392,
      "seeds": 0.2941219891632197,
      "tangential": 0.0002591919312041418,
-     "ms": 10.32744193912975
+     "ms": 10.204368617485173
     },
     {
      "n": 20000,
@@ -66,7 +67,7 @@
      "construction": 0.0006213443451051081,
      "seeds": 0.254712258869174,
      "tangential": 9.466211774799322e-05,
-     "ms": 10.138269013213936
+     "ms": 10.046661754762434
     },
     {
      "n": 40000,
@@ -75,7 +76,7 @@
      "construction": 0.00021392578430852889,
      "seeds": 0.2392459283896111,
      "tangential": 3.324709845694635e-05,
-     "ms": 10.144739791916768
+     "ms": 10.049041716623135
     }
    ],
    "span": [
@@ -232,26 +233,26 @@
     {
      "delta": 0.0,
      "rows": 400,
-     "flat_ms": 3.84793749981327,
-     "tangential_ms": 15.287436999642523
+     "flat_ms": 3.794979496888118,
+     "tangential_ms": 15.001208499597851
     },
     {
      "delta": 0.01,
      "rows": 400,
-     "flat_ms": 8.74189600290265,
-     "tangential_ms": 22.59804150162381
+     "flat_ms": 8.645832996990066,
+     "tangential_ms": 22.24110449969885
     },
     {
      "delta": 0.005,
      "rows": 400,
-     "flat_ms": 8.74377099898993,
-     "tangential_ms": 26.067562499520136
+     "flat_ms": 8.703437499207212,
+     "tangential_ms": 25.613812998926733
     },
     {
      "delta": 0.0025,
      "rows": 400,
-     "flat_ms": 9.608104504877701,
-     "tangential_ms": 25.376478999532992
+     "flat_ms": 9.59760400291998,
+     "tangential_ms": 25.033083999005612
     }
    ]
   }
