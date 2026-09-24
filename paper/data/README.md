@@ -20,7 +20,8 @@ uv run python scripts/paper_data.py --verify   # the files against the commands
 "tables"}`. `argv` is the command line, `tables_sha256` the tables' checksum;
 `tables` holds every table the driver printed, and the
 arrays its figures draw to six figures (`seed_functions/curves`,
-`snapshot/curves`, `snapshot/field`, `spectra/figure`). Float keys are `%g`
+`snapshot/curves`, `snapshot/field`, `spectra/figure`,
+`stencils/seed_functions`). Float keys are `%g`
 strings; lists of scalars sit on one line.
 
 **What `--verify` asks of each file** (and `scripts/paper_numbers.py` before
@@ -45,7 +46,8 @@ the command does (`paper_data.py`, then `git diff paper/data`). The checksum
 catches an edit that did not recompute it (a merge, a hand "fix"), not a
 deliberate one. `scripts/paper_numbers.py` recomputes every number the notes'
 closing statements quote from the tables; the figures' arrays
-(`…/curves`, `snapshot/field`, `spectra/figure`) are covered by the checksum
+(`…/curves`, `snapshot/field`, `spectra/figure`, `stencils/seed_functions`)
+are covered by the checksum
 and by `paper_figures.py --check` only. The figures and fragments never read a
 run time (`tests/test_paper_figures.py` moves every one and redraws).
 
@@ -55,7 +57,7 @@ run time (`tests/test_paper_figures.py` moves every one and redraws).
 | `heat2d_stiff_references.json` | `heat2d_stiff.py --mode references --deltas 0 0.04 0.01 0.005 0.0025 0.002 0.001 0.0005` | §4.1 |
 | `heat2d_stiff_naive.json` | `--mode naive --counts 1250 … 160000` | §4.2 |
 | `heat2d_stiff_naive_seed1.json`, `…_seed2.json` | `--mode naive --seed 1` (2) `--counts 1250 … 20000 --spectrum-counts` | §4.2, the scatter |
-| `heat2d_stiff_stencils.json` | `--mode stencils` | §4.3 |
+| `heat2d_stiff_stencils.json` | `--mode stencils` | §4.3 (and the seed figure's stencil, E5.7) |
 | `heat2d_stiff_snapshot.json` | `--mode snapshot` | §5.1 |
 | `heat2d_stiff_seeds.json` | `--mode seeds --operators naive construction direct direct-reach seeds seeds-plain seeds-edge --counts 1250 … 40000` | §4.5, §4.10 |
 | `heat2d_stiff_seeds_jump.json` | `--mode seeds --deltas 0 --operators naive construction seeds --counts 1250 … 160000` | §4.5 |

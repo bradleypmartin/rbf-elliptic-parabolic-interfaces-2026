@@ -986,6 +986,7 @@ JUMP = "heat2d_stiff_seeds_jump.json"
 NAIVE = "heat2d_stiff_naive.json"
 CURVED = "heat2d_stiff_seeds_a0.02_sine.json"
 TANGENTIAL = "heat2d_stiff_seeds_tangential_a0.02_sine.json"
+STENCILS = "heat2d_stiff_stencils.json"
 SPLIT = {
     "A": "heat2d_stiff_seeds_tangential_a0.02_constant.json",
     "B": "heat2d_stiff_seeds_tangential_a0_sine.json",
@@ -1346,10 +1347,15 @@ def seeds_flat(f: Files, b: Book) -> None:
     30 / 4 groups (1.30e-6, 8.40e-6, 1.76e-7: §5.6's scratch).
     """
     w = "stiff §5.3 (4)"
-    stencils = f("heat2d_stiff_stencils.json", "stencils")
+    stencils = f(STENCILS, "stencils")
     (case1,) = [r for r in stencils["jump_limit"] if r["material"] == "case 1"]
-    b.eq(w, "the seed span against E2.3's basis at δ = 0", case1["span"], "4.9e-14")
-    b.eq(w, "case 1's crossing stencils", case1["stencils"], "576")
+    b.eq(
+        cited(w, "§5.2"),
+        "the seed span against E2.3's basis at δ = 0",
+        case1["span"],
+        "4.9e-14",
+    )
+    b.eq(cited(w, "§5.2"), "case 1's crossing stencils", case1["stencils"], "576")
     jump = f(JUMP, "sweep")["elliptic"]["0"]
     seeds = column(jump, "seeds/rms")
     b.eq(w, "the seed line at δ = 0, 1250", seeds[1250], "1.598e-5")
@@ -1454,11 +1460,84 @@ def seeds_flat(f: Files, b: Book) -> None:
     )
     ladder = [r for r in stencils["ladder"] if r["ratio"] > 0]
     b.within(
-        w,
+        cited(w, "§5.2"),
         "the seed block over the monomial one, column-scaled",
         [r["scaled"] / r["monomial"] for r in ladder],
         "0.46",
         "2.5",
+    )
+
+
+def seeds_2d(f: Files, b: Book) -> None:
+    """The construction's own measurements that §5 of the manuscript quotes.
+
+    Stiff §4.3's H1–H3 tables on the 2500-node case-1 set, and the stencil of the
+    seed figure (``stencils/seed_functions``, E5.7). E5.7 (#48) added them; the
+    δ = 0 span, the crossing count, the column-scaled conditioning and the
+    tangential chain's 7.18e-9 are statement (4)'s and (8)'s checks, tagged
+    there. Skipped, and traced to the notes: E4.5's warped rows (7.6e-12) and
+    assembled operators (5.3e-13), the tangential series' 3.6e-10 and the first
+    level cutoff's 3.55e-8 (scratch runs), the ring's width to ulp(1)/(w/h_s),
+    the fold's share of the contact resistance, the level-0 warp's 3.3e-6 and
+    2.3e-7, the diagonal shares (§4.10's one-offs), and every cost.
+    """
+    stencils = f(STENCILS, "stencils")
+    w = "stiff §4.3 H1"
+    chain = stencils["chain"]
+    b.eq(
+        cited(w, "§5.1"),
+        "the seeds on a constant α against the monomials",
+        max(r["monomials"] for r in chain),
+        "1.4e-15",
+    )
+    b.eq(
+        cited(w, "§5.1"),
+        "the shift identity, every δ",
+        max(r["shift"] for r in chain),
+        "7e-16",
+    )
+    b.le(
+        cited(w, "§5.1"),
+        "the chain's residual by twelfth-order differences",
+        max(r["residual"] for r in chain if r["residual"] is not None),
+        "1e-10",
+    )
+    w = "stiff §4.3 H2"
+    case1, thin = stencils["jump_limit"]
+    b.eq(cited(w, "§5.2"), "φ₀₁ against the jump-aware warp", case1["warp"], "1.8e-15")
+    b.eq(cited(w, "§5.2"), "the weights, plain Gaussians", case1["weights"], "1.6e-12")
+    b.eq(cited(w, "§5.2"), "the thin band's crossing stencils", thin["stencils"], "333")
+    b.eq(cited(w, "§5.2"), "… of them three-region", thin["three_region"], "240")
+    b.eq(cited(w, "§5.2"), "the thin band's span distance", thin["span"], "1.7e-14")
+    b.eq(cited(w, "§5.2"), "the thin band's weights", thin["weights"], "6.0e-13")
+    b.span(
+        cited(w, "§5.2"),
+        "the span distance over δ/h at 1e-5 h, four anchors",
+        [r["span"] / r["ratio"] for r in stencils["ladder"] if r["ratio"] == 1e-5],
+        "0.46",
+        "0.74",
+    )
+    lowest = min(r["anchor"] for r in stencils["ladder"])
+    below = [r for r in stencils["ladder"] if r["anchor"] == lowest]
+    by_ratio = {r["ratio"]: r for r in below}
+    w = "stiff §4.3 H3"
+    b.eq(cited(w, "§5.2"), "raw cond, resolved (8h), below", by_ratio[8.0]["raw"], "55")
+    b.eq(cited(w, "§5.2"), "raw cond, δ = 0, below", by_ratio[0.0]["raw"], "212")
+    # The seed figure's stencil (fig:seeds2d, stiff §4.3's E5.7 paragraph).
+    w = "stiff §4.3 H2"
+    figure = f(STENCILS, "stencils/seed_functions")
+    b.eq(cited(w, "§5.2"), "the figure's edge in η", figure["eta_edge"], "0.47")
+    b.eq(
+        cited(w, "§5.2"),
+        "the figure's nodes across the edge",
+        sum(e > figure["eta_edge"] for e in figure["eta_nodes"]),
+        "7",
+    )
+    b.le(
+        cited(w, "§5.2"),
+        "the figure's 1 − α_e at δ = h/2",
+        1.0 - figure["alpha_e"]["0.5"],
+        "0.004",
     )
 
 
@@ -1761,14 +1840,20 @@ def curved_feature(f: Files, b: Book) -> None:
         )
     ]
     b.span(w, "the chain over the flat seeds on A and B", split, "1.1", "4.4")
+    b.eq(
+        cited(w, "§5.3"),
+        "the chain at 40,000 on case 2, δ = 0",
+        at(sweep(f, TANGENTIAL, "elliptic", 0.0), 40000)["tangential/rms"],
+        "7.18e-9",
+    )
     b.each(
         w,
-        "the chain at 40,000 on case 2, δ = 0, 0.01, 0.005, 0.0025",
+        "the chain at 40,000 on case 2, δ = 0.01, 0.005, 0.0025",
         [
             at(sweep(f, TANGENTIAL, "elliptic", d), 40000)["tangential/rms"]
-            for d in (0.0, 0.01, 0.005, 0.0025)
+            for d in (0.01, 0.005, 0.0025)
         ],
-        ["7.18e-9", "3.01e-8", "3.00e-8", "2.69e-8"],
+        ["3.01e-8", "3.00e-8", "2.69e-8"],
     )
     zero = sweep(f, TANGENTIAL, "elliptic", 0.0)
     b.span(
@@ -2170,6 +2255,7 @@ STATEMENTS = (
     naive_knee,
     construction_floor,
     seeds_flat,
+    seeds_2d,
     elliptic_ranks,
     solvability,
     warp,

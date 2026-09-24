@@ -360,6 +360,96 @@ def _seed_line(data: Data) -> dict[str, dict[float, list[tuple[int, float]]]]:
     return out
 
 
+def heat2d_seed_functions(data: Data):
+    """§3.2–§3.4: one flat stencil's seeds along its normal, and ``φ₂₀`` across it.
+
+    E5.7 (#48). Left, the 30 nodes in ``(ξ, η)`` with the level lines of the seed
+    of ``ξ²``, ``Σ_j g_j(η) ξʲ`` from its two stored levels; right, ``α`` and the
+    profiles along ``ξ = 0`` against the monomials, the jump's seeds (E2.3's
+    translated basis there, stiff §4.3) and two widths, as ``heat1d_seeds``.
+    """
+    fig_data = data.tables("heat2d_stiff_stencils.json")["stencils/seed_functions"]
+    eta = np.asarray(fig_data["eta"])
+    ec = fig_data["eta_edge"]
+    profiles = {
+        r: {k: np.asarray(v) for k, v in p.items()}
+        for r, p in by_delta(fig_data["profiles"]).items()
+    }
+    alpha = {r: np.asarray(v) for r, v in by_delta(fig_data["alpha"]).items()}
+    ratios = [r for r in profiles if r > 0]
+    styles = ["-", "--"]
+    fig = _figure(3.9)
+    grid = fig.add_gridspec(4, 2, height_ratios=(0.55, 1, 1, 1), width_ratios=(1, 1))
+    stencil = fig.add_subplot(grid[:, 0])
+    xi = np.linspace(-1.0, 1.0, 201)
+    levels = (0.05, 0.2, 0.45, 0.8)
+    for ratio, colour, ls in ((0.0, CONSTRUCTION, "-"), (ratios[0], AWARE, "-")):
+        p = profiles[ratio]
+        phi20 = p["phi20_2"][:, None] * xi[None, :] ** 2 + p["phi20_0"][:, None]
+        cs = stencil.contour(xi, eta, phi20, levels, colors=colour, linewidths=0.8)
+        cs.set_linestyle(ls)
+        clip = plt.Circle((0.0, 0.0), 1.0, transform=stencil.transData)
+        cs.set_clip_path(clip)
+    stencil.add_patch(plt.Circle((0.0, 0.0), 1.0, fill=False, color=REFERENCE, lw=0.5))
+    stencil.axhline(ec, color=REFERENCE, lw=0.6, ls=":")
+    xn, en = np.asarray(fig_data["xi_nodes"]), np.asarray(fig_data["eta_nodes"])
+    stencil.plot(xn[1:], en[1:], "o", color="k", ms=2.5)
+    stencil.plot(xn[:1], en[:1], "*", color="k", ms=6)
+    stencil.set_aspect("equal")
+    stencil.set_xlim(-1.08, 1.08)
+    stencil.set_ylim(-1.08, 1.08)
+    stencil.set_xlabel(r"$\xi$")
+    stencil.set_ylabel(r"$\eta$")
+    stencil.set_title(
+        rf"level lines of $\phi_{{20}}$ at ${', '.join(map(str, levels))}$"
+    )
+    top = fig.add_subplot(grid[0, 1])
+    for j, ratio in enumerate(ratios):
+        top.plot(eta, alpha[ratio], color=AWARE, ls=styles[j])
+    top.plot(eta, alpha[0.0], color=CONSTRUCTION, lw=0.8)
+    top.set_ylabel(r"$\alpha$")
+    top.set_title(f"case 1, {fig_data['n']} nodes, along $\\xi = 0$")
+    panels = (
+        ("phi01", eta, r"$\phi_{01}$, the warp $\tilde\eta$"),
+        ("phi02", eta**2, r"$\phi_{02}$"),
+        ("phi20_0", np.zeros_like(eta), r"$\phi_{20} - \xi^2$"),
+    )
+    for k, (name, monomial, title) in enumerate(panels):
+        ax = fig.add_subplot(grid[1 + k, 1], sharex=top)
+        ax.plot(eta, monomial, color=REFERENCE, ls="--", lw=0.8)
+        ax.plot(eta, profiles[0.0][name], color=CONSTRUCTION, lw=0.9)
+        for j, ratio in enumerate(ratios):
+            ax.plot(eta, profiles[ratio][name], color=AWARE, ls=styles[j])
+        if name == "phi01":
+            warp = np.asarray(by_delta(fig_data["warp_nodes"])[ratios[0]])
+            ax.plot(en, warp, "o", color=AWARE, ms=2.5)
+        ax.axvline(ec, color=REFERENCE, lw=0.5, ls=":")
+        ax.set_title(title)
+        if k == 2:
+            ax.set_xlabel(r"$\eta$")
+        else:
+            ax.tick_params(labelbottom=False)
+    top.tick_params(labelbottom=False)
+    handles = [
+        _key(REFERENCE, "monomial", ls="--", lw=0.8),
+        _key(CONSTRUCTION, r"seeds of the jump ($\delta = 0$)"),
+        *[
+            _key(AWARE, rf"seeds, $\delta/h = {r:g}$", ls=styles[j])
+            for j, r in enumerate(ratios)
+        ],
+        _key("k", r"nodes (anchor $\star$)", marker="o", ls="", ms=2.5),
+        _key(
+            AWARE,
+            rf"$\tilde\eta$ at the nodes, $\delta/h = {ratios[0]:g}$",
+            marker="o",
+            ls="",
+            ms=2.5,
+        ),
+    ]
+    _legend(fig, handles, 3)
+    return fig
+
+
 def heat2d_knee(data: Data):
     """§4.2: the naive knee, the construction's floor, the seeds, the h/δ collapse."""
     knee = data.tables("heat2d_stiff_naive.json")["knee"]
@@ -978,6 +1068,11 @@ FIGURES: dict[str, Figure] = {
     ),
     "heat1d_stiff_snapshot.pdf": Figure(
         heat1d_snapshot, ("heat1d_stiff.json",), "stiff §2.5"
+    ),
+    "heat2d_stiff_seed_functions.pdf": Figure(
+        heat2d_seed_functions,
+        ("heat2d_stiff_stencils.json",),
+        "stiff §3.2–§3.4, §4.3",
     ),
     "heat2d_stiff_knee.pdf": Figure(
         heat2d_knee,

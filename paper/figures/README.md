@@ -29,6 +29,7 @@ would read `a0.02` as one), so case 2's figures are `…_curved`.
 | `heat1d_stiff_treatments.pdf` | `heat1d_stiff.json` | §2.4 | the comparators on the ramp problem, a row per medium, a column per δ > 0 |
 | `heat1d_stiff_seeds.pdf` | `heat1d_stiff.json` | §2.5 | α across P4's window; the seeds at δ/h = ½ and 0.1 against the monomials and E1.2's translated basis, normalised by `(α₀/α_e)^⌈k/2⌉` |
 | `heat1d_stiff_snapshot.pdf` | `heat1d_stiff.json` | §2.5 | the ramp solution at h = 8δ, the four operators and their nodal errors |
+| `heat2d_stiff_seed_functions.pdf` | `heat2d_stiff_stencils.json` | §3.2–§3.4, §4.3 | one case-1 stencil (E5.7): the level lines of φ₂₀ across the edge, and α, φ₀₁ (the warp), φ₀₂ and g₀ along its normal at δ = 0, h/2 and h/10 |
 | `heat2d_stiff_knee.pdf` | `heat2d_stiff_naive.json`, `heat2d_stiff_seeds.json`, `heat2d_stiff_seeds_jump.json` | §4.2, §5.1 | the naive knee, the construction on its floor, the seeds, and the naive readings against h/δ |
 | `heat2d_stiff_spectra.pdf` | `heat2d_stiff_eigenvalues.json` | §4.4 | the five operators' interior spectra at 1600 nodes, δ = 0.005, and the zoom with BD4's boundary |
 | `heat2d_stiff_dominance.pdf` | `heat2d_stiff_eigenvalues.json` | §4.4 | the rows' DDR and the unpreconditioned iteration counts against δ/h at 2500 nodes |

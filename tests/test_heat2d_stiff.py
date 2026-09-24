@@ -22,6 +22,7 @@ from heat2d_stiff import (  # noqa: E402
     NOT_APPLICABLE,
     OPERATORS,
     QUANTITIES,
+    SEED_FIGURE_ROW,
     SNAPSHOT,
     STUDY_DELTAS,
     TREATMENT_LABELS,
@@ -298,6 +299,36 @@ def test_the_stencil_study_at_1250_nodes(tmp_path, capsys):
         assert np.all((scaled > monomial / 3) & (scaled < 3 * monomial))
     for r in tables["timing"]:
         assert r["median_ms"] < 30.0
+    # E5.7 (#48): the seed figure's arrays. At δ = 0 on constant pieces the
+    # seeds are closed-form: slope 1 below the edge, α_e/α_band times the
+    # monomial's flux above it, and φ₂₀ = ξ² + (k − 1)(η − η_c)₊².
+    figure = written["tables"]["stencils/seed_functions"]
+    eta, ec = np.array(figure["eta"]), figure["eta_edge"]
+    k = figure["alpha_e"]["0"] / figure["pieces"]["band"]
+    up = np.maximum(eta - ec, 0.0)
+    jump = figure["profiles"]["0"]
+    below = eta < ec
+    phi01 = np.where(below, eta, ec + k * up)
+    phi02 = np.where(below, eta**2, ec**2 + 2 * k * ec * up + k * up**2)
+    np.testing.assert_allclose(jump["phi01"], phi01, rtol=1e-5, atol=1e-12)
+    np.testing.assert_allclose(jump["phi02"], phi02, rtol=1e-5, atol=1e-12)
+    np.testing.assert_allclose(jump["phi20_0"], (k - 1) * up**2, rtol=1e-5, atol=1e-12)
+    eta_nodes = np.array(figure["eta_nodes"])
+    np.testing.assert_allclose(
+        figure["warp_nodes"]["0"],
+        np.where(eta_nodes < ec, eta_nodes, ec + k * (eta_nodes - ec)),
+        rtol=1e-5,
+        atol=1e-6,
+    )
+    assert (eta_nodes > ec).sum() >= 5 and figure["row"] == SEED_FIGURE_ROW
+    assert abs(figure["alpha_e"]["0.5"] - 1.0) < 4e-3
+    for ratio, p in figure["profiles"].items():
+        assert p["phi20_2"] == [1.0] * eta.size  # the shift identity, g₂ = C(2, 2) g₀⁰⁰
+        assert np.all(np.diff(p["phi01"]) > 0), ratio
+    far = {
+        r: abs(figure["profiles"][r]["phi01"][-1] - phi01[-1]) for r in ("0.5", "0.1")
+    }
+    assert far["0.1"] < far["0.5"]
 
 
 def test_seed_label_carries_the_warp_and_a_non_default_reach():

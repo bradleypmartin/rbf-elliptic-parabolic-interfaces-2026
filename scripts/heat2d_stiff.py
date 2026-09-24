@@ -69,7 +69,10 @@ and ``φ₀₁`` against E2.4's warped normal coordinate. Then per δ/h from 8 t
 half) and the seed block's condition number raw and column-scaled, beside
 the monomial and translated blocks' (H3). Last, ``seed_basis``'s cost over
 every crossing stencil per δ, with E2.3's for scale (#35's acceptance
-line). About 20 s.
+line). About 20 s. ``stencils/seed_functions`` holds what the manuscript's
+seed figure draws (E5.7, #48): one stencil on the second straddling row
+below the band, the seeds ``φ₀₁``, ``φ₀₂`` and ``φ₂₀``'s two levels along
+its normal line at δ = 0, h/2 and h/10, and its nodes, to six figures.
 
 ``--mode seeds`` (E4.6, #37; stiff note §3.7 H4, H7 and H8, §4.5 records) is
 the flat δ sweep: the seed operator against E4.3's two lines and the *direct*
@@ -458,6 +461,23 @@ CHAIN_RATIOS = (1.0 / 8.0, 1.0, 8.0)
 
 LADDER_RATIOS = (8.0, 1.0, 0.5, 1.0 / 8.0, 1.0 / 64.0, 1e-3, 1e-4, 1e-5)
 """δ/h of the jump-limit and conditioning ladders (P4 and P5's in 1-D)."""
+
+SEED_FIGURE_ROW = 1
+"""The straddling row of the manuscript's seed figure, counted from the lower
+line down (0 is the innermost): its anchor's α_e is within 0.4 % of the jump's
+at δ = h/2 (0.905 on the innermost row), so the seeds need no normalisation to
+be compared across δ, and 7 of its 30 nodes lie across the edge."""
+
+SEED_FIGURE_RATIOS = (0.0, 0.5, 0.1)
+"""δ/h of the seed figure: the jump, then fig:seeds1d's two widths."""
+
+SEED_FIGURE_SEEDS = {
+    "phi01": (0, 1, 0),
+    "phi02": (0, 2, 0),
+    "phi20_0": (2, 0, 0),
+    "phi20_2": (2, 0, 2),
+}
+"""The chain states the seed figure draws, ``(a, b, j)``: ``g_j`` of ``ξᵃηᵇ``'s seed."""
 
 RESIDUAL_GRID = (25, 801)
 """``(ξ, η)`` points of H1's residual grid on ``[−1, 1]²``."""
@@ -1926,6 +1946,70 @@ def timing_rows(nodes: NodeSet, h: float) -> list[dict]:
     return rows
 
 
+def seed_functions(nodes: NodeSet, h: float, points: int = 401) -> dict:
+    """The seed figure's arrays (E5.7, #48): one stencil's seeds along its normal.
+
+    The stencil is anchored on the straddling row ``SEED_FIGURE_ROW`` below case
+    1's lower line, at ``x ≈ 0.5``. Along ``ξ = 0`` at ``points`` values of η in
+    ``[−1, 1]``, per δ/h of ``SEED_FIGURE_RATIOS``: ``α`` and the profiles
+    ``g_j`` of ``SEED_FIGURE_SEEDS`` (the seed of ``ξ²`` is ``g₂ ξ² + g₀``), and
+    at the nodes the warp ``φ₀₁``, the Gaussians' normal coordinate. To six
+    figures (``rounded``), as ``snapshot/field``.
+    """
+    band = case1().material
+    y = band.lower.c - (0.5 + SEED_FIGURE_ROW * np.sqrt(3.0) / 2.0) * h
+    xy = anchor_stencil(nodes, y)
+    eta = np.linspace(-1.0, 1.0, points)
+    alpha, profiles, warp, alpha_e = {}, {}, {}, {}
+    for ratio in SEED_FIGURE_RATIOS:
+        medium = SmoothBand(band, ratio * h)
+        sb = seed_basis(xy, medium)
+        scale = sb.scale
+        p = seed_profiles(sb.profile, eta, alpha_e=sb.alpha_e)
+        f = sb.frame
+        x = f.x0 - f.scale * np.sin(f.angle) * eta
+        yy = f.y0 + f.scale * np.cos(f.angle) * eta
+        alpha[ratio] = rounded(medium.alpha(x, yy))
+        profiles[ratio] = {
+            name: rounded(p.g[p.chain.index(*state)])
+            for name, state in SEED_FIGURE_SEEDS.items()
+        }
+        warp[ratio] = rounded(sb.warp)
+        alpha_e[ratio] = sb.alpha_e
+    return {
+        "n": nodes.n,
+        "h": h,
+        "row": SEED_FIGURE_ROW,
+        "anchor": [float(v) for v in xy[0]],
+        "scale": scale,
+        "eta_edge": (band.lower.c - float(xy[0, 1])) / scale,
+        "pieces": {"below": band.outside.value, "band": band.inside.value},
+        "alpha_e": alpha_e,
+        "eta": rounded(eta),
+        "alpha": alpha,
+        "profiles": profiles,
+        "xi_nodes": rounded(sb.xi),
+        "eta_nodes": rounded(sb.eta),
+        "warp_nodes": warp,
+    }
+
+
+def print_seed_functions(figure: dict) -> None:
+    """One line per δ/h of the seed figure: where its stencil is, what it draws."""
+    x, y = figure["anchor"]
+    print(
+        f"\nthe seed figure's stencil: anchor ({x:.4f}, {y:.4f}), row"
+        f" {figure['row']} below the band, h_s = {figure['scale']:.4f}, edge at"
+        f" η = {figure['eta_edge']:.4f}; the seeds at η = 1"
+    )
+    print("    δ/h     α_e      φ₀₁      φ₀₂   g₀ of φ₂₀")
+    for ratio, p in figure["profiles"].items():
+        print(
+            f"  {ratio:5g}  {figure['alpha_e'][ratio]:.4f}  {p['phi01'][-1]:7.4f}"
+            f"  {p['phi02'][-1]:7.4f}  {p['phi20_0'][-1]:10.4f}"
+        )
+
+
 def print_stencil_study(tables: dict, n: int, h: float) -> None:
     print(
         f"\nthe scalar seeds on one stencil (E4.4, H1–H3): case 1, {n} nodes, "
@@ -2005,9 +2089,11 @@ def run_stencils(args) -> dict:
         "ladder": ladder_rows(nodes, h),
         "timing": timing_rows(nodes, h),
     }
+    figure = seed_functions(nodes, h)
     print_stencil_study(tables, args.stencil_n, h)
+    print_seed_functions(figure)
     print(f"\nstencil study {time.perf_counter() - t0:.1f} s")
-    return {"stencils": tables}
+    return {"stencils": tables, "stencils/seed_functions": figure}
 
 
 # --- E4.6: the flat δ sweep ---------------------------------------------------------

@@ -15,7 +15,8 @@
 %   Sec. 2  Setting                   stiff 1.1, 3.1; port notes 1-2          #45
 %   Sec. 3  Seeds in one dimension    stiff 1.2-1.8                           #46
 %   Sec. 4  1-D results               stiff 2.1-2.5                           #47
-%   Sec. 5  Seeds in two dimensions   stiff 3.2-3.4, 3.10, 3.11, 4.10, 5.2    #48
+%   Sec. 5  Seeds in two dimensions   stiff 3.1-3.6, 3.10, 3.11, 4.3-4.4,     #48
+%                                     4.10, 5.2
 %   Sec. 6  2-D results               stiff 4.1-4.10, 5.1, 5.3                #49
 %   Sec. 7  Discussion                stiff 2.5, 5.5-5.6; LITERATURE.md 6b    #50
 %   Literature #43 . Figures, tables, numbers #44 . Assembly #51 . arXiv #52
@@ -669,7 +670,7 @@ each node count has one node set, from a fixed random seed.
 \para{RBF-FD}
 RBF-FD \cite{FornbergFlyer2015primer,FornbergFlyer2015acta} builds each row
 of a differentiation matrix from a stencil. For a stencil of nodes
-$x_1, \ldots, x_{N_s}$ about an evaluation node $x_c$, the weights $w$ of a
+$x_1, \ldots, x_{N_s}$ about an evaluation node $x_e$, the weights $w$ of a
 linear operator $\mathcal{L}$ solve
 \begin{equation}
   \label{eq:rbffd}
@@ -677,8 +678,8 @@ linear operator $\mathcal{L}$ solve
   \begin{bmatrix} w \\ w_* \end{bmatrix}
   =
   \begin{bmatrix}
-    \mathcal{L}\, \varphi(\|x - x_i\|) \big|_{x_c} \\
-    \mathcal{L}\, p_j(x) \big|_{x_c}
+    \mathcal{L}\, \varphi(\|x - x_i\|) \big|_{x_e} \\
+    \mathcal{L}\, p_j(x) \big|_{x_e}
   \end{bmatrix},
 \end{equation}
 with $\Phi_{il} = \varphi(\|x_i - x_l\|)$ for the Gaussian
@@ -688,7 +689,7 @@ stencil's radius, and $w_*$ discarded. The constraint rows make the weights
 exact on the polynomials, which take over from the Gaussians under
 refinement \cite{FlyerFornbergBayonaBarnett2016,BayonaFlyerFornbergBarnett2017};
 the shape parameter is $\varepsilon = 0.4 / d$, with $d$ the distance from
-$x_c$ to its nearest neighbour. Stencils have $42$ nodes and degree $5$ in
+$x_e$ to its nearest neighbour. Stencils have $42$ nodes and degree $5$ in
 the bulk, and $30$ nodes and degree $4$ within $3 / \sqrt n$ of a Dirichlet
 curve and wherever a $42$-node stencil would reach across an interface.
 Of the latter, the interface-aware construction rebuilds the rows whose
@@ -1952,39 +1953,686 @@ is $\sci{1.47}{-8}$.
 % ===========================================================================
 \section{Seeds in two dimensions}
 \label{sec:seeds2d}
-% TRACE: stiff 3.2-3.4 (the straight feature), 3.10 (the tangential chain),
-% 3.11 (the ring's gap, series, flux seeds and level-0 warp), 4.10 and 5.2
-% (the diagonal rule, and why it is the ring's); code heat2d/seeds.py.
-% Drafted by #48. Figure: a seed section (#44).
+% TRACE: stiff 3.1 (what the seeds keep and change), 3.2-3.4 (the straight
+% feature), 3.5 and 4.6 (route (a) and why it fails), 3.10 (the tangential
+% chain), 3.6 and 3.11 (the ring's gap, series, smooth form, flux seeds and
+% Gaussians), 4.10 and 5.2 (the diagonal rule, and why it is the ring's),
+% with the construction checks of 4.3-4.4; code heat2d/seeds.py and
+% heat2d/operators.py. Drafted by #48. Numbers are traced paragraph by
+% paragraph; every cache-backed one is a check in scripts/paper_numbers.py
+% whose `where` names a "§5.x". Figure fig:seeds2d from paper/data (#48).
+A stencil of the interface group (Section~\ref{sec:setting2d}) has $30$
+nodes and degree four, and the jump-aware construction replaces its fifteen
+monomials by the translated basis. Here they are replaced by seeds, the
+profiles at $t = 0$ of solutions polynomial in time, anchored at the
+evaluation node as in Section~\ref{sec:seeds1d} and now functions of two
+variables. The node sets, the stencil sizes, the Gaussians and the
+saddle-point solve are kept. So is the rest of the operator: the bulk rows,
+the Dirichlet rows and the time stepping. The construction for a straight
+edge is the companion paper's for the wave equation \cite{Martin2026seeds},
+specialised to one field (Sections~\ref{sec:straight}
+and~\ref{sec:assembly2d}); a curved or tangentially varying edge and a
+resistive layer thinner than the stencil each add to it
+(Sections~\ref{sec:curved} and~\ref{sec:ring}).
+
 \subsection{A straight feature}
 \label{sec:straight}
-\stub{\#48: the local frame and the anchor; seeds polynomial in the
-tangential coordinate with coefficient functions marched along the normal}
+% TRACE: stiff 3.2 (the frame at the foot point with the origin moved to
+% the evaluation node; xi, eta in stencil radii; alpha_n the profile along
+% the normal; the ansatz over the levels of a's parity; the chain read in
+% 2-D; the level ODE in the flux variable; the anchor data; triangular in
+% degree and level; 22 levels, 44 states for degree 4; the monomials on a
+% constant alpha by induction), 3.3 (the stencil coordinate, w = w~/h_s^2).
+% The time-polynomial solution u_ab is E5.7's, added to stiff 3.2 with this
+% ticket (the chain's algebra, no number), the 2-D form of lem:heatpoly.
+\para{Frame and anchor}
+A seeded stencil keeps the orientation of the jump-aware frame: at the foot
+point of the interface nearest the evaluation node, $x'$ along the tangent
+and $y'$ along the normal (Section~\ref{sec:jump}). Its origin moves to the
+evaluation node $x_e$, which lies on the normal through that foot point,
+and lengths are measured in the stencil's radius $h_s$, the largest
+distance from $x_e$ to a node of the stencil:
+\begin{equation}
+  \label{eq:frame2d}
+  \xi = (x' - x'_e) / h_s, \qquad \eta = (y' - y'_e) / h_s .
+\end{equation}
+The material along the normal line, $\alpha_n(\eta) = \alpha(x_e + h_s \eta
+n)$ with $n$ the unit normal, is what the seeds read, and
+$\alpha_e = \alpha_n(0)$. In these coordinates $L = h_s^{-2} (\partial_\xi
+\alpha \partial_\xi + \partial_\eta \alpha \partial_\eta)$; as in
+Section~\ref{sec:chain} we drop the factor $h_s^{-2}$ in what follows and
+restore it in the weights, $w = \tilde w / h_s^2$.
+
+\para{The ansatz}
+Where $\alpha$ depends on the normal coordinate alone, as it does exactly
+across the flat edges of case 1, the seed of the monomial $\xi^a \eta^b$ is
+a polynomial in $\xi$ whose coefficients are functions of $\eta$,
+\begin{equation}
+  \label{eq:ansatz}
+  \phi_{ab}(\xi, \eta) = \sum_{j} g_j(\eta)\, \xi^j, \qquad
+  j = a, a - 2, \ldots, a \bmod 2,
+\end{equation}
+because $L (g(\eta) \xi^j) = \xi^j (\alpha_n g')' + j (j - 1)\, \alpha_n g\,
+\xi^{j-2}$: the operator lowers the degree in $\xi$ by two or not at all. The
+chain \eqref{eq:chain} read in two dimensions is
+\begin{equation}
+  \label{eq:chain2d}
+  \phi_{00} = 1, \qquad
+  L \phi_{ab} = \alpha_e \bigl[ a (a - 1)\, \phi_{a-2, b} + b (b - 1)\,
+  \phi_{a, b-2} \bigr],
+\end{equation}
+the constant-coefficient operator's action on the monomial with the lower
+monomials' seeds on the right. Collecting $\xi^j$ and writing the flux
+$\psi_j = \alpha_n g_j'$ gives a first-order pair for each seed and level,
+\begin{equation}
+  \label{eq:levels}
+  \begin{aligned}
+  g_j' &= \psi_j / \alpha_n, \\
+  \psi_j' &= \alpha_e \bigl[ a (a - 1)\, g_j^{(a-2, b)} + b (b - 1)\,
+  g_j^{(a, b-2)} \bigr] - (j + 2)(j + 1)\, \alpha_n\, g_{j+2}^{(a, b)},
+  \end{aligned}
+\end{equation}
+where a superscript names the seed a level belongs to and a missing level is
+zero. The initial data are the monomial's at its top level,
+$g_a(0) = [b = 0]$ and $\psi_a(0) = \alpha_e [b = 1]$, and zero for every
+other level; for $b \ge 2$ the source generates $\eta^b$, as
+$\phi_k(x_e) = \phi_k'(x_e) = 0$ did in one dimension. Seed $(a, b)$ at level
+$j$ needs the same level of the seeds $(a - 2, b)$ and $(a, b - 2)$ and level
+$j + 2$ of itself, so the system is triangular in total degree and in level,
+and the fifteen seeds of degree at most four are $22$ levels with $44$
+states, marched together as one linear system that never differentiates
+$\alpha$. With a constant $\alpha$ the seeds are the monomials, by induction
+on the degree as in Lemma~\ref{lem:heatpoly}. The proof of that lemma,
+applied once in each index, shows that
+$u_{ab} = \sum_{i \le a/2,\, k \le b/2} c^{a}_{i}\, c^{b}_{k}\,
+(\alpha_e t)^{i + k}\, \phi_{a - 2i, b - 2k}$, with $c^{a}_{i} = a! / (i!\, (a - 2i)!)$, solves the
+heat equation in these coordinates with $u_{ab}(\cdot, 0) = \phi_{ab}$: the
+seeds are again the profiles of solutions polynomial in time.
+
+% TRACE: stiff 3.2 (the four closed forms; phi_20 = xi^2 + g_0 with
+% (alpha_n g_0')' = 2 (alpha_e - alpha_n), the "u_t = const" condition for a
+% temperature quadratic along the edge; O(1) in stencil units across an
+% unresolved edge; what a 1-D construction cannot supply; sin 2 pi x v(y) not
+% in the span of the 1-D seeds), fig:seeds2d.
+\para{Closed forms}
+The linear seeds are the one-dimensional ones along the normal, stretched
+along the tangent: $\phi_{10} = \xi$, $\phi_{01} = \alpha_e \int_0^\eta
+d\eta' / \alpha_n$, the constant-flux seed $\phi_1$ of
+Section~\ref{sec:chain}, and $\phi_{11} = \xi \phi_{01}$; $\phi_{02}$ is the
+seed $\phi_2$ along the normal. The first seed that is not a
+one-dimensional seed times a power of $\xi$ is
+\begin{equation}
+  \label{eq:phi20}
+  \phi_{20} = \xi^2 + g_0(\eta), \qquad
+  (\alpha_n g_0')' = 2 (\alpha_e - \alpha_n), \quad g_0(0) = g_0'(0) = 0.
+\end{equation}
+$L \xi^2 = 2 \alpha_n$ is not constant across the edge, and $g_0$ is the
+normal profile that restores $L \phi_{20} = 2 \alpha_e$, the constant rate
+of change of a temperature quadratic along the edge. It vanishes on a
+constant $\alpha$ and is of order one in stencil units across an
+unresolved edge (Figure~\ref{fig:seeds2d}), and no one-dimensional
+construction supplies it: the two-dimensional content of the seeds is this
+coupling of tangential monomials to normal profiles. It is also why the
+elliptic problem tests them in two dimensions where it could not in one
+(Section~\ref{sec:elliptic1d}): case 1's equilibrium
+$\sin 2\pi x\, v(y)$ is not in the span of the one-dimensional seeds at any
+resolution.
+
+% TRACE: stiff 3.2 (the shift identity; nine independent level-zero
+% functions; the 44-state form kept because it generalises), 4.3 H1 on the
+% 2500-node case-1 stencil anchored at y = 0.5896: monomials 1.4e-15, the
+% identity to 7e-16 over delta/h = 0, 1/8, 1, 8, the residual by twelfth-order
+% differences on 25 x 801 points below 1e-10 (8.5e-11 at most), all
+% paper/data/heat2d_stiff_stencils.json stencils/chain (paper_numbers.py,
+% where "§5.1; stiff §4.3 H1"); 3.3 (the march: the 1-D tolerances, both
+% ways, restarted at every node's eta, stops at each edge centre and +-10
+% delta, one-sided pieces, both curves of a band stops of one march).
+\para{A symmetry, and the march}
+The frozen problem is invariant under shifts along $\xi$, and matching
+powers of the shift gives
+$g_j^{(a, b)} = \binom{a}{j}\, g_0^{(a - j, b)}$, with $g_0^{(m, b)} = 0$ for
+odd $m$: only nine level-zero functions are independent. The $44$-state
+march reproduces the identity to $\sci{7}{-16}$ at every $\delta$ tested,
+from the jump to $8h$, and the monomials on a constant $\alpha$ to
+$\sci{1.4}{-15}$; we march all $44$ states because it is the coupled form
+that carries over to a curved or tangentially varying edge
+(Section~\ref{sec:curved}). The march is that of
+Section~\ref{sec:chain}: SciPy's DOP853 at the same tolerances in the
+stencil coordinate, from the anchor in both directions, restarted at every
+node's $\eta$ so that node values are integrated and not interpolated, with
+segment boundaries at each edge centre and at $10\delta$ on either side;
+$\alpha$ on a segment is read from the piece that owns it, so a jump is
+marched like any other width, and a band thinner than the stencil is crossed
+in one march with both of its edges as boundaries. The true operator applied
+to the marched seeds by twelfth-order differences on a $25 \times 801$ grid
+leaves $L \phi_{ab}$ minus the right-hand side of \eqref{eq:chain2d} below
+$10^{-10}$ relative, the floor of the differences.
 
 \subsection{Stencil assembly}
 \label{sec:assembly2d}
-\stub{\#48: the seeds in the RBF-FD system, the warp they bring with them,
-which rows are seeded; the seed-section figure}
+% TRACE: stiff 3.4 (EABE eq. 2 with the seed block; the right-hand side 2
+% alpha_e on the quadratics plus h_s alpha_xi on xi, the frozen profile's
+% omission; alpha_eta never appears; the jump-aware rows apply alpha lap +
+% grad alpha . grad to all 15 functions), 4.3 ("the right-hand side is the
+% true operator at the anchor", to 1e-11 by differences, tests).
+\para{The saddle-point system}
+The seeds take the monomials' place in \eqref{eq:rbffd}: $P_{ie} =
+\phi_e(\xi_i, \eta_i)$, read off the march at the nodes, and the
+right-hand side is the true operator on each seed at the anchor,
+\begin{equation}
+  \label{eq:moments2d}
+  (L \phi_{ab})(x_e) = 2 \alpha_e\, [(a, b) \in \{(2, 0), (0, 2)\}] +
+  h_s \alpha_\xi\, [(a, b) = (1, 0)],
+\end{equation}
+with $\alpha_\xi$ the tangential derivative of $\alpha$ at the anchor. The
+chain gives the first term, since the right-hand side of
+\eqref{eq:chain2d} vanishes at the anchor for every seed but the two
+quadratics, whose lower seed is $\phi_{00} = 1$. The second is what the
+frozen normal profile leaves out: $\partial_\xi (\alpha \partial_\xi \phi) =
+\alpha_\xi \phi_\xi + \alpha \phi_{\xi\xi}$, and at the anchor $\phi_\xi \ne
+0$ only for $\phi_{10} = \xi$. The normal derivative of $\alpha$ never
+appears, since the seeds satisfy $\partial_\eta \alpha_n \partial_\eta$
+with the true profile. Where the jump-aware rows apply
+$\alpha \nabla^2 + \nabla \alpha \cdot \nabla$ to all fifteen functions of
+their basis, the seeds carry $\nabla \alpha \cdot \nabla$ through the march
+and need it at the anchor once, in one entry.
+
+% TRACE: stiff 3.4 (the warp is phi_01, the E2.4 breadcrumb's quadrature;
+% eta~' = alpha_e/alpha_n; the chain rule and the exact cancellation of the
+% G_eta~ term that the jump-aware rows carry as alpha_eta G_eta; at the
+% anchor alpha_e (G_xixi + G_eta~eta~) + alpha_xi G_xi; Warp.apply bit for
+% bit at delta = 0 on constant pieces), 4.3 (phi_01 against E2.4's warped eta
+% at the nodes, 1.8e-15 over case 1's 576 crossing stencils,
+% paper/data/heat2d_stiff_stencils.json stencils/jump_limit, paper_numbers.py
+% where "§5.2; stiff §4.3 H2"), 4.4 (the chain-rule form assembled, the
+% cancellation checked along the whole line, WARP_TOL; epsilon from the
+% physical offsets; warp=False the plain block carrying alpha_eta G_eta).
+\para{The warp is the constant-flux seed}
+The jump-aware stencils warp the Gaussians' normal coordinate
+piecewise-linearly, with its slope changed by the factor $\alpha^- /
+\alpha^+$ at the interface (Section~\ref{sec:jump}). The seeds bring the
+smooth version with them: the Gaussians are written in $(\xi, \tilde\eta)$
+with
+\begin{equation}
+  \label{eq:warp}
+  \tilde\eta = \phi_{01}(\eta) = \alpha_e \int_0^\eta
+  \frac{d\eta'}{\alpha_n(\eta')},
+\end{equation}
+read off the same march at every node. With $\tilde\eta' = \alpha_e /
+\alpha_n$ the chain rule gives, at any point of the normal line,
+\begin{equation*}
+  L\, G(\xi, \tilde\eta(\eta)) = \alpha_\xi G_\xi + \alpha G_{\xi\xi} +
+  (\alpha \tilde\eta')'\, G_{\tilde\eta} + \alpha \tilde\eta'^2\,
+  G_{\tilde\eta\tilde\eta},
+\end{equation*}
+and $\alpha \tilde\eta' = \alpha_e$ is constant, the flux of $\phi_{01}$, so
+the term in $G_{\tilde\eta}$, which the jump-aware rows carry as
+$\alpha_\eta G_\eta$, cancels exactly. At the anchor
+\begin{equation}
+  \label{eq:gaussrhs}
+  (L G)(x_e) = \alpha_e (G_{\xi\xi} + G_{\tilde\eta\tilde\eta}) +
+  \alpha_\xi G_\xi ,
+\end{equation}
+the Gaussian's Laplacian at the warped offsets times $\alpha_e$, with the
+seeds' tangential correction. At $\delta = 0$ on constant pieces
+\eqref{eq:warp} is the jump-aware warp, to $\sci{1.8}{-15}$ at the nodes of
+case 1's $576$ crossing stencils at $2500$ nodes. The implementation
+assembles the general chain-rule form and checks the cancellation along the
+whole marched line rather than assuming it, and takes $\varepsilon$ from
+the physical offsets, as the jump-aware stencils do. Written in the frame's
+own $(\xi, \eta)$ the Gaussians are plain and carry $\alpha_\eta G_\eta$;
+Section~\ref{sec:flat2d} measures what the warp is worth.
+
+\begin{figure}
+  \centering
+  % figures/heat2d_stiff_seed_functions.pdf: scripts/paper_figures.py from
+  % paper/data/heat2d_stiff_stencils.json (stencils/seed_functions, added by
+  % #48); never hand-edited. TRACE: the stencil, the driver's seed_functions
+  % (SEED_FIGURE_ROW = 1: the second straddling row, (1/2 + sqrt 3/2) h =
+  % 1.37 h below the lower line; the edge at eta = 0.47; 7 of the 30 nodes
+  % across it; alpha_e = 0.9966 at delta = h/2, within 0.4 %, so no
+  % normalisation; paper_numbers.py, where "§5.2; fig:seeds2d"); the closed
+  % forms at delta = 0 checked in tests/test_heat2d_stiff.py; the jump's seed
+  % span the translated basis's, stiff 4.3 H2; first order in delta/h, stiff
+  % 4.3's ladder.
+  \includegraphics{heat2d_stiff_seed_functions}
+  \caption{The seeds of one $30$-node stencil of case 1 at $2500$ nodes,
+  anchored (star) on the second straddling row below the lower edge
+  (dotted), in the stencil coordinates \eqref{eq:frame2d}; the edge is at
+  $\eta = 0.47$ and $7$ of the nodes lie across it. Left: the nodes and the
+  level lines of $\phi_{20}$ for the jump (purple) and for $\delta = h/2$
+  (blue). Below the edge they are those of $\xi^2$; above it they close,
+  since $g_0$ adds the normal curvature that keeps $L \phi_{20} = 2 \alpha_e$
+  where $\alpha = 0.2$. Right: $\alpha$ and three seeds along the normal line
+  $\xi = 0$ against the monomials (grey, dashed): the constant-flux seed
+  $\phi_{01}$, which is the Gaussians' normal coordinate $\tilde\eta$ (dots:
+  its values at the nodes for $\delta = h/2$), $\phi_{02}$, and $g_0 =
+  \phi_{20} - \xi^2$, which vanishes on a constant $\alpha$. Purple: the
+  jump's seeds, which span the translated basis of the jump-aware stencil;
+  blue: $\delta = h/2$ (solid) and $h/10$ (dashed). The anchor's $\alpha_e$
+  is within $0.4\%$ of the jump's at $\delta = h/2$, so the seeds are drawn
+  as marched, unnormalised.}
+  \label{fig:seeds2d}
+\end{figure}
+
+% TRACE: stiff 3.4 (the jump limit: on the anchor's side the monomial, on
+% the far side a polynomial of degree <= 4 continuous with its flux and, by
+% induction down the chain, D^k phi and its flux: the 15 conditions of the
+% continuity matrices, C square and nonsingular, the spans coincide; one
+% march through both lines of a thin band; curvature and tangential alpha
+% break it at O(h)), 4.3 H2 (576 crossing stencils, span 4.9e-14, weights
+% with the plain block 1.6e-12; the thin band 0.6 <= y <= 0.62: 333 stencils,
+% 240 three-region, span 1.7e-14, weights 6.0e-13, all
+% paper/data/heat2d_stiff_stencils.json stencils/jump_limit, paper_numbers.py
+% where "§5.2; stiff §4.3 H2" and, for the span, "§5.2; stiff §5.3 (4)"),
+% 4.4 (warped rows 7.6e-12; the assembled operators 5.3e-13 at 2500 nodes:
+% E4.5's operator comparison, notes only), 4.3's ladder (first order in
+% delta/h with no floor to 1e-5 h, 0.46-0.74 delta/h across the four anchors,
+% stencils/ladder, paper_numbers.py where "§5.2; stiff §4.3 H2").
+\para{The jump as the limit}
+At $\delta = 0$ on constant pieces across a flat interface, the seed of
+$\xi^a \eta^b$ is the monomial on the anchor's side and, on the far side, a
+polynomial of degree at most four, since the chain has constant
+coefficients and polynomial sources there. It is continuous with its flux
+at every $\xi$, and by induction down the chain so are $L^k \phi$ and their
+fluxes: the fifteen conditions of the continuity matrices, all exact for
+constant pieces on a flat line (Section~\ref{sec:jump}). The matrices being
+square and nonsingular, the far side is the translated polynomial, and the
+seeds and the translated basis are two bases of one space, anchored at the
+node and at the foot point. With the same Gaussians the seed rows are
+therefore the jump-aware rows, the two-dimensional form of the one
+construction with two implementations of Section~\ref{sec:jumplimit}. Over
+the $576$ crossing stencils of case 1 at $2500$ nodes the sine of the
+largest principal angle between the two spans is $\sci{4.9}{-14}$, and the
+weights differ by $\sci{1.6}{-12}$ relative with plain Gaussians and by
+$\sci{7.6}{-12}$ with warped ones; assembled, the two operators agree to
+$\sci{5.3}{-13}$. On a band one spacing thick, $333$ crossing stencils of
+which $240$ reach all three regions, where the jump-aware construction
+translates twice with a change of frame between the interfaces and the
+march crosses both in one pass, the span distance is $\sci{1.7}{-14}$ and
+the weights differ by $\sci{6.0}{-13}$. At $\delta > 0$ the seed span leaves
+the jump's at first order in $\delta / h$, $0.46$ to $0.74\,\delta / h$
+across four anchors, with no floor down to $\delta = 10^{-5} h$. On a curved
+interface, or with pieces that vary along it, the two constructions differ
+at $O(h)$, and Section~\ref{sec:results2d} measures each against the
+reference.
+
+% TRACE: stiff 3.3 and 4.4 (seeded_rows: the span of the 30 nodes' signed
+% distances meets [-20 delta, 20 delta], interface_crossings OR-ed in; at
+% delta = 0 the rule is interface_crossings by construction; build_stencils
+% reach one size up, so no 42 / 5 stencil sees an unresolved edge; the
+% boundary zone's one-sided 30 / 4 stencils seeded on their own nodes; every
+% row once 20 delta covers the strip; no threshold in delta), 2.1 (the pieces
+% to the bit beyond 20 delta); the rule's 20 delta is a parameter, stiff
+% 5.3 (4).
+\para{Which rows are seeded}
+A row is seeded when the signed distances of its $30$ nodes to an edge's
+centre curve span a range that meets $[-20\delta, 20\delta]$, beyond which
+the edge is its pieces to the last bit (Section~\ref{sec:problem}), or when
+its nodes straddle the curve; at $\delta = 0$ the rule is the jump-aware
+construction's crossing test. The stencil groups follow the same rule one
+size up: a node whose $42$-node stencil sees an edge joins the interface
+group and gets a $30$-node stencil of degree four, so that no bulk stencil
+sees an unresolved edge, and of the group the members whose own $30$ nodes
+see it are seeded. A stencil of the boundary zone that sees an edge is
+seeded on its own one-sided nodes, since the chain is anchored at the node
+and marched only where nodes are. Once $20\delta$ covers the strip every
+row is seeded. No threshold in $\delta$ switches the seeds off: a resolved
+edge costs them nothing but the marches (Section~\ref{sec:flat2d}).
+
+% TRACE: stiff 3.4 (30 / 4, the companion's 19 / 3 warning a
+% hyperviscosity-footprint issue with no twin in diffusion; the spectrum of
+% H6 where a surprise would show), 4.4 (H6: no eigenvalue in the right
+% half-plane, stiff 5.3 (6)); 3.3 (the seed block's condition number raw and
+% column-scaled), 4.3 H3 (column-scaled within 0.46-2.5 of the monomial
+% block's at every delta from 1e-5 h to 8 h, stencils/ladder,
+% paper_numbers.py where "§5.2; stiff §5.3 (4)"; raw 54.6 resolved to 212
+% unresolved below the band, where "§5.2; stiff §4.3 H3"); the cost, 4.3's
+% timing table and its second run (medians 1.9-7.3 ms against the
+% jump-aware rows' 1.5-1.6 ms: 1.2-5 times; timings, notes only).
+\para{Stencil size, conditioning and cost}
+The seed stencils are the interface group's, $30$ nodes and degree four.
+Our companion paper found degree-four seed stencils unstable across a sharp
+edge in the wave equation and used $19$ nodes and degree three
+\cite{Martin2026seeds}; the cause there was the footprint of the
+hyperviscosity row the wave operator needs, which has no counterpart in an
+implicit march of a dissipative operator, and the spectra of
+Section~\ref{sec:spectra2d} show no eigenvalue in the right half-plane.
+Column-scaled, the seed block's condition number stays within $0.46$ to
+$2.5$ times the monomial block's on the same nodes at every $\delta$ from
+$10^{-5} h$ to $8h$; unscaled, it carries the contrast, from $55$ with the
+edge resolved to $212$ with it unresolved on the stencil below the band. A
+seed row costs $1.2$ to $5$ times a jump-aware row, a few milliseconds.
 
 \subsection{Curved and tangentially varying features}
 \label{sec:curved}
-\stub{\#48: why a frozen normal profile is inconsistent where $\alpha$
-varies along the edge; the tangential chain in the curve's own coordinates}
+% TRACE: stiff 3.5 (route (a): the straight-feature seeds along the true
+% normal through the foot point, curvature dropped; the companion's route
+% (a) on the same sine pair) and its E4.7 correction (moving a tanh edge by
+% kappa x'^2/2 changes the values beyond it by that times the jump in the
+% flux-carrying slope, whatever delta is: O(kappa h^2) in value, an O(kappa)
+% truncation error in a row whose weights are O(h^-2); at delta = 0 route (a)
+% is E2.3's curvature=False construction, EABE Fig. 10's first-order line; a
+% tangential variation of alpha changes the flux ratio from node to node, a
+% kinked correction outside the span, also O(1)); 4.6 (the two split and
+% measured; H9), whose numbers section 6.5 quotes.
+\para{A frozen profile}
+For a curved edge the natural first step, the companion paper's for the
+wave equation \cite{Martin2026seeds}, marches the straight-feature seeds
+along the true normal through the foot point and drops the curvature. The
+seeds' kink then lies on the tangent line instead of on the curve: a node
+at tangential offset $x'$ is at normal distance $y' - \kappa x'^2 / 2 +
+\cdots$ from a curve of curvature $\kappa$, while its seed value assumes
+$y'$. Moving an unresolved edge by $\Delta$ changes the values beyond it by
+$\Delta$ times the jump in the slope that carries the flux, whatever
+$\delta$ is: an error of $O(\kappa h^2)$ in value and, in a row whose weights
+are $O(h^{-2})$, a truncation error of $O(\kappa)$ that does not converge.
+At $\delta = 0$ on constant pieces this frozen profile is the jump-aware
+construction without its curvature terms, whose flat line in \cite[Fig.~10]{MartinFornberg2017heat}
+is first order. A variation of $\alpha$ along an unresolved edge does the
+same another way: the ratio of fluxes the seeds impose across it changes
+from node to node, a kinked correction outside their span. Either term alone
+makes a frozen profile inconsistent at $O(1)$ through an unresolved edge;
+Section~\ref{sec:curved2d} measures the two apart.
+
+% TRACE: stiff 3.10 (the foot curve's normal coordinates x = gamma(sigma) + d
+% n(sigma), one-to-one inside the focal distance, FOOT_CURVATURE (stiff 4.6:
+% kappa_max (|d_e| + 2 h_s) < 0.8); the diagonal metric m = |gamma'| (1 -
+% kappa d); L in divergence form with no cross term; xi = mu_e (sigma -
+% sigma_0)/h_s, eta = (d - d_e)/h_s, m^ = m/mu_e = 1 at the anchor; the
+% normal line xi = 0 is route (a)'s; the foot curve a coordinate line).
+% The notes' curve parameter sigma and scale factor m are theta and mu here:
+% sigma is the blend weight and m the rows per unit length in section 2.
+\para{The curve's own coordinates}
+Write every point near the foot curve $\gamma(\theta)$, in its own
+parameter, as $x = \gamma(\theta) + d\, n(\theta)$, with $n$ the unit normal
+and $\kappa$ the signed curvature. These coordinates are one-to-one inside
+the focal distance, and the implementation refuses a stencil whose normal
+line reaches within a margin of it, $\kappa_{\max} (|d_e| + 2 h_s) \ge 0.8$,
+with $\kappa_{\max}$ the curve's largest curvature and $d_e$ the anchor's
+distance to it. The metric is diagonal, with scale factors
+$\mu = |\gamma'| (1 - \kappa d)$ along $\theta$ and $1$ along $d$, so that
+\begin{equation}
+  \label{eq:curvilinear}
+  L u = \frac{1}{\mu} \Bigl[ \partial_\theta \Bigl( \frac{\alpha}{\mu}\,
+  \partial_\theta u \Bigr) + \partial_d (\alpha \mu\, \partial_d u) \Bigr],
+\end{equation}
+in divergence form with no cross term. About the anchor $(\theta_0, d_e)$
+the stencil coordinates are $\xi = \mu_e (\theta - \theta_0) / h_s$ and
+$\eta = (d - d_e) / h_s$, with $\mu_e = \mu(\theta_0, d_e)$; the operator keeps
+its form with $\hat\mu = \mu / \mu_e$ in place of $\mu$, and $\hat\mu = 1$ at the
+anchor, so that $\xi$ is arclength along the anchor's parallel curve in
+stencil radii. The normal line $\xi = 0$ is the frozen profile's, with the
+same $\alpha_n$, segment boundaries and pieces. What changes is that the
+foot curve is the line $\eta = -d_e / h_s$ at every $\xi$, so the edge is a
+coordinate line and its conditions hold along one.
+
+% TRACE: stiff 3.10 (the ansatz with every level to xi^4; the series
+% alpha/m^ = sum A_k xi^k, alpha m^ = sum B_k xi^k, m^ = sum M_k xi^k, k <=
+% 4; the chain kept verbatim, m^ L phi = m^ alpha_e S phi; the level flux
+% psi_i = sum B_k g'_{i-k}; the pair; triangular in the first line; g_i and
+% psi_i continuous through a jump on the coordinate line level by level; the
+% flat limit is 3.2's chain; the anchor data 3.2's; the parity trim and the
+% shift identity lost).
+\para{Coupled levels}
+Keep the ansatz \eqref{eq:ansatz}, now with every level,
+$\phi_{ab} = \sum_{j=0}^{4} g_j(\eta)\, \xi^j$, and expand the coefficients
+of \eqref{eq:curvilinear} along the coordinate lines,
+$\alpha / \hat\mu = \sum_k A_k(\eta)\, \xi^k$,
+$\alpha \hat\mu = \sum_k B_k(\eta)\, \xi^k$ and
+$\hat\mu = \sum_k M_k(\eta)\, \xi^k$, $k \le 4$. The chain
+\eqref{eq:chain2d} is kept as it stands, multiplied through by $\hat\mu$.
+With $S \phi_{ab}$ its right-hand side and $\psi_i = \sum_k B_k\, g_{i-k}'$
+the coefficient of $\xi^i$ in the normal flux, collecting $\xi^i$ gives
+\begin{equation}
+  \label{eq:coupled}
+  \begin{aligned}
+  g_i' &= \frac{1}{B_0} \Bigl[ \psi_i - \sum_{k \ge 1} B_k\, g_{i-k}'
+  \Bigr], \\
+  \psi_i' &= \alpha_e \sum_k M_k\, (S g)_{i-k} - \sum_k A_k\, (i + 2 -
+  k)(i + 1)\, g_{i+2-k},
+  \end{aligned}
+\end{equation}
+a missing level being zero. The first equation is triangular, so $\alpha$
+is still never differentiated, and $g_i$ and $\psi_i$ are continuous
+through a jump on the coordinate line, level by level, so the march reads
+its pieces one-sidedly as before. On a flat line with $\alpha$ a function
+of $\eta$ alone, \eqref{eq:coupled} is \eqref{eq:levels} and the levels of
+the other parity stay zero. The initial data are those of
+Section~\ref{sec:straight}; the parity trim and the shift identity do not
+survive.
+
+% TRACE: stiff 3.10 ("why every seed keeps level 4": A_k, B_k = O(h^k), M_k =
+% O(h^{k+1}); level j of seed (a, b) O(h^{j-a}) above its top, O(h^{b+j}) in
+% a smooth solution; the order count j <= 4 - b, 55 levels, the first
+% cutoff; the far side's flux ratio to the power ceil(b/2); case 2 at delta
+% = 0 on 40,000 nodes 3.55e-8 with the first cutoff (a first-cutoff run,
+% notes only) against 7.18e-9 with every level,
+% paper/data/heat2d_stiff_seeds_tangential_a0.02_sine.json (paper_numbers.py,
+% where "§5.3; stiff §5.3 (8)"); 85 levels the same to two digits; 75
+% levels, 150 states).
+\para{Every seed to level four}
+The series coefficients are small: $A_k$ and $B_k$ are $O(h^k)$ and $M_k$
+is $O(h^{k+1})$ for $k \ge 1$. Level $j$ of seed $(a, b)$ is therefore
+$O(h^{j - a})$ above its top and contributes $O(h^{b + j})$ to a smooth
+solution, and an order count would keep it only while $b + j \le 4$, $55$
+levels. The count hides a constant. Across a jump the far side of the seed
+of $\xi^a \eta^b$ carries the flux ratio $\alpha_e / \alpha_{\mathrm{far}}$
+to the power $\lceil b/2 \rceil$, and the dropped levels multiply it by the
+variation of $\alpha$ along the edge. On case 2 at $\delta = 0$ and $40{,}000$
+nodes the cut chain's error was $\sci{3.55}{-8}$; with every seed to level
+four it is $\sci{7.18}{-9}$, and two more levels on every seed change
+nothing to two digits. The chain has $75$ levels, $150$ states.
+
+% TRACE: stiff 3.10 ("the moment right-hand side": only level 0 survives at
+% the anchor, marched with every term, so the chain holds on the whole line
+% xi = 0; 2 alpha_e on the quadratics and nothing else; the h_s alpha_xi
+% entry gone, phi_10 = xi plus lower levels driven by A_1, A_2 satisfying
+% L phi_10 = 0; "the Gaussians": the warp phi_01 with all its levels, (L
+% G)(x_e) = alpha_e (G_xixi + G_eta~eta~) + A_1(0) G_xi; "the tangential
+% series": 11-point Fornberg weights at spacing 0.2 along the coordinate
+% lines at the same d, the samples exact and formed once per stencil; the
+% foot edge's factor exact, the other edge saturated beyond 20 delta or a
+% 17-point Chebyshev interpolant of its distance per sample line; 3.6e-10
+% between 11 points at 0.2 and 15 at 0.12 on 40 case-2 rows at 1250 nodes
+% and delta = 0.0025 (scratch, notes only); "scope": at delta = 0 the other
+% curve only as a coordinate line; no 30-node stencil at 1250 nodes or finer
+% crosses both of case 2's curves); 4.7 (a row 2.5-3.8 times route (a)'s;
+% timings, notes only).
+\para{Right-hand sides, series and scope}
+At the anchor only level zero of $L \phi$ survives, and its equation is
+marched with every term, so the chain holds on the whole line $\xi = 0$ and
+$(L \phi_{ab})(x_e)$ is $2 \alpha_e$ on the two quadratics and zero
+otherwise. The entry $h_s \alpha_\xi$ of \eqref{eq:moments2d} is gone: the
+seed of $\xi$, now $\xi$ plus lower levels driven by $A_1, A_2, \ldots$,
+satisfies $L \phi_{10} = 0$, so the march carries the tangential derivative.
+The warp is $\phi_{01}$ with all its levels, and at the anchor
+$(L G)(x_e) = \alpha_e (G_{\xi\xi} + G_{\tilde\eta\tilde\eta}) + A_1(0)\,
+G_\xi$, the form of \eqref{eq:gaussrhs} with $A_1(0) = \partial_\xi (\alpha
+/ \hat\mu)$ in place of $h_s \alpha_\xi$. The coefficients $A_k$, $B_k$ and
+$M_k$ come from Fornberg's weights \cite{Fornberg1988} at $\xi = 0$ on $11$
+points $0.2$ apart along the coordinate lines, whose positions are formed
+once per stencil and are exact. The foot edge's factor $\sigma(d / \delta)$
+depends on $\eta$ alone and is applied exactly; the other edge is taken as
+its pieces beyond $20\delta$ of the sampled region and otherwise read
+through a $17$-point Chebyshev interpolant of its distance along each
+sample line. Between $11$ points at spacing $0.2$ and $15$ at $0.12$ the
+weights of $40$ rows of case 2 at $1250$ nodes and $\delta = 0.0025$ move by
+$\sci{3.6}{-10}$. At $\delta = 0$ the other curve may meet a stencil only as
+a coordinate line of the foot curve's frame, a parallel line or a
+concentric circle; no stencil of case 2 at $1250$ nodes or more crosses both
+of its curves. A row costs $2.5$ to $3.8$ times a row of the frozen profile.
 
 \subsection{A thin resistive layer}
 \label{sec:ring}
-% For #48, moved here by #45 from LITERATURE.md 6a (its third cut; section 1
-% keeps one clause, "A resistive layer thinner than the grid is an imperfect
-% interface in the limit [...], which Section 5.4 takes up"). Place it where
-% the flux seeds are introduced, with 6b's required flux-seed sentence:
-%   A resistive layer thinner than the grid is an imperfect interface in the
-%   limit \cite{SanchezPalencia1974,PerrusselPoignard2013,Hashin2001}, and
-%   strong-form schemes across such a contact need its jump conditions one
-%   derivative higher in two dimensions \cite{LombardPiraux2003,LombardPiraux2006};
-%   the flux seeds of Section~\ref{sec:ring} are that observation for the
-%   diffusion operator.
-\stub{\#48: the double edge of a ring: its exact width, series composition,
-the flux seeds, the warp on rows anchored inside the layer}
+% TRACE: stiff 3.6 (two edges in one march: the ring thinner than h at
+% every count, no node inside, one march through both circles along the
+% radial normal), 3.11 (each change a switch that only a band with a gap
+% turns on; cases 1 and 2 the same to the bit, checked on flat and
+% tangential rows, both warps, delta = 0 and 0.0025); the resistance
+% 1.5/(1 + sin sin/2) at every s, port notes 2.9 and section 2.3.
+The ring of case 3 is $1/s$ wide and thinner than the node spacing at every
+count (Section~\ref{sec:setting2d}). No node lies inside it, and a stencil
+across its midline reaches both sides; its march crosses both circles in
+one pass along the radial normal, with both edges as segment boundaries.
+What the ring needs beyond the band is switched on only for a band whose
+two circles carry their gap, so that cases 1 and 2 are unchanged to the last
+bit.
+
+% TRACE: stiff 3.6 (widths not radii: Circle(0.35 - 1/s) stores the width to
+% 8e-8 at s >= 1e10, port notes 2.9) and its E4.8 note, 3.11 ("the width":
+% two O(1) stops w/h_s apart, ulp(1)/(w/h_s), 1e-7 in the median and 6e-7 at
+% worst over stencils at s = 1e11, notes only; Band.gap; the march in the
+% offset from the outer crossing, the ring's segment gap/h_s to rounding;
+% "the ring's series": 1/(alpha m^) = 1.5 s across the ring at delta = 0;
+% the Fornberg series' rounding past DOP853's absolute tolerance; a
+% piecewise Chebyshev interpolant in eta per segment, RING_POINTS, checked
+% to 1e-13 of the largest coefficient).
+\para{The width and the series}
+At $s \ge 10^{10}$ the stored radii $0.35 - 1/s$ and $0.35$ give the width
+only to $\sci{8}{-8}$ relative, and a march between two segment boundaries
+$w / h_s$ apart, both of order one in stencil units, crosses the width only
+to $\mathrm{ulp}(1) / (w / h_s)$, about $10^{-7}$ at $s = 10^{11}$. The
+band therefore carries the gap $1/s$ exactly, and the march runs in the
+offset from the outer circle's crossing, so that the segment it crosses is
+the gap to rounding. Across the ring $1 / (\alpha \hat\mu)$ is $1.5 s$ at
+$\delta = 0$, and it multiplies the rounding of the sampled series into the
+small tangential levels, past the integrator's absolute tolerance; on a
+ring each segment's series are a piecewise Chebyshev interpolant in $\eta$,
+checked against the samples to $10^{-13}$ of their largest coefficient, so
+that the integrator's stages see a smooth function.
+
+% TRACE: stiff 3.6's smooth ring and the decision on #39 (Brad, 2026-09-23),
+% 3.11 ("the smooth ring"): the fold keeps 0.41 of the contact resistance at
+% delta = w/10 and 0.01 at w/4 (s = 1e3), the difference of the edges in
+% alpha about w (stiff 4.8, notes only); 1/alpha blended by s(d1/delta) -
+% s(d2/delta), SmoothBand(composition="resistance"); the excess resistance
+% the jump's w (1/alpha_in - 1/alpha_out) at every (s, delta); as s -> inf at
+% fixed delta a layer of peak resistivity 0.75/delta (R/(2 delta), R = 1.5,
+% the share's peak slope 1/2 times w/delta). Section 2.1 and 2.3 promise this
+% definition. The sentence that follows is LITERATURE.md 6a's resistive-layer
+% sentence, verbatim, moved here by #45's third cut (with its K9 citations).
+\para{The smooth ring}
+With $\delta$ comparable to the width or larger, the band's composition
+\eqref{eq:edge} never reaches the ring's plateau and keeps only $0.41$ of
+its contact resistance at $\delta = w/10$ and $0.01$ at $w/4$ ($s = 10^3$);
+blending $\alpha$ by the difference of the two edges keeps a resistance of
+about $w$, against the jump's $1.5$. Both lose the resistance that the jump ring holds fixed as $s$ grows. The smooth
+ring blends the resistivity instead,
+\begin{equation}
+  \label{eq:smoothring}
+  \frac{1}{\alpha} = \frac{1}{\alpha_{\mathrm{out}}} +
+  \Bigl( \frac{1}{\alpha_{\mathrm{in}}} - \frac{1}{\alpha_{\mathrm{out}}}
+  \Bigr) \bigl[ \sigma(d_1 / \delta) - \sigma(d_2 / \delta) \bigr],
+\end{equation}
+with $d_1$ and $d_2$ the signed distances to the inner and outer circles, so
+that its excess resistance $\int (1/\alpha - 1/\alpha_{\mathrm{out}})\, dn$
+is the jump's, $w (1/\alpha_{\mathrm{in}} - 1/\alpha_{\mathrm{out}})$, at
+every $(s, \delta)$. As $s \to \infty$ at fixed $\delta$ it tends to a
+layer of peak resistivity $R / (2\delta)$, with $R$ the contact resistance,
+as the jump ring tends to the resistance itself. A resistive layer thinner
+than the grid is an imperfect interface in the limit
+\cite{SanchezPalencia1974,PerrusselPoignard2013,Hashin2001}, and
+strong-form schemes across such a contact need its jump conditions one
+derivative higher in two dimensions \cite{LombardPiraux2003,LombardPiraux2006};
+the flux seeds of Section~\ref{sec:ring} are that observation for the
+diffusion operator.
+
+% TRACE: stiff 3.11 ("the flux seeds": the rows beside the ring stall with
+% the 15 seeds (4.8, the flux-seedless line, which section 6.6 quotes); a
+% kink carries the flux times the distance beyond it, a thin resistive layer
+% [u] = R F with no such factor; the b >= 1 seeds' flux at the ring a
+% polynomial of degree 3; the O(h^4) flux error turned into O(h^4) values,
+% O(h^2) in rows reading many; the five degree-5 seeds with a flux,
+% seeds.flux_exponents, the chain of degree 5 marched, every seed to level
+% 5; 20 seeds on 30 nodes; their moment conditions zero at the anchor; the
+% least-squares fit to the exact mode: O(h^5) on the near side alone, O(h^4)
+% on rows with 10-12 of their 30 nodes across, 7 times below E2.3's basis on
+% the near side; all five make it O(h^5); why E2.3's basis fits at O(h^5)
+% not established, its Cartesian frame the likely source). The second
+% sentence of the paragraph's close is LITERATURE.md 6b's required
+% flux-seed sentence, verbatim, with K9's citations inserted (6's preamble).
+\para{The flux seeds}
+With the fifteen seeds the rows beside the ring stall at fine counts
+(Section~\ref{sec:ring2d}). Across a kink the flux enters the far side's
+values multiplied by the distance beyond it; across a thin resistive layer
+it enters with no such factor, as the jump $[u] = R F$ with $F$ the flux
+through the layer. The seeds of degree four that carry a flux, those with
+$b \ge 1$, have a flux at the ring that is a polynomial of degree three in
+the offsets; the true flux differs from it by $O(h^4)$, which $R$ turns
+into an $O(h^4)$ error in the far side's values and an $O(h^2)$ error in a
+row that reads many of them. Fitted by least squares to an exact mode
+through the ring, the fifteen seeds are $O(h^5)$ on a stencil's near side
+alone but $O(h^4)$ on the rows with $10$ to $12$ of their $30$ nodes across
+it, where the jump-aware basis is $O(h^5)$. On a ring the block therefore adds the five seeds of degree
+five that carry a flux, those of $\xi^4 \eta$, $\xi^3 \eta^2$,
+$\xi^2 \eta^3$, $\xi \eta^4$ and $\eta^5$, from the chain of degree five:
+twenty seeds on thirty nodes, and with them the fit is $O(h^5)$. Their moment
+conditions vanish at the anchor, so the right-hand side is unchanged. An
+imperfect contact costs strong-form schemes a derivative in the jump
+conditions, as Lombard and Piraux observed for elastic waves
+\cite{LombardPiraux2003,LombardPiraux2006}; the flux seeds add the
+functions of one degree higher that carry the flux, and nothing else. Why
+the jump-aware basis, whose continuity conditions also carry the flux only
+to degree three along the curve, fits at $O(h^5)$ with fifteen functions we
+have not established; its Cartesian frame couples the circle's curvature
+into the flux of its degree-four monomials, which is the likely source.
+
+% TRACE: stiff 3.11 ("the Gaussians on a ring": the warp phi_01's level 0,
+% g_0(eta); its higher levels carry the ring's resistance along xi (case 3's
+% piece varies 3 : 1) into a shear of about 4 per stencil radius; the floor
+% 3.3e-6 at 80,000 nodes, 11 times E2.3's, against 2.3e-7 with level 0 alone
+% (notes only); level 0's flux and derivative at the anchor the full seed's,
+% so the right-hand side is unchanged; epsilon: alpha_e a twentieth of the
+% pieces' or less inside the smooth ring, g_0 compresses by that factor, the
+% seed system's condition number to 1e8, epsilon from the nodes' spacing in
+% (xi, g_0)).
+\para{The Gaussians on a ring}
+Two changes to the Gaussians, both measured on the ring. The warp is the
+level zero of $\phi_{01}$ alone: its higher levels carry the ring's
+resistance, which varies $3 : 1$ around it, along $\xi$ into the far side's
+warped coordinate, a shear of about $4$ per stencil radius at every $h$, and
+Gaussians on that coordinate put a floor under the ring's line,
+$\sci{3.3}{-6}$ at $80{,}000$ nodes against $\sci{2.3}{-7}$ with level zero
+alone. Level zero has the full seed's flux and derivative at the anchor, so
+\eqref{eq:gaussrhs} is unchanged. And for an anchor inside a smooth ring,
+where $\alpha_e$ is a twentieth of the pieces' or less, the warp compresses
+the neighbours by that factor, so $\varepsilon$ is taken from the nodes'
+spacing in the warped coordinates instead of the physical one.
+
+% TRACE: stiff 3.11 ("the Gaussians on rows anchored in an edge", E4.12):
+% the warp's slope 1 over the anchor's side only on its piece; the
+% resistivity tail (1.5/delta) e^{-2z} several delta out; alpha_e/alpha_piece
+% 0.2-0.4 on the rows of 4.8's delta = 0.001 outlier; the probe keeps
+% falling, stability fails; the anchor's share -w_e/sum|w_j| 0.08-0.13
+% against plain's 0.25-0.27; plain Gaussians' wrong-sign anchor weights at
+% delta = 0.0025; PIECE_TOL = 0.05, alpha_piece the delta = 0 band's alpha;
+% both blocks on one march, the larger share kept (seeds.diagonal_share,
+% Appendix B's eq. 93 with its sign; seeds.gaussian_choice); at delta = 0
+% the warp bit for bit (all 4.10, scratch one-offs, notes only). The
+% off-ring sentence: stiff 5.2's decision (Brad on #41, 2026-09-23), its
+% words ("helps on the flat band where it fires and is mixed on case 2,
+% where the row-by-row choice at near-ties can do worse than either uniform
+% choice"); LITERATURE.md 1b O5 (a methodological remark, no claim).
+\para{Rows anchored in an edge}
+The warp's slope $\alpha_e / \alpha$ is $1$ across the anchor's side of the
+stencil only where the anchor sits on its piece. The resistivity tail of a
+smooth ring reaches several $\delta$ out, and an anchor in it has $\alpha_e$
+below its piece's value, so the warp squeezes the anchor's own side, by
+$0.2$ to $0.4$ on the rows concerned. Their consistency is not the problem,
+since the truncation error on those rows keeps falling; their stability
+is: the anchor's share of such a row, $-w_e / \sum_{j \ne e} |w_j|$, is
+$0.08$ to $0.13$, against $0.25$ to $0.27$ with plain Gaussians. Plain
+Gaussians fail the other way where the edge is nearly resolved: some of
+those rows then get an anchor weight of the wrong sign. So on a ring a row whose
+anchor is off its piece, $|\ln (\alpha_e / \alpha_{\mathrm{piece}})| > 0.05$
+with $\alpha_{\mathrm{piece}}$ the jump's value there, is solved with both
+Gaussian blocks on its one march and keeps the weights with the larger
+diagonal share, the diagonal dominance of \cite[App.~B]{Martin2016} with
+its sign; a row on its piece keeps the warp, and at $\delta = 0$ every
+anchor is on its piece. Off the ring the rule helps on the flat band where
+it fires and is mixed on case 2, where the row-by-row choice at near-ties
+can do worse than either uniform choice, so it stays the ring's safeguard.
 
 % ===========================================================================
 \section{Two-dimensional results}
