@@ -159,7 +159,9 @@ is parabolic; the headline 2-D figures are elliptic and parabolic both.
   and a row anchored there, where the warp squeezes the anchor's side and
   weakens the row's diagonal, keeps whichever Gaussians give the stronger
   diagonal. That rule is on for a ring only; off the ring it is an ablation
-  line and E4.10 decides.
+  line and E4.10 decides. *Decided by E4.10 (#41; stiff note §5.2): it stays
+  the ring's, since off the ring the row-by-row choice at near-ties does
+  worse than either uniform choice.*
 
 ### 3.4 The standing alternatives to measure against
 
