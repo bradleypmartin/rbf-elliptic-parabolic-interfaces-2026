@@ -1,0 +1,71 @@
+% =====================================================================
+% references.bib: bibliography for the manuscript (epic E5, #7).
+%
+% HOUSE RULE (CLAUDE.md, from the companion manuscript): no unverified
+% citation ships. Every entry carries, in the comment block directly above
+% it, a dated "VERIFIED YYYY-MM-DD" note naming the primary source fetched
+% for it (a Crossref or arXiv record, a zbMATH or archive.org record, the
+% paper's own PDF). Fields no fetch confirmed are left out and the comment
+% says so. The literature pass (E5.2, #43) writes those notes and logs its
+% queries in LITERATURE.md; make_arxiv.py refuses to package while any
+% entry lacks one or still carries TODO(verify).
+%
+% E5.1 (#42) seeded only the 2016-2017 sources and the companion preprint.
+% The other references of the stiff note (sections 1.10 and 3.9) enter
+% through E5.2's re-verification, as section 1.10 there says.
+%
+% Citation keys are stable once a section draft cites them.
+% =====================================================================
+
+% ---------------------------------------------------------------------
+% Own work: the construction ported here, and its wave-equation companion
+% ---------------------------------------------------------------------
+
+% TODO(verify, #43): against the PDF in papers/ (title page) and the
+% ProQuest record of papers/README.md, which was not fetched.
+@phdthesis{Martin2016,
+  author = {Martin, Bradley P.},
+  title  = {Application of {RBF-FD} to Wave and Heat Transport Problems in
+            Domains with Interfaces},
+  school = {University of Colorado Boulder},
+  year   = {2016},
+  note   = {ProQuest 10151046},
+}
+
+% TODO(verify, #43): the Crossref record of the DOI; the fields are those of
+% papers/README.md (E0.2, #9).
+@article{MartinFornberg2017heat,
+  author  = {Martin, Bradley and Fornberg, Bengt},
+  title   = {Using radial basis function-generated finite differences
+             ({RBF-FD}) to solve heat transfer equilibrium problems in
+             domains with interfaces},
+  journal = {Engineering Analysis with Boundary Elements},
+  volume  = {79},
+  pages   = {38--48},
+  year    = {2017},
+  doi     = {10.1016/j.enganabound.2017.03.005},
+}
+
+% TODO(verify, #43): the Crossref record of the DOI. The wave-equation paper
+% of the same construction (dissertation ch. 2-3).
+@article{MartinFornberg2017,
+  author  = {Martin, Bradley and Fornberg, Bengt},
+  title   = {Seismic modeling with radial basis function-generated finite
+             differences ({RBF-FD}) -- a simplified treatment of interfaces},
+  journal = {Journal of Computational Physics},
+  volume  = {335},
+  pages   = {828--845},
+  year    = {2017},
+  doi     = {10.1016/j.jcp.2017.01.065},
+}
+
+% TODO(verify, #43): the arXiv record, once announced; packaged 2026-09-20,
+% not yet submitted (stiff note 1.10). Cited as the preprint, never as the
+% companion repository's files (plan D2).
+@misc{Martin2026seeds,
+  author = {Martin, Bradley P.},
+  title  = {Seed stencils: high-order finite differences and {RBF-FD}
+            through material edges too steep for the grid},
+  year   = {2026},
+  note   = {arXiv preprint},
+}

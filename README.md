@@ -47,6 +47,7 @@ uv sync                                    # Python 3.13 venv with numpy / scipy
 uv run pytest                              # tests
 ./papers/fetch_papers.sh                   # verify the reference PDFs (gitignored; see papers/README.md)
 uv run python scripts/publish_issues.py    # dry run of the tickets in docs/plan.md
+(cd paper && SOURCE_DATE_EPOCH=0 tectonic main.tex)   # the manuscript; see paper/README.md
 ```
 
 Drivers in `scripts/` write figures and cached references to `outputs/`

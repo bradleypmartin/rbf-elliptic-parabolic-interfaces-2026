@@ -83,7 +83,8 @@ uv run ruff check . && uv run ruff format .
 uv run python scripts/publish_issues.py   # dry run of the tickets in docs/plan.md
 uv run python scripts/<driver>.py         # figures into outputs/ (defaults run in seconds;
                                           # sweeps sit behind flags and cache under outputs/)
-(cd paper && tectonic main.tex)           # the manuscript, once E5.1 exists
+(cd paper && SOURCE_DATE_EPOCH=0 tectonic main.tex)   # the manuscript, byte-stable
+(cd paper && uv run python make_arxiv.py)             # arXiv tarball; refuses drafts
 ```
 
 ## Conventions
@@ -112,15 +113,19 @@ uv run python scripts/<driver>.py         # figures into outputs/ (defaults run 
   manuscript quotes the notes and never becomes a second source of truth;
   every number in `main.tex` carries a `% TRACE` comment; figures and tables
   come from committed scripts, never hand-edited.
-- Manuscript: after any edit under `paper/`, rebuild with tectonic, look at
-  the changed pages with `pdftoppm`, commit `main.pdf` with the source.
+- Manuscript: after any edit under `paper/`, rebuild with tectonic
+  (`SOURCE_DATE_EPOCH=0`, so an unchanged source rebuilds byte for byte), look
+  at the changed pages with `pdftoppm`, commit `main.pdf` with the source.
   `\date` fixed by hand. Novelty wording only from `LITERATURE.md` §6.
+  `paper/README.md` has the build, the packaging gates and the ticket map.
 
 ## Hard constraints
 
-- **This repo is PUBLIC (MIT; `paper/` CC BY 4.0).** Never commit PDFs,
-  credentials, or anything from FullContact / Ziff Davis systems. Content is
-  Brad's own academic work plus public papers.
+- **This repo is PUBLIC (MIT; `paper/` CC BY 4.0).** Never commit
+  PDFs, credentials, or anything from FullContact / Ziff Davis systems. The
+  one exception is `paper/main.pdf`, the built manuscript, which *is*
+  committed with every change under `paper/`. Content is Brad's own academic
+  work plus public papers.
 - `papers/*.pdf` and `outputs/` are gitignored on purpose; don't un-ignore.
 - Cite, don't claim: no statement of novelty outside what `LITERATURE.md`
   §6 allows once E5.2 exists; no unverified citation ships.
