@@ -1,0 +1,1760 @@
+{
+ "schema": 2,
+ "driver": "heat2d_stiff_eigenvalues",
+ "date": "2026-09-24T12:56:19Z",
+ "git": {
+  "sha": "ab76241732ef032305dfb5ffbafe78068c2e087a",
+  "dirty": false
+ },
+ "argv": ["--mode", "rows", "--n", "10000", "--data-dir", "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data"],
+ "args": {
+  "mode": "rows",
+  "n": 10000,
+  "ratios": [8.0, 1.0, 0.125, 0.015625, 0.0],
+  "deltas": [0.0, 0.04, 0.01, 0.005, 0.0025],
+  "labels": ["naive", "direct", "construction", "seeds", "seeds-plain"],
+  "spectrum_n": 1600,
+  "figure_delta": 0.005,
+  "seed": 0,
+  "iterations": 100,
+  "rtol": 1e-08,
+  "maxiter": 3000,
+  "neighbours": 37,
+  "sweeps": 3,
+  "outputs": "outputs",
+  "data_dir": "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data"
+ },
+ "timings": {
+  "rows": 0.17270020800060593,
+  "total": 0.17356737500085728
+ },
+ "tables": {
+  "rows": [
+   {
+    "ratio": 8.0,
+    "label": "naive",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 0.605777290998958,
+    "rows": 1134,
+    "nnz": 146.51783893985728,
+    "all-least": 0.0639011847364204,
+    "all-median": 0.21333143754322997,
+    "all-below1": 1.0,
+    "least": 0.09847470729204588,
+    "median": 0.22528859754127017,
+    "below1": 1.0,
+    "direct": 1.1351802499848418,
+    "residual": 5.671430862555678e-15,
+    "error": 5.003783446239898e-08,
+    "cond": 171522.71130950967,
+    "appendix-b-build": 3.0476438750047237,
+    "b-all-least": 0.01943569089256344,
+    "b-all-median": 0.1821742091282586,
+    "b-all-below1": 1.0,
+    "b-least": 0.06698660271158854,
+    "b-median": 0.180700312490682,
+    "b-below1": 1.0,
+    "spilu-build": 1.1041841249680147,
+    "gmres/none": {
+     "iterations": 223,
+     "seconds": 0.4260767920059152,
+     "info": 0,
+     "residual": 9.5231917143859e-09,
+     "distance": 4.826793188611433e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 202,
+     "seconds": 0.6267900830134749,
+     "info": 0,
+     "residual": 1.7487431002910506e-08,
+     "distance": 3.009029814691154e-07
+    },
+    "gmres/spilu": {
+     "iterations": 4,
+     "seconds": 0.02226083300774917,
+     "info": 0,
+     "residual": 3.766573130454906e-10,
+     "distance": 2.4742876195289283e-10
+    },
+    "bicgstab/none": {
+     "iterations": 200,
+     "seconds": 0.36230254103429615,
+     "info": 0,
+     "residual": 6.186781103491222e-09,
+     "distance": 3.3639549469903547e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 148,
+     "seconds": 0.6691430420032702,
+     "info": 0,
+     "residual": 3.6605679341328962e-09,
+     "distance": 1.337610454618077e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.019155125017277896,
+     "info": 0,
+     "residual": 1.0685021476702088e-09,
+     "distance": 1.9680854958425602e-09
+    }
+   },
+   {
+    "ratio": 8.0,
+    "label": "direct",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 0.46472929196897894,
+    "rows": 1134,
+    "nnz": 41.11213047910296,
+    "all-least": 0.40251759491166855,
+    "all-median": 0.6068260457987694,
+    "all-below1": 1.0,
+    "least": 0.4984322749087543,
+    "median": 0.6196846990079458,
+    "below1": 1.0,
+    "direct": 0.5653993749874644,
+    "residual": 1.236162730489594e-14,
+    "error": 2.275054436743776e-07,
+    "cond": 38097.50824243613,
+    "appendix-b-build": 1.2261653330060653,
+    "b-all-least": 0.7875117138634835,
+    "b-all-median": 0.904293315762714,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.8296970393196329,
+    "b-median": 0.9091689386434256,
+    "b-below1": 1.0,
+    "spilu-build": 0.28650262497831136,
+    "gmres/none": {
+     "iterations": 212,
+     "seconds": 0.24561866698786616,
+     "info": 0,
+     "residual": 8.60510206671076e-09,
+     "distance": 1.1346619934201772e-07
+    },
+    "gmres/appendix-b": {
+     "iterations": 112,
+     "seconds": 0.15681320801377296,
+     "info": 0,
+     "residual": 1.3679896497948621e-08,
+     "distance": 2.0142414187865846e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.00888691598083824,
+     "info": 0,
+     "residual": 4.5490459798495713e-10,
+     "distance": 3.1475419418962997e-10
+    },
+    "bicgstab/none": {
+     "iterations": 192,
+     "seconds": 0.07605633302591741,
+     "info": 0,
+     "residual": 8.058505294075732e-10,
+     "distance": 8.9906073772376e-08
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 67,
+     "seconds": 0.11375687504187226,
+     "info": 0,
+     "residual": 1.056853057822574e-08,
+     "distance": 4.495009566892902e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.0055868750205263495,
+     "info": 0,
+     "residual": 4.602893366534978e-09,
+     "distance": 1.1328743559633815e-08
+    }
+   },
+   {
+    "ratio": 8.0,
+    "label": "construction",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 2.450726750015747,
+    "rows": 1134,
+    "nnz": 39.69928644240571,
+    "all-least": 0.21100103221922628,
+    "all-median": 0.6078444038210258,
+    "all-below1": 1.0,
+    "least": 0.21100103221922628,
+    "median": 0.6757908376249893,
+    "below1": 1.0,
+    "direct": 0.5579016249976121,
+    "residual": 1.2927391860296684e-14,
+    "error": 0.023589187689338025,
+    "cond": 58495.54303296864,
+    "appendix-b-build": 1.2181902920128778,
+    "b-all-least": 0.3409849653688713,
+    "b-all-median": 0.9011225177298159,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.3409849653688713,
+    "b-median": 0.531712507267914,
+    "b-below1": 1.0,
+    "spilu-build": 0.27832233399385586,
+    "gmres/none": {
+     "iterations": 394,
+     "seconds": 0.8144275409867987,
+     "info": 0,
+     "residual": 9.793726146303352e-09,
+     "distance": 5.545222759197558e-07
+    },
+    "gmres/appendix-b": {
+     "iterations": 130,
+     "seconds": 0.21601562498835847,
+     "info": 0,
+     "residual": 1.2605494164439509e-08,
+     "distance": 2.3331149430321478e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.008161915990058333,
+     "info": 0,
+     "residual": 2.6832889758463386e-10,
+     "distance": 1.7990409396676643e-10
+    },
+    "bicgstab/none": {
+     "iterations": 293,
+     "seconds": 0.11415283399401233,
+     "info": 0,
+     "residual": 9.678067037709113e-09,
+     "distance": 6.896468557658514e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 76,
+     "seconds": 0.12846933299442753,
+     "info": 0,
+     "residual": 8.001958038347581e-09,
+     "distance": 7.694238507420529e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.005615292000584304,
+     "info": 0,
+     "residual": 4.187953724493949e-09,
+     "distance": 1.0099478752069673e-08
+    }
+   },
+   {
+    "ratio": 8.0,
+    "label": "seeds",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 58.00919841701398,
+    "rows": 10000,
+    "nnz": 29.7506625891947,
+    "all-least": 0.40382148758304237,
+    "all-median": 0.6907271645834357,
+    "all-below1": 1.0,
+    "least": 0.40382148758304237,
+    "median": 0.6907271645834357,
+    "below1": 1.0,
+    "direct": 0.46335183404153213,
+    "residual": 1.3016024587522887e-14,
+    "error": 1.240250365985711e-07,
+    "cond": 32010.09212279146,
+    "appendix-b-build": 1.02520725002978,
+    "b-all-least": 0.8608163309776797,
+    "b-all-median": 0.924518075274665,
+    "b-all-below1": 0.9438328236493374,
+    "b-least": 0.8608163309776797,
+    "b-median": 0.924518075274665,
+    "b-below1": 0.9438328236493374,
+    "spilu-build": 0.19610637496225536,
+    "gmres/none": {
+     "iterations": 202,
+     "seconds": 0.23248129204148427,
+     "info": 0,
+     "residual": 8.942554233945311e-09,
+     "distance": 3.459400784907809e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 108,
+     "seconds": 0.14107220899313688,
+     "info": 0,
+     "residual": 1.163784576021455e-08,
+     "distance": 7.851297865365344e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.007832707953639328,
+     "info": 0,
+     "residual": 1.5081332047633624e-09,
+     "distance": 1.1923227757359713e-09
+    },
+    "bicgstab/none": {
+     "iterations": 181,
+     "seconds": 0.05034933297429234,
+     "info": 0,
+     "residual": 5.283179440431103e-09,
+     "distance": 1.3049395050329851e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 71,
+     "seconds": 0.10652587504591793,
+     "info": 0,
+     "residual": 8.788545690564395e-09,
+     "distance": 6.236268602051193e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 3,
+     "seconds": 0.006041874992661178,
+     "info": 0,
+     "residual": 2.4805234549109583e-10,
+     "distance": 1.2331088202255351e-09
+    }
+   },
+   {
+    "ratio": 8.0,
+    "label": "seeds-plain",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 57.90518608299317,
+    "rows": 10000,
+    "nnz": 29.7506625891947,
+    "all-least": 0.4033031227594829,
+    "all-median": 0.6899257001972332,
+    "all-below1": 1.0,
+    "least": 0.4033031227594829,
+    "median": 0.6899257001972332,
+    "below1": 1.0,
+    "direct": 0.4743052090052515,
+    "residual": 1.29876025179159e-14,
+    "error": 8.444288981496766e-08,
+    "cond": 31517.3255109501,
+    "appendix-b-build": 0.9982671250472777,
+    "b-all-least": 0.8789684733497358,
+    "b-all-median": 0.9247431241867929,
+    "b-all-below1": 0.9438328236493374,
+    "b-least": 0.8789684733497358,
+    "b-median": 0.9247431241867929,
+    "b-below1": 0.9438328236493374,
+    "spilu-build": 0.20128675003070384,
+    "gmres/none": {
+     "iterations": 202,
+     "seconds": 0.23461933300131932,
+     "info": 0,
+     "residual": 8.753660812036277e-09,
+     "distance": 5.855133875074093e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 90,
+     "seconds": 0.10172945796512067,
+     "info": 0,
+     "residual": 1.1087900422037042e-08,
+     "distance": 7.447023306178601e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.006707958003971726,
+     "info": 0,
+     "residual": 1.6242783085943048e-09,
+     "distance": 1.2222153613399961e-09
+    },
+    "bicgstab/none": {
+     "iterations": 184,
+     "seconds": 0.05240991699974984,
+     "info": 0,
+     "residual": 1.2261571418919477e-09,
+     "distance": 6.118796980299483e-08
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 61,
+     "seconds": 0.08587366598658264,
+     "info": 0,
+     "residual": 1.152869571872533e-08,
+     "distance": 7.703214651828107e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 3,
+     "seconds": 0.005304457969032228,
+     "info": 0,
+     "residual": 2.8141264912569525e-10,
+     "distance": 1.3899651550071087e-09
+    }
+   },
+   {
+    "ratio": 1.0,
+    "label": "naive",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 0.6044286250253208,
+    "rows": 1134,
+    "nnz": 146.51783893985728,
+    "all-least": 0.06391965442188512,
+    "all-median": 0.21283710403153439,
+    "all-below1": 1.0,
+    "least": 0.09902286162252721,
+    "median": 0.21995517501412332,
+    "below1": 1.0,
+    "direct": 1.1778969999868423,
+    "residual": 5.8585971838768e-15,
+    "error": 8.434628651128323e-05,
+    "cond": 161071.3675717578,
+    "appendix-b-build": 3.2030328750261106,
+    "b-all-least": 0.019435701115453723,
+    "b-all-median": 0.1818132539156529,
+    "b-all-below1": 1.0,
+    "b-least": 0.05752329207656447,
+    "b-median": 0.17924481073252077,
+    "b-below1": 1.0,
+    "spilu-build": 1.1548147500143386,
+    "gmres/none": {
+     "iterations": 401,
+     "seconds": 1.1083076250506565,
+     "info": 0,
+     "residual": 9.938363941329895e-09,
+     "distance": 5.930626047461984e-07
+    },
+    "gmres/appendix-b": {
+     "iterations": 222,
+     "seconds": 0.7281955420039594,
+     "info": 0,
+     "residual": 2.0687018499620026e-08,
+     "distance": 3.7900484484807087e-07
+    },
+    "gmres/spilu": {
+     "iterations": 4,
+     "seconds": 0.022434042009990662,
+     "info": 0,
+     "residual": 4.0455497875048823e-10,
+     "distance": 4.12504351129552e-10
+    },
+    "bicgstab/none": {
+     "iterations": 266,
+     "seconds": 0.47539425001014024,
+     "info": 0,
+     "residual": 5.17543619862786e-09,
+     "distance": 1.1468688678309228e-06
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 167,
+     "seconds": 0.7529983330168761,
+     "info": 0,
+     "residual": 8.803013589571743e-09,
+     "distance": 1.4280080992825187e-06
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.020370999991428107,
+     "info": 0,
+     "residual": 7.242230202071797e-10,
+     "distance": 7.570198139583206e-10
+    }
+   },
+   {
+    "ratio": 1.0,
+    "label": "direct",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 0.5055677500204183,
+    "rows": 1134,
+    "nnz": 41.11213047910296,
+    "all-least": 0.4030924363089774,
+    "all-median": 0.6063352306700681,
+    "all-below1": 1.0,
+    "least": 0.5048217944974818,
+    "median": 0.614875130125051,
+    "below1": 1.0,
+    "direct": 0.580870000005234,
+    "residual": 1.3474895919217394e-14,
+    "error": 0.00039318914799594504,
+    "cond": 44016.51220483561,
+    "appendix-b-build": 1.291625042038504,
+    "b-all-least": 0.7944078821021482,
+    "b-all-median": 0.9027596897939024,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.8080979140881458,
+    "b-median": 0.8974733329955135,
+    "b-below1": 1.0,
+    "spilu-build": 0.2902741249999963,
+    "gmres/none": {
+     "iterations": 390,
+     "seconds": 0.8157992920023389,
+     "info": 0,
+     "residual": 9.853409517196303e-09,
+     "distance": 6.082665672811213e-07
+    },
+    "gmres/appendix-b": {
+     "iterations": 121,
+     "seconds": 0.19487549999030307,
+     "info": 0,
+     "residual": 1.2930474011628562e-08,
+     "distance": 1.491883363894873e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.008736583986319602,
+     "info": 0,
+     "residual": 2.9431763349625775e-10,
+     "distance": 3.9387868920591126e-10
+    },
+    "bicgstab/none": {
+     "iterations": 287,
+     "seconds": 0.12627608398906887,
+     "info": 0,
+     "residual": 9.76357801450925e-09,
+     "distance": 9.745044742453485e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 82,
+     "seconds": 0.13791195902740583,
+     "info": 0,
+     "residual": 4.843079142427338e-09,
+     "distance": 3.7822724612503194e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.0065612500184215605,
+     "info": 0,
+     "residual": 5.551690998187998e-09,
+     "distance": 7.523802016773489e-09
+    }
+   },
+   {
+    "ratio": 1.0,
+    "label": "construction",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 2.407600791018922,
+    "rows": 1134,
+    "nnz": 39.69928644240571,
+    "all-least": 0.21100103221922628,
+    "all-median": 0.6078423814642978,
+    "all-below1": 1.0,
+    "least": 0.21100103221922628,
+    "median": 0.6757908376249893,
+    "below1": 1.0,
+    "direct": 0.556570874992758,
+    "residual": 1.1920882486110387e-14,
+    "error": 0.0020505805124251134,
+    "cond": 73082.95911381647,
+    "appendix-b-build": 1.2021011660108343,
+    "b-all-least": 0.3404995634808664,
+    "b-all-median": 0.9011911645293365,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.3404995634808664,
+    "b-median": 0.5318606107412973,
+    "b-below1": 1.0,
+    "spilu-build": 0.262589999998454,
+    "gmres/none": {
+     "iterations": 406,
+     "seconds": 0.841635667020455,
+     "info": 0,
+     "residual": 9.575952546022009e-09,
+     "distance": 3.615988837146103e-07
+    },
+    "gmres/appendix-b": {
+     "iterations": 140,
+     "seconds": 0.2054449170245789,
+     "info": 0,
+     "residual": 1.2683844755665314e-08,
+     "distance": 2.1870019002034334e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.008649416966363788,
+     "info": 0,
+     "residual": 5.565878256257639e-10,
+     "distance": 4.210913787043837e-10
+    },
+    "bicgstab/none": {
+     "iterations": 270,
+     "seconds": 0.10076295799808577,
+     "info": 0,
+     "residual": 9.217212754996773e-09,
+     "distance": 2.2048067104330545e-06
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 91,
+     "seconds": 0.152256750036031,
+     "info": 0,
+     "residual": 4.909912876739825e-09,
+     "distance": 4.361393811600932e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.006779332994483411,
+     "info": 0,
+     "residual": 4.46921207831469e-09,
+     "distance": 1.6947499126205e-08
+    }
+   },
+   {
+    "ratio": 1.0,
+    "label": "seeds",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 39.06581166700926,
+    "rows": 6414,
+    "nnz": 33.623649337410804,
+    "all-least": 0.3780392222686764,
+    "all-median": 0.6678171034473437,
+    "all-below1": 1.0,
+    "least": 0.3780392222686764,
+    "median": 0.6896823025151753,
+    "below1": 1.0,
+    "direct": 0.4617890830268152,
+    "residual": 1.4729031649897196e-14,
+    "error": 1.5935583983936061e-07,
+    "cond": 39658.640161484436,
+    "appendix-b-build": 1.1439769169664942,
+    "b-all-least": 0.7149983343720487,
+    "b-all-median": 0.9169483995977685,
+    "b-all-below1": 0.9450560652395514,
+    "b-least": 0.7149983343720487,
+    "b-median": 0.922366343389081,
+    "b-below1": 0.9561639499920873,
+    "spilu-build": 0.21641929098404944,
+    "gmres/none": {
+     "iterations": 227,
+     "seconds": 0.2905263749998994,
+     "info": 0,
+     "residual": 9.565750605493147e-09,
+     "distance": 4.015899932035605e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 118,
+     "seconds": 0.1564260830054991,
+     "info": 0,
+     "residual": 1.323895057815763e-08,
+     "distance": 3.433385284564622e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.007206541020423174,
+     "info": 0,
+     "residual": 1.13581182316609e-09,
+     "distance": 1.3978135651426423e-09
+    },
+    "bicgstab/none": {
+     "iterations": 201,
+     "seconds": 0.07213658298132941,
+     "info": 0,
+     "residual": 3.4759040341599465e-10,
+     "distance": 2.828733929621725e-08
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 77,
+     "seconds": 0.11750129103893414,
+     "info": 0,
+     "residual": 4.597025394527208e-09,
+     "distance": 1.0345678854506707e-06
+    },
+    "bicgstab/spilu": {
+     "iterations": 3,
+     "seconds": 0.011492500023450702,
+     "info": 0,
+     "residual": 1.432678887968412e-10,
+     "distance": 4.945949085866503e-10
+    }
+   },
+   {
+    "ratio": 1.0,
+    "label": "seeds-plain",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 38.74582295899745,
+    "rows": 6414,
+    "nnz": 33.623649337410804,
+    "all-least": 0.4030924363090238,
+    "all-median": 0.6672436421643904,
+    "all-below1": 1.0,
+    "least": 0.4030924363090238,
+    "median": 0.6885769062641474,
+    "below1": 1.0,
+    "direct": 0.4780890829861164,
+    "residual": 1.3114017475837389e-14,
+    "error": 7.859245212479935e-08,
+    "cond": 38108.94375924817,
+    "appendix-b-build": 1.1459904999937862,
+    "b-all-least": 0.8420752166095878,
+    "b-all-median": 0.9183398877230554,
+    "b-all-below1": 0.9450560652395514,
+    "b-least": 0.8492963040049605,
+    "b-median": 0.9229999852798926,
+    "b-below1": 0.9561639499920873,
+    "spilu-build": 0.22377558395965025,
+    "gmres/none": {
+     "iterations": 228,
+     "seconds": 0.27710416598711163,
+     "info": 0,
+     "residual": 9.271473118372263e-09,
+     "distance": 3.6749831307934656e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 113,
+     "seconds": 0.15195312502328306,
+     "info": 0,
+     "residual": 8.348912292757547e-09,
+     "distance": 1.5385228985030118e-06
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.008592500002123415,
+     "info": 0,
+     "residual": 1.3369924604761714e-09,
+     "distance": 2.121227358375767e-09
+    },
+    "bicgstab/none": {
+     "iterations": 201,
+     "seconds": 0.06606412504334003,
+     "info": 0,
+     "residual": 4.5885055035234305e-09,
+     "distance": 3.0139407007706133e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 65,
+     "seconds": 0.10519929201109335,
+     "info": 0,
+     "residual": 1.1967180202083627e-08,
+     "distance": 1.0597112930667138e-06
+    },
+    "bicgstab/spilu": {
+     "iterations": 3,
+     "seconds": 0.005844000028446317,
+     "info": 0,
+     "residual": 1.9406712762889902e-10,
+     "distance": 1.1773848274301946e-09
+    }
+   },
+   {
+    "ratio": 0.125,
+    "label": "naive",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 0.5886140830116346,
+    "rows": 1134,
+    "nnz": 146.51783893985728,
+    "all-least": 0.0639196544218852,
+    "all-median": 0.21166134650017693,
+    "all-below1": 1.0,
+    "least": 0.10615433497653225,
+    "median": 0.20905931398801952,
+    "below1": 1.0,
+    "direct": 1.2126532080001198,
+    "residual": 6.082209440325767e-15,
+    "error": 0.0011848418530646294,
+    "cond": 143156.16778891362,
+    "appendix-b-build": 3.1369548329967074,
+    "b-all-least": 0.019435701115453723,
+    "b-all-median": 0.18011977450182753,
+    "b-all-below1": 1.0,
+    "b-least": 0.06088196061855397,
+    "b-median": 0.1673130197498002,
+    "b-below1": 1.0,
+    "spilu-build": 1.1537353340536356,
+    "gmres/none": {
+     "iterations": 468,
+     "seconds": 1.4909012919524685,
+     "info": 0,
+     "residual": 9.6630978445345e-09,
+     "distance": 3.545903875387045e-07
+    },
+    "gmres/appendix-b": {
+     "iterations": 239,
+     "seconds": 0.7982444170047529,
+     "info": 0,
+     "residual": 1.9899456033229147e-08,
+     "distance": 4.2148278734080634e-07
+    },
+    "gmres/spilu": {
+     "iterations": 4,
+     "seconds": 0.023103749961592257,
+     "info": 0,
+     "residual": 2.8958280534008655e-10,
+     "distance": 2.6684815197050267e-10
+    },
+    "bicgstab/none": {
+     "iterations": 315,
+     "seconds": 0.5826621660380624,
+     "info": 0,
+     "residual": 9.966707790984953e-09,
+     "distance": 1.1304812504483339e-06
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 189,
+     "seconds": 0.8501998329884373,
+     "info": 0,
+     "residual": 9.20855130725946e-09,
+     "distance": 1.0493655641841218e-06
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.014736832992639393,
+     "info": 0,
+     "residual": 2.2238267704153977e-10,
+     "distance": 4.5259134220418245e-10
+    }
+   },
+   {
+    "ratio": 0.125,
+    "label": "direct",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 0.4888540409738198,
+    "rows": 1134,
+    "nnz": 41.11213047910296,
+    "all-least": 0.4030924363089775,
+    "all-median": 0.6068069487219677,
+    "all-below1": 1.0,
+    "least": 0.5073608471393397,
+    "median": 0.6198404335776542,
+    "below1": 1.0,
+    "direct": 0.5615724579547532,
+    "residual": 1.1538163812174189e-14,
+    "error": 0.035682858361924426,
+    "cond": 129199.85097344103,
+    "appendix-b-build": 1.254276583029423,
+    "b-all-least": 0.7889123469260249,
+    "b-all-median": 0.904390751576381,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.8336101681217076,
+    "b-median": 0.9093029148530765,
+    "b-below1": 1.0,
+    "spilu-build": 0.2862345829489641,
+    "gmres/none": {
+     "iterations": 342,
+     "seconds": 0.6146496669971384,
+     "info": 0,
+     "residual": 9.99931476151342e-09,
+     "distance": 5.739450463335937e-06
+    },
+    "gmres/appendix-b": {
+     "iterations": 141,
+     "seconds": 0.208234874997288,
+     "info": 0,
+     "residual": 1.3540567673618517e-08,
+     "distance": 1.2215308406077099e-06
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.009632957982830703,
+     "info": 0,
+     "residual": 1.8055297560353275e-09,
+     "distance": 3.2825371632821074e-09
+    },
+    "bicgstab/none": {
+     "iterations": 236,
+     "seconds": 0.09555454202927649,
+     "info": 0,
+     "residual": 6.403168332101982e-09,
+     "distance": 4.2438667839053415e-06
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 95,
+     "seconds": 0.16676116600865498,
+     "info": 0,
+     "residual": 9.23320913762958e-09,
+     "distance": 4.2081339116285494e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 3,
+     "seconds": 0.006616624945309013,
+     "info": 0,
+     "residual": 2.1335151142267626e-10,
+     "distance": 5.511232588582692e-10
+    }
+   },
+   {
+    "ratio": 0.125,
+    "label": "construction",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 2.48368208296597,
+    "rows": 1134,
+    "nnz": 39.69928644240571,
+    "all-least": 0.21100103221922628,
+    "all-median": 0.6078507094553941,
+    "all-below1": 1.0,
+    "least": 0.21100103221922628,
+    "median": 0.6757908376249893,
+    "below1": 1.0,
+    "direct": 0.5415904590045102,
+    "residual": 1.2238691759086375e-14,
+    "error": 0.0003387619334423239,
+    "cond": 72338.26894044895,
+    "appendix-b-build": 1.2479202919639647,
+    "b-all-least": 0.34046734531900813,
+    "b-all-median": 0.9011919288028898,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.34046734531900813,
+    "b-median": 0.5318199872559068,
+    "b-below1": 1.0,
+    "spilu-build": 0.2583945000078529,
+    "gmres/none": {
+     "iterations": 238,
+     "seconds": 0.3433382920338772,
+     "info": 0,
+     "residual": 8.716179775870261e-09,
+     "distance": 3.294500340750315e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 139,
+     "seconds": 0.2035152080352418,
+     "info": 0,
+     "residual": 1.366967318370696e-08,
+     "distance": 2.158550911907904e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.008279750007204711,
+     "info": 0,
+     "residual": 5.500995576272298e-10,
+     "distance": 4.160562026724097e-10
+    },
+    "bicgstab/none": {
+     "iterations": 211,
+     "seconds": 0.07909691700479016,
+     "info": 0,
+     "residual": 8.611913270523356e-09,
+     "distance": 6.947242433931294e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 106,
+     "seconds": 0.18308074999367818,
+     "info": 0,
+     "residual": 4.858954419830739e-09,
+     "distance": 3.618824406404417e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.006208334001712501,
+     "info": 0,
+     "residual": 4.643930107246878e-09,
+     "distance": 1.7608618601622776e-08
+    }
+   },
+   {
+    "ratio": 0.125,
+    "label": "seeds",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 15.56614745798288,
+    "rows": 2198,
+    "nnz": 38.15677879714577,
+    "all-least": 0.2518328379798264,
+    "all-median": 0.6130630074979604,
+    "all-below1": 1.0,
+    "least": 0.2518328379798264,
+    "median": 0.6786664418776124,
+    "below1": 1.0,
+    "direct": 0.5394347910187207,
+    "residual": 9.560233700684838e-15,
+    "error": 1.0577989536607948e-07,
+    "cond": 69922.35652034899,
+    "appendix-b-build": 1.2531305000302382,
+    "b-all-least": 0.3908520279943737,
+    "b-all-median": 0.9032082444893659,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.3908520279943737,
+    "b-median": 0.8611914488446519,
+    "b-below1": 1.0,
+    "spilu-build": 0.25660312501713634,
+    "gmres/none": {
+     "iterations": 237,
+     "seconds": 0.30448004096979275,
+     "info": 0,
+     "residual": 8.850786439657008e-09,
+     "distance": 4.488118877225076e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 131,
+     "seconds": 0.18906974996207282,
+     "info": 0,
+     "residual": 1.461553207852451e-08,
+     "distance": 2.5508272480433276e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.009917000017594546,
+     "info": 0,
+     "residual": 1.2730124548220972e-09,
+     "distance": 7.005825365944965e-10
+    },
+    "bicgstab/none": {
+     "iterations": 211,
+     "seconds": 0.07826420798664913,
+     "info": 0,
+     "residual": 7.220620144155847e-09,
+     "distance": 3.3009398249489923e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 87,
+     "seconds": 0.1392657909891568,
+     "info": 0,
+     "residual": 5.008779589667767e-09,
+     "distance": 4.026940364424653e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 3,
+     "seconds": 0.006972624978516251,
+     "info": 0,
+     "residual": 5.602771389059293e-10,
+     "distance": 8.836750167657963e-10
+    }
+   },
+   {
+    "ratio": 0.125,
+    "label": "seeds-plain",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 15.797001124999952,
+    "rows": 2198,
+    "nnz": 38.15677879714577,
+    "all-least": 0.18358433094098997,
+    "all-median": 0.61147661223847,
+    "all-below1": 1.0,
+    "least": 0.18358433094098997,
+    "median": 0.6732123997828985,
+    "below1": 1.0,
+    "direct": 0.5690932919969782,
+    "residual": 9.280237812831732e-15,
+    "error": 7.08697159225814e-07,
+    "cond": 64777.083124622615,
+    "appendix-b-build": 1.2397974170162342,
+    "b-all-least": 0.2547990903151448,
+    "b-all-median": 0.9028994042557421,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.2547990903151448,
+    "b-median": 0.8043848889698175,
+    "b-below1": 1.0,
+    "spilu-build": 0.26883037498919293,
+    "gmres/none": {
+     "iterations": 242,
+     "seconds": 0.3315932090044953,
+     "info": 0,
+     "residual": 9.755686865775181e-09,
+     "distance": 9.882089446973824e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 144,
+     "seconds": 0.22184583300258964,
+     "info": 0,
+     "residual": 1.2612691688185491e-08,
+     "distance": 3.4116182383069295e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.01796554197790101,
+     "info": 0,
+     "residual": 5.731051542151619e-10,
+     "distance": 3.7288324668412586e-10
+    },
+    "bicgstab/none": {
+     "iterations": 210,
+     "seconds": 0.08792149997316301,
+     "info": 0,
+     "residual": 4.960133885618402e-09,
+     "distance": 4.048675774602837e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 104,
+     "seconds": 0.17302774998825043,
+     "info": 0,
+     "residual": 4.048561969578782e-09,
+     "distance": 6.635407255825417e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.006011250021401793,
+     "info": 0,
+     "residual": 7.764020337207658e-09,
+     "distance": 1.0234145132772907e-08
+    }
+   },
+   {
+    "ratio": 0.015625,
+    "label": "naive",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 0.5855801250436343,
+    "rows": 1134,
+    "nnz": 146.51783893985728,
+    "all-least": 0.0639196544218852,
+    "all-median": 0.2116618919785479,
+    "all-below1": 1.0,
+    "least": 0.10610739825962014,
+    "median": 0.20898951405788774,
+    "below1": 1.0,
+    "direct": 1.1548649999895133,
+    "residual": 6.045530214133002e-15,
+    "error": 0.0012609740334632712,
+    "cond": 150037.98513708788,
+    "appendix-b-build": 3.1360399579862133,
+    "b-all-least": 0.019435701115453723,
+    "b-all-median": 0.18009696012295606,
+    "b-all-below1": 1.0,
+    "b-least": 0.06088991503857592,
+    "b-median": 0.16728341345095257,
+    "b-below1": 1.0,
+    "spilu-build": 1.161939833953511,
+    "gmres/none": {
+     "iterations": 468,
+     "seconds": 1.5273572499863803,
+     "info": 0,
+     "residual": 9.700538721348826e-09,
+     "distance": 3.5617945000410734e-07
+    },
+    "gmres/appendix-b": {
+     "iterations": 239,
+     "seconds": 0.8284470000071451,
+     "info": 0,
+     "residual": 1.9931549797545237e-08,
+     "distance": 4.218788463937609e-07
+    },
+    "gmres/spilu": {
+     "iterations": 4,
+     "seconds": 0.029304749972652644,
+     "info": 0,
+     "residual": 2.800016914838879e-10,
+     "distance": 2.5912670943103275e-10
+    },
+    "bicgstab/none": {
+     "iterations": 407,
+     "seconds": 0.7409608340240084,
+     "info": 0,
+     "residual": 6.4186219140568556e-09,
+     "distance": 5.629928388116921e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 175,
+     "seconds": 0.7643881249823608,
+     "info": 0,
+     "residual": 1.4771736147316531e-08,
+     "distance": 7.855658661760868e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.021397917007561773,
+     "info": 0,
+     "residual": 2.1512223847811666e-10,
+     "distance": 4.405825829500767e-10
+    }
+   },
+   {
+    "ratio": 0.015625,
+    "label": "direct",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 0.49311199999647215,
+    "rows": 1134,
+    "nnz": 41.11213047910296,
+    "all-least": 0.4030924363089775,
+    "all-median": 0.6068069487037644,
+    "all-below1": 1.0,
+    "least": 0.5073608471393402,
+    "median": 0.6198404335776544,
+    "below1": 1.0,
+    "direct": 0.5843023749766871,
+    "residual": 1.147088540679626e-14,
+    "error": 0.03620622757196634,
+    "cond": 126271.57918099017,
+    "appendix-b-build": 1.2658977920073085,
+    "b-all-least": 0.7888528817226548,
+    "b-all-median": 0.9044138167354663,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.8333936369455439,
+    "b-median": 0.9094120215930062,
+    "b-below1": 1.0,
+    "spilu-build": 0.3142030829912983,
+    "gmres/none": {
+     "iterations": 259,
+     "seconds": 0.38861125003313646,
+     "info": 0,
+     "residual": 9.992226947892494e-09,
+     "distance": 1.6057716279214849e-06
+    },
+    "gmres/appendix-b": {
+     "iterations": 140,
+     "seconds": 0.2115947080310434,
+     "info": 0,
+     "residual": 1.533505525427505e-08,
+     "distance": 1.1017013225179743e-06
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.00856016599573195,
+     "info": 0,
+     "residual": 1.8645159701764907e-09,
+     "distance": 3.195112443454521e-09
+    },
+    "bicgstab/none": {
+     "iterations": 212,
+     "seconds": 0.09720441699028015,
+     "info": 0,
+     "residual": 4.230715695951515e-09,
+     "distance": 1.019279250554978e-06
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 85,
+     "seconds": 0.16617870796471834,
+     "info": 0,
+     "residual": 1.0265608085517136e-08,
+     "distance": 1.9393604462786e-06
+    },
+    "bicgstab/spilu": {
+     "iterations": 3,
+     "seconds": 0.008819583046715707,
+     "info": 0,
+     "residual": 2.3736489536927626e-10,
+     "distance": 5.319263720239723e-10
+    }
+   },
+   {
+    "ratio": 0.015625,
+    "label": "construction",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 2.555278666957747,
+    "rows": 1134,
+    "nnz": 39.69928644240571,
+    "all-least": 0.21100103221922628,
+    "all-median": 0.6078507094553941,
+    "all-below1": 1.0,
+    "least": 0.21100103221922628,
+    "median": 0.6757908376249893,
+    "below1": 1.0,
+    "direct": 0.5948369579855353,
+    "residual": 1.2218356082305774e-14,
+    "error": 4.271050242318151e-05,
+    "cond": 74912.94476433948,
+    "appendix-b-build": 1.2863067080033943,
+    "b-all-least": 0.34046734531900813,
+    "b-all-median": 0.9011919288028898,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.34046734531900813,
+    "b-median": 0.5318199872559068,
+    "b-below1": 1.0,
+    "spilu-build": 0.2810293330112472,
+    "gmres/none": {
+     "iterations": 238,
+     "seconds": 0.3304443340166472,
+     "info": 0,
+     "residual": 8.716179172090939e-09,
+     "distance": 3.2945002547455574e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 139,
+     "seconds": 0.2146407500258647,
+     "info": 0,
+     "residual": 1.3669672743253978e-08,
+     "distance": 2.1585507884006164e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.012589542020577937,
+     "info": 0,
+     "residual": 5.50098414119725e-10,
+     "distance": 4.1605682647195764e-10
+    },
+    "bicgstab/none": {
+     "iterations": 211,
+     "seconds": 0.09245445800479501,
+     "info": 0,
+     "residual": 9.863379899236457e-09,
+     "distance": 8.003332733040455e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 90,
+     "seconds": 0.16423483297694474,
+     "info": 0,
+     "residual": 5.2521068103561166e-09,
+     "distance": 1.023219055436244e-06
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.005990750039927661,
+     "info": 0,
+     "residual": 4.643930121742062e-09,
+     "distance": 1.7608620288463218e-08
+    }
+   },
+   {
+    "ratio": 0.015625,
+    "label": "seeds",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 10.603807291015983,
+    "rows": 1134,
+    "nnz": 39.69928644240571,
+    "all-least": 0.21516851743030352,
+    "all-median": 0.6078235298071908,
+    "all-below1": 1.0,
+    "least": 0.21516851743030352,
+    "median": 0.675760525336613,
+    "below1": 1.0,
+    "direct": 0.6106192920124158,
+    "residual": 1.2792165203245907e-14,
+    "error": 1.4393728659118456e-07,
+    "cond": 72638.44097341284,
+    "appendix-b-build": 1.2691582920379005,
+    "b-all-least": 0.35109171220911617,
+    "b-all-median": 0.9011828057422897,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.35109171220911617,
+    "b-median": 0.5396835358230998,
+    "b-below1": 1.0,
+    "spilu-build": 0.29272408300312236,
+    "gmres/none": {
+     "iterations": 237,
+     "seconds": 0.3264222080470063,
+     "info": 0,
+     "residual": 9.987815373983264e-09,
+     "distance": 3.519748829184183e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 138,
+     "seconds": 0.2343369169975631,
+     "info": 0,
+     "residual": 1.3553965700640756e-08,
+     "distance": 2.2208236609648144e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.00982600002316758,
+     "info": 0,
+     "residual": 5.435591935073512e-10,
+     "distance": 3.658639340307015e-10
+    },
+    "bicgstab/none": {
+     "iterations": 209,
+     "seconds": 0.0954347500228323,
+     "info": 0,
+     "residual": 7.441565080972791e-09,
+     "distance": 8.024989919488276e-08
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 90,
+     "seconds": 0.1550248329876922,
+     "info": 0,
+     "residual": 1.3210178630652496e-08,
+     "distance": 5.886288266826625e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.005587207968346775,
+     "info": 0,
+     "residual": 5.1269847642028825e-09,
+     "distance": 1.7474430072358666e-08
+    }
+   },
+   {
+    "ratio": 0.015625,
+    "label": "seeds-plain",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 10.798810249951202,
+    "rows": 1134,
+    "nnz": 39.69928644240571,
+    "all-least": 0.16071350612305252,
+    "all-median": 0.6064630888272861,
+    "all-below1": 1.0,
+    "least": 0.16071350612305252,
+    "median": 0.6608571471629083,
+    "below1": 1.0,
+    "direct": 0.581330084009096,
+    "residual": 1.2512985662160711e-14,
+    "error": 4.038915459245998e-07,
+    "cond": 90896.61776338959,
+    "appendix-b-build": 1.318635625008028,
+    "b-all-least": 0.21750442567224904,
+    "b-all-median": 0.9009263125456994,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.21750442567224904,
+    "b-median": 0.37058238263953125,
+    "b-below1": 1.0,
+    "spilu-build": 0.2889980000327341,
+    "gmres/none": {
+     "iterations": 279,
+     "seconds": 0.45085274998564273,
+     "info": 0,
+     "residual": 9.852047768093293e-09,
+     "distance": 8.615574944605219e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 172,
+     "seconds": 0.2983345829998143,
+     "info": 0,
+     "residual": 1.9118095144322175e-08,
+     "distance": 2.3752703578174706e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.008947416034061462,
+     "info": 0,
+     "residual": 7.766089977767734e-10,
+     "distance": 5.684407272129159e-10
+    },
+    "bicgstab/none": {
+     "iterations": 253,
+     "seconds": 0.09776495798723772,
+     "info": 0,
+     "residual": 2.2565768488804527e-09,
+     "distance": 1.0742164618918558e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 131,
+     "seconds": 0.24617674999171868,
+     "info": 0,
+     "residual": 3.2326793589263695e-08,
+     "distance": 2.2025024242079838e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.00570012500975281,
+     "info": 0,
+     "residual": 6.00140815783319e-09,
+     "distance": 9.87452560895356e-09
+    }
+   },
+   {
+    "ratio": 0.0,
+    "label": "naive",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 0.6225364159909077,
+    "rows": 1134,
+    "nnz": 146.51783893985728,
+    "all-least": 0.0639196544218852,
+    "all-median": 0.2116618919785479,
+    "all-below1": 1.0,
+    "least": 0.10610739825962014,
+    "median": 0.20898951405788774,
+    "below1": 1.0,
+    "direct": 1.2132003750302829,
+    "residual": 6.045530214133002e-15,
+    "error": 0.001276753724625269,
+    "cond": 143182.3427587559,
+    "appendix-b-build": 3.3348674590233713,
+    "b-all-least": 0.019435701115453723,
+    "b-all-median": 0.18009696012295606,
+    "b-all-below1": 1.0,
+    "b-least": 0.06088991503857592,
+    "b-median": 0.16728341345095257,
+    "b-below1": 1.0,
+    "spilu-build": 1.1453385839704424,
+    "gmres/none": {
+     "iterations": 468,
+     "seconds": 1.5663347499794327,
+     "info": 0,
+     "residual": 9.700538721348826e-09,
+     "distance": 3.5617945000410734e-07
+    },
+    "gmres/appendix-b": {
+     "iterations": 239,
+     "seconds": 0.8488587500178255,
+     "info": 0,
+     "residual": 1.9931549797545237e-08,
+     "distance": 4.218788463937609e-07
+    },
+    "gmres/spilu": {
+     "iterations": 4,
+     "seconds": 0.02446466695982963,
+     "info": 0,
+     "residual": 2.800016914838879e-10,
+     "distance": 2.5912670943103275e-10
+    },
+    "bicgstab/none": {
+     "iterations": 407,
+     "seconds": 0.773339958046563,
+     "info": 0,
+     "residual": 6.4186219140568556e-09,
+     "distance": 5.629928388116921e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 175,
+     "seconds": 0.8597020410234109,
+     "info": 0,
+     "residual": 1.4771736147316531e-08,
+     "distance": 7.855658661760868e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.016130333999171853,
+     "info": 0,
+     "residual": 2.1512223847811666e-10,
+     "distance": 4.405825829500767e-10
+    }
+   },
+   {
+    "ratio": 0.0,
+    "label": "direct",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 0.5060654999688268,
+    "rows": 1134,
+    "nnz": 41.11213047910296,
+    "all-least": 0.4030924363089775,
+    "all-median": 0.6068069487037644,
+    "all-below1": 1.0,
+    "least": 0.5073608471393402,
+    "median": 0.6198404335776544,
+    "below1": 1.0,
+    "direct": 0.5979724579956383,
+    "residual": 1.1497105292018844e-14,
+    "error": 0.03618907539131723,
+    "cond": 132612.68387795455,
+    "appendix-b-build": 1.2845046669826843,
+    "b-all-least": 0.7888528817226548,
+    "b-all-median": 0.9044138167354663,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.8333936369455439,
+    "b-median": 0.9094120215930062,
+    "b-below1": 1.0,
+    "spilu-build": 0.30415099998936057,
+    "gmres/none": {
+     "iterations": 259,
+     "seconds": 0.3933237079763785,
+     "info": 0,
+     "residual": 9.99222695199334e-09,
+     "distance": 1.6057716275198858e-06
+    },
+    "gmres/appendix-b": {
+     "iterations": 140,
+     "seconds": 0.2276222090004012,
+     "info": 0,
+     "residual": 1.5335055520539587e-08,
+     "distance": 1.1017013198080387e-06
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.018271500011906028,
+     "info": 0,
+     "residual": 1.8645159862904757e-09,
+     "distance": 3.195112605015822e-09
+    },
+    "bicgstab/none": {
+     "iterations": 213,
+     "seconds": 0.09065945900510997,
+     "info": 0,
+     "residual": 4.4357614182526146e-09,
+     "distance": 1.1142598814012187e-06
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 95,
+     "seconds": 0.16472433297894895,
+     "info": 0,
+     "residual": 7.31205442183815e-09,
+     "distance": 5.8342591255124e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 3,
+     "seconds": 0.0082456250092946,
+     "info": 0,
+     "residual": 2.373649089875269e-10,
+     "distance": 5.319258087637709e-10
+    }
+   },
+   {
+    "ratio": 0.0,
+    "label": "construction",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 2.5781692910240963,
+    "rows": 1134,
+    "nnz": 39.69928644240571,
+    "all-least": 0.21100103221922628,
+    "all-median": 0.6078507094553941,
+    "all-below1": 1.0,
+    "least": 0.21100103221922628,
+    "median": 0.6757908376249893,
+    "below1": 1.0,
+    "direct": 0.6047002910054289,
+    "residual": 1.2218356082305774e-14,
+    "error": 1.4528109277749475e-07,
+    "cond": 73295.63297902548,
+    "appendix-b-build": 1.2496743749943562,
+    "b-all-least": 0.34046734531900813,
+    "b-all-median": 0.9011919288028898,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.34046734531900813,
+    "b-median": 0.5318199872559068,
+    "b-below1": 1.0,
+    "spilu-build": 0.2965287920087576,
+    "gmres/none": {
+     "iterations": 238,
+     "seconds": 0.32134883297840133,
+     "info": 0,
+     "residual": 8.716179172090939e-09,
+     "distance": 3.2945002547455574e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 139,
+     "seconds": 0.2143084579729475,
+     "info": 0,
+     "residual": 1.3669672743253978e-08,
+     "distance": 2.1585507884006164e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.009423417039215565,
+     "info": 0,
+     "residual": 5.50098414119725e-10,
+     "distance": 4.1605682647195764e-10
+    },
+    "bicgstab/none": {
+     "iterations": 211,
+     "seconds": 0.09037620801245794,
+     "info": 0,
+     "residual": 9.863379899236457e-09,
+     "distance": 8.003332733040455e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 90,
+     "seconds": 0.16892562503926456,
+     "info": 0,
+     "residual": 5.2521068103561166e-09,
+     "distance": 1.023219055436244e-06
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.005999874963890761,
+     "info": 0,
+     "residual": 4.643930121742062e-09,
+     "distance": 1.7608620288463218e-08
+    }
+   },
+   {
+    "ratio": 0.0,
+    "label": "seeds",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 3.7259544159751385,
+    "rows": 1134,
+    "nnz": 39.69928644240571,
+    "all-least": 0.21100103221927333,
+    "all-median": 0.6078507094553941,
+    "all-below1": 1.0,
+    "least": 0.21100103221927333,
+    "median": 0.6757908376270916,
+    "below1": 1.0,
+    "direct": 0.5833011670038104,
+    "residual": 1.216218315275516e-14,
+    "error": 1.452810919158457e-07,
+    "cond": 68152.47621128011,
+    "appendix-b-build": 1.265725624980405,
+    "b-all-least": 0.3404673453189797,
+    "b-all-median": 0.9011919288028898,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.3404673453189797,
+    "b-median": 0.5318199872564512,
+    "b-below1": 1.0,
+    "spilu-build": 0.27507579198572785,
+    "gmres/none": {
+     "iterations": 238,
+     "seconds": 0.3190653750207275,
+     "info": 0,
+     "residual": 8.716177607836157e-09,
+     "distance": 3.2944997997358185e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 139,
+     "seconds": 0.21362200001021847,
+     "info": 0,
+     "residual": 1.3669673057432757e-08,
+     "distance": 2.1585509584949982e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.008333542034961283,
+     "info": 0,
+     "residual": 5.500989299703012e-10,
+     "distance": 4.160572536697408e-10
+    },
+    "bicgstab/none": {
+     "iterations": 213,
+     "seconds": 0.09207879099994898,
+     "info": 0,
+     "residual": 1.1846017524995948e-09,
+     "distance": 6.865876240380041e-08
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 103,
+     "seconds": 0.18327054200926796,
+     "info": 0,
+     "residual": 1.2722979878783138e-08,
+     "distance": 2.7462104531984444e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.005797582969535142,
+     "info": 0,
+     "residual": 4.643930090336226e-09,
+     "distance": 1.7608616970566584e-08
+    }
+   },
+   {
+    "ratio": 0.0,
+    "label": "seeds-plain",
+    "n": 10000,
+    "h": 0.010526315789473684,
+    "build": 3.5465245420346037,
+    "rows": 1134,
+    "nnz": 39.69928644240571,
+    "all-least": 0.14745234369754673,
+    "all-median": 0.6065689826343392,
+    "all-below1": 1.0,
+    "least": 0.14745234369754673,
+    "median": 0.6612026850039088,
+    "below1": 1.0,
+    "direct": 0.5533950839890167,
+    "residual": 1.2876683048502633e-14,
+    "error": 5.179073093456004e-07,
+    "cond": 93785.21015034319,
+    "appendix-b-build": 1.243734834017232,
+    "b-all-least": 0.20653756648621086,
+    "b-all-median": 0.9009275103855681,
+    "b-all-below1": 0.9467889908256881,
+    "b-least": 0.20653756648621086,
+    "b-median": 0.3538107583255393,
+    "b-below1": 1.0,
+    "spilu-build": 0.2705385420122184,
+    "gmres/none": {
+     "iterations": 287,
+     "seconds": 0.43929929099977016,
+     "info": 0,
+     "residual": 8.820730116983522e-09,
+     "distance": 7.946425759438451e-08
+    },
+    "gmres/appendix-b": {
+     "iterations": 175,
+     "seconds": 0.30041750002419576,
+     "info": 0,
+     "residual": 2.15052052061456e-08,
+     "distance": 2.323917559126265e-07
+    },
+    "gmres/spilu": {
+     "iterations": 5,
+     "seconds": 0.008454040973447263,
+     "info": 0,
+     "residual": 6.753664786000883e-10,
+     "distance": 3.890824978979437e-10
+    },
+    "bicgstab/none": {
+     "iterations": 263,
+     "seconds": 0.10734016704373062,
+     "info": 0,
+     "residual": 4.618451258170517e-09,
+     "distance": 2.605380365146166e-07
+    },
+    "bicgstab/appendix-b": {
+     "iterations": 111,
+     "seconds": 0.18142958299722522,
+     "info": 0,
+     "residual": 4.682407454032505e-09,
+     "distance": 1.8785999810595033e-07
+    },
+    "bicgstab/spilu": {
+     "iterations": 2,
+     "seconds": 0.006721666024532169,
+     "info": 0,
+     "residual": 5.8133173933034e-09,
+     "distance": 1.3020008577489212e-08
+    }
+   }
+  ]
+ }
+}

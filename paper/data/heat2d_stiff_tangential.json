@@ -1,0 +1,259 @@
+{
+ "schema": 2,
+ "driver": "heat2d_stiff",
+ "date": "2026-09-24T12:56:15Z",
+ "git": {
+  "sha": "ab76241732ef032305dfb5ffbafe78068c2e087a",
+  "dirty": false
+ },
+ "argv": ["--mode", "tangential", "--counts", "1250", "2500", "5000", "10000", "20000", "40000", "--data-dir", "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data"],
+ "args": {
+  "mode": "tangential",
+  "deltas": [0.0, 0.04, 0.01, 0.005, 0.0025],
+  "growth": [0.0, 1.0],
+  "counts": [1250, 2500, 5000, 10000, 20000, 40000],
+  "t_end": 0.1,
+  "seed": 0,
+  "iterations": 100,
+  "spectrum_counts": [1250, 2500],
+  "stencil_n": 2500,
+  "operators": ["naive", "construction", "direct", "direct-reach", "seeds", "seeds-plain"],
+  "seed_reach": 20.0,
+  "amplitude": 0.0,
+  "inside": null,
+  "outputs": "outputs",
+  "data_dir": "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data",
+  "geometry": "case 1"
+ },
+ "timings": {
+  "tangential": 498.5000379999983,
+  "total": 498.50014545799786
+ },
+ "tables": {
+  "tangential": {
+   "circles": [
+    {
+     "n": 2500,
+     "h": 0.020833333333333332,
+     "rows": 1013,
+     "construction": 0.017680580421432106,
+     "seeds": 0.4855292919429387,
+     "tangential": 0.003811138287995414,
+     "ms": 10.544876629990725
+    },
+    {
+     "n": 5000,
+     "h": 0.014925373134328358,
+     "rows": 1505,
+     "construction": 0.005166025216025764,
+     "seeds": 0.384457493077994,
+     "tangential": 0.0010368800280768121,
+     "ms": 10.326677968081023
+    },
+    {
+     "n": 10000,
+     "h": 0.010526315789473684,
+     "rows": 2136,
+     "construction": 0.0018984480605351392,
+     "seeds": 0.2941219891632197,
+     "tangential": 0.0002591919312041418,
+     "ms": 10.32744193912975
+    },
+    {
+     "n": 20000,
+     "h": 0.007462686567164179,
+     "rows": 3030,
+     "construction": 0.0006213443451051081,
+     "seeds": 0.254712258869174,
+     "tangential": 9.466211774799322e-05,
+     "ms": 10.138269013213936
+    },
+    {
+     "n": 40000,
+     "h": 0.005263157894736842,
+     "rows": 4291,
+     "construction": 0.00021392578430852889,
+     "seeds": 0.2392459283896111,
+     "tangential": 3.324709845694635e-05,
+     "ms": 10.144739791916768
+    }
+   ],
+   "span": [
+    {
+     "n": 1250,
+     "h": 0.029411764705882353,
+     "stencils": 408,
+     "median": 0.20215371761076306,
+     "max": 0.7887776414863013
+    },
+    {
+     "n": 2500,
+     "h": 0.020833333333333332,
+     "stencils": 576,
+     "median": 0.14438076922879683,
+     "max": 0.6048838261784392
+    },
+    {
+     "n": 5000,
+     "h": 0.014925373134328358,
+     "stencils": 796,
+     "median": 0.11074635577036004,
+     "max": 0.5422781183095674
+    },
+    {
+     "n": 10000,
+     "h": 0.010526315789473684,
+     "stencils": 1139,
+     "median": 0.07867951009553165,
+     "max": 0.39175870747334635
+    },
+    {
+     "n": 20000,
+     "h": 0.007462686567164179,
+     "stencils": 1607,
+     "median": 0.05558623888388672,
+     "max": 0.27623958623850847
+    },
+    {
+     "n": 40000,
+     "h": 0.005263157894736842,
+     "stencils": 2277,
+     "median": 0.03859444910022475,
+     "max": 0.19626516145800743
+    }
+   ],
+   "spectra": [
+    {
+     "delta": 0.0,
+     "operator": "seeds",
+     "max_re": -7.176147805505025,
+     "min_re_h2": -12.702654242907675,
+     "max_im_h2": 0.15138950543645693,
+     "positive": 0
+    },
+    {
+     "delta": 0.0,
+     "operator": "tangential",
+     "max_re": -7.175816640023695,
+     "min_re_h2": -12.70265424983479,
+     "max_im_h2": 0.15374113678075052,
+     "positive": 0
+    },
+    {
+     "delta": 0.0,
+     "operator": "tangential-plain",
+     "max_re": -7.175446048497577,
+     "min_re_h2": -12.702654258596464,
+     "max_im_h2": 1.0556813452396616,
+     "positive": 0
+    },
+    {
+     "delta": 0.0,
+     "operator": "construction",
+     "max_re": -7.175637283890225,
+     "min_re_h2": -12.702654243503563,
+     "max_im_h2": 0.15164584973617803,
+     "positive": 0
+    },
+    {
+     "delta": 0.01,
+     "operator": "seeds",
+     "max_re": -7.283641740551041,
+     "min_re_h2": -12.70286208368661,
+     "max_im_h2": 0.15240331618451083,
+     "positive": 0
+    },
+    {
+     "delta": 0.01,
+     "operator": "tangential",
+     "max_re": -7.283038002808665,
+     "min_re_h2": -12.70286316850664,
+     "max_im_h2": 0.21231790251577565,
+     "positive": 0
+    },
+    {
+     "delta": 0.01,
+     "operator": "tangential-plain",
+     "max_re": -7.283027845414778,
+     "min_re_h2": -12.70286323357644,
+     "max_im_h2": 0.2375546902817866,
+     "positive": 0
+    },
+    {
+     "delta": 0.005,
+     "operator": "seeds",
+     "max_re": -7.228091794965085,
+     "min_re_h2": -12.70267152834328,
+     "max_im_h2": 0.15987196857794803,
+     "positive": 0
+    },
+    {
+     "delta": 0.005,
+     "operator": "tangential",
+     "max_re": -7.228811898161412,
+     "min_re_h2": -12.702672385428286,
+     "max_im_h2": 0.2134354608494482,
+     "positive": 0
+    },
+    {
+     "delta": 0.005,
+     "operator": "tangential-plain",
+     "max_re": -7.228407221417001,
+     "min_re_h2": -12.702671828811152,
+     "max_im_h2": 0.3749984553241867,
+     "positive": 0
+    },
+    {
+     "delta": 0.0025,
+     "operator": "seeds",
+     "max_re": -7.2019442258661,
+     "min_re_h2": -12.702656804471427,
+     "max_im_h2": 0.15308050001531823,
+     "positive": 0
+    },
+    {
+     "delta": 0.0025,
+     "operator": "tangential",
+     "max_re": -7.202166534025973,
+     "min_re_h2": -12.702656847922043,
+     "max_im_h2": 0.15298814213074585,
+     "positive": 0
+    },
+    {
+     "delta": 0.0025,
+     "operator": "tangential-plain",
+     "max_re": -7.201256865090165,
+     "min_re_h2": -12.702656848224585,
+     "max_im_h2": 0.39020247451343915,
+     "positive": 0
+    }
+   ],
+   "timing": [
+    {
+     "delta": 0.0,
+     "rows": 400,
+     "flat_ms": 3.84793749981327,
+     "tangential_ms": 15.287436999642523
+    },
+    {
+     "delta": 0.01,
+     "rows": 400,
+     "flat_ms": 8.74189600290265,
+     "tangential_ms": 22.59804150162381
+    },
+    {
+     "delta": 0.005,
+     "rows": 400,
+     "flat_ms": 8.74377099898993,
+     "tangential_ms": 26.067562499520136
+    },
+    {
+     "delta": 0.0025,
+     "rows": 400,
+     "flat_ms": 9.608104504877701,
+     "tangential_ms": 25.376478999532992
+    }
+   ]
+  }
+ }
+}

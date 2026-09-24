@@ -1,0 +1,118 @@
+{
+ "schema": 2,
+ "driver": "heat2d_stiff",
+ "date": "2026-09-24T12:47:51Z",
+ "git": {
+  "sha": "ab76241732ef032305dfb5ffbafe78068c2e087a",
+  "dirty": false
+ },
+ "argv": ["--mode", "references", "--amplitude", "0.02", "--data-dir", "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data"],
+ "args": {
+  "mode": "references",
+  "deltas": [0.0, 0.01, 0.005, 0.0025],
+  "growth": [0.0, 1.0],
+  "counts": [1250, 2500, 5000, 10000],
+  "t_end": 0.1,
+  "seed": 0,
+  "iterations": 100,
+  "spectrum_counts": [1250, 2500],
+  "stencil_n": 2500,
+  "operators": ["naive", "construction", "direct", "direct-reach", "seeds", "seeds-plain"],
+  "seed_reach": 20.0,
+  "amplitude": 0.02,
+  "inside": null,
+  "outputs": "outputs",
+  "data_dir": "/Users/bradmartin/rbf-elliptic-parabolic-interfaces-2026/paper/data",
+  "geometry": "case 2"
+ },
+ "timings": {
+  "references": 62.68740020800033,
+  "total": 62.687455999999656
+ },
+ "tables": {
+  "references": [
+   {
+    "delta": 0.0,
+    "growth": 0.0,
+    "elements": 10,
+    "unknowns": 10290,
+    "seconds": 0.7981149589977576,
+    "n_x": 9.914291609902648e-14,
+    "elements_check": 2.9024005421263155e-13,
+    "distance": 0.0,
+    "e26_rms": 4.32392358190112e-09,
+    "e26_max": 3.455821018238936e-08
+   },
+   {
+    "delta": 0.01,
+    "growth": 0.0,
+    "elements": 21,
+    "unknowns": 21609,
+    "seconds": 1.6609001249962603,
+    "n_x": 5.278000259067994e-13,
+    "elements_check": 2.2676860389481135e-12,
+    "distance": 0.025107310915013448
+   },
+   {
+    "delta": 0.005,
+    "growth": 0.0,
+    "elements": 21,
+    "unknowns": 21609,
+    "seconds": 1.647067457997764,
+    "n_x": 1.7600365609382607e-12,
+    "elements_check": 3.162359263342296e-12,
+    "distance": 0.014508192277430665
+   },
+   {
+    "delta": 0.0025,
+    "growth": 0.0,
+    "elements": 23,
+    "unknowns": 23667,
+    "seconds": 1.7981149999977788,
+    "n_x": 5.440592421024348e-12,
+    "elements_check": 5.6117888114215475e-12,
+    "distance": 0.00773403715111165
+   },
+   {
+    "delta": 0.0,
+    "growth": 1.0,
+    "elements": 10,
+    "unknowns": 10290,
+    "seconds": 0.7903770420016372,
+    "n_x": 1.199040866595169e-13,
+    "elements_check": 5.686007220617739e-13,
+    "distance": 0.0
+   },
+   {
+    "delta": 0.01,
+    "growth": 1.0,
+    "elements": 21,
+    "unknowns": 21609,
+    "seconds": 1.6569778339980985,
+    "n_x": 1.2567724638756772e-12,
+    "elements_check": 2.156413936305057e-12,
+    "distance": 0.025786461818620432
+   },
+   {
+    "delta": 0.005,
+    "growth": 1.0,
+    "elements": 21,
+    "unknowns": 21609,
+    "seconds": 1.6649762500019278,
+    "n_x": 1.5026868638301494e-12,
+    "elements_check": 2.096378626248452e-12,
+    "distance": 0.014960995154752965
+   },
+   {
+    "delta": 0.0025,
+    "growth": 1.0,
+    "elements": 23,
+    "unknowns": 23667,
+    "seconds": 1.8164885000005597,
+    "n_x": 5.861422458508514e-12,
+    "elements_check": 6.594891299727124e-12,
+    "distance": 0.007986955122560424
+   }
+  ]
+ }
+}
