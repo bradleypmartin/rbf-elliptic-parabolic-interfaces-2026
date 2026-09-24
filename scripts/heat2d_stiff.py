@@ -2352,8 +2352,10 @@ def print_probe(
             for label in shown:
                 seeded, across = cells[(label, "seeded")], cells[(label, "crossing")]
                 line += f" {seeded[i]:<16} {across[i]:<16} |"
-            below = r[f"{seeds}/probe_bulk"]
-            ratio = r[f"{seeds}/probe_seeded"] / below if below else None
+            # Entries cached before E4.7 carry no probe (E4.6's to 160,000 at δ = 0).
+            below = r.get(f"{seeds}/probe_bulk")
+            above = r.get(f"{seeds}/probe_seeded")
+            ratio = above / below if below and above is not None else None
             cell = "       -" if ratio is None else f"{ratio:8.1f}"
             print(line + f" {bulk[i]:<16} {cell}")
 
