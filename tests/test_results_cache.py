@@ -15,6 +15,7 @@ from heat_interfaces.results_cache import (
     ResultsCache,
     changed_since,
     command,
+    dumps,
     finite,
     float_keys,
     git_state,
@@ -146,6 +147,22 @@ def test_git_state_names_this_checkout_and_nothing_outside_one(tmp_path):
     assert isinstance(state["sha"], str) and len(state["sha"]) == 40
     assert isinstance(state["dirty"], bool)
     assert git_state(tmp_path) == {"sha": None, "dirty": None}
+
+
+def test_dumps_is_json_with_the_scalar_lists_on_one_line():
+    obj = {
+        "argv": ["--mode", "naive"],
+        "rows": [{"n": 1, "e": [1.5, None]}, {"n": 2, "e": []}],
+        "curves": {"x": [0.1, 0.2, 0.3]},
+        "empty": {},
+    }
+    text = dumps(obj)
+    assert json.loads(text) == obj
+    assert '"argv": ["--mode", "naive"]' in text
+    assert '"x": [0.1, 0.2, 0.3]' in text and '"e": [1.5, null]' in text
+    assert text.startswith('{\n "argv"') and '\n  {\n   "n": 1,' in text
+    with pytest.raises(ValueError):
+        dumps({"x": [float("nan")]})
 
 
 def test_command_drops_where_a_run_writes():

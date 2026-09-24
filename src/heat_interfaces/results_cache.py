@@ -269,9 +269,7 @@ class ResultsCache:
         replace the manuscript's tables in silence (E4.10, the /spar review).
         """
         payload = self.payload()
-        # A NaN or an infinity would be written as a token no strict parser
-        # reads; the number check must see it fail here instead.
-        text = json.dumps(payload, indent=1, allow_nan=False) + "\n"
+        text = dumps(payload) + "\n"
         written = []
         for path in paths:
             path = Path(path)
@@ -285,6 +283,24 @@ class ResultsCache:
             path.write_text(text)
             written.append(path)
         return written
+
+
+def dumps(obj: Any, level: int = 0) -> str:
+    """``json.dumps(obj, indent=1)``, but a list of scalars on one line.
+
+    The figures' arrays (thousands of numbers) and the command line read as
+    one line each, and the rows and tables keep one key per line. A NaN or an
+    infinity would be written as a token no strict parser reads: it raises
+    here instead (``allow_nan=False``), so the number check never sees one.
+    """
+    pad = " " * (level + 1)
+    if isinstance(obj, dict) and obj:
+        items = [f"{pad}{json.dumps(k)}: {dumps(v, level + 1)}" for k, v in obj.items()]
+        return "{\n" + ",\n".join(items) + "\n" + " " * level + "}"
+    if isinstance(obj, list) and any(isinstance(v, (dict, list)) for v in obj):
+        items = [pad + dumps(v, level + 1) for v in obj]
+        return "[\n" + ",\n".join(items) + "\n" + " " * level + "]"
+    return json.dumps(obj, allow_nan=False)
 
 
 def changed_args(path: Path, args: dict[str, Any]) -> list[str]:
