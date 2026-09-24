@@ -239,7 +239,7 @@ well, so seeding a resolved edge costs accuracy nothing. *E5.5 (#46)
 withdraws the first for diffusion. The jump weights solve the jump problem,
 whose solution lies O(δ) from the smooth one (0.71–0.75 δ relative at
 equilibrium and 0.27–0.29 δ on the ramp problem, §2.2's floor on the MATLAB
-medium), so they serve an edge whose δ is below the error wanted, not one
+medium over 50–1600 nodes and the three δ; 0.73–0.75 δ at 1600 alone), so they serve an edge whose δ is below the error wanted, not one
 below a fixed fraction of h: at h = 0.01 and δ = 1e-5 h the ramp problem's
 floor is 2.9e-8, eighteen times the seeds' 1.6e-9 at 200 nodes. The
 manuscript (§3.1) carries the march's own floor (§2.3) and no threshold in
