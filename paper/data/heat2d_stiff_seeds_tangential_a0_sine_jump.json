@@ -1,9 +1,9 @@
 {
  "schema": 2,
  "driver": "heat2d_stiff",
- "date": "2026-09-24T15:14:14Z",
+ "date": "2026-09-24T18:53:18Z",
  "git": {
-  "sha": "cd963bac92e703a1a660cc6bdb853b96e2818488",
+  "sha": "0b101d50362ce23e56be5d0a91ec2ab93b698536",
   "dirty": false
  },
  "argv": ["--mode", "seeds", "--inside", "sine", "--deltas", "0", "--operators", "naive", "construction", "seeds", "tangential", "tangential-plain", "--counts", "1250", "2500", "5000", "10000", "20000", "40000", "80000", "160000", "--data-dir", "paper/data"],
@@ -26,8 +26,8 @@
   "geometry": "flat lines, sine inside"
  },
  "timings": {
-  "seeds": 0.20814420800161315,
-  "total": 0.20870595800079172
+  "seeds": 0.2091962920021615,
+  "total": 0.2097427919943584
  },
  "tables_sha256": "8b9bb83033e6319fd6366f38ba4fdd10bcb57e086e80cd6dbde8c3fd179d83b2",
  "tables": {

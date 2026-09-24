@@ -1,9 +1,9 @@
 {
  "schema": 2,
  "driver": "heat2d_stiff",
- "date": "2026-09-24T15:22:30Z",
+ "date": "2026-09-24T19:01:32Z",
  "git": {
-  "sha": "cd963bac92e703a1a660cc6bdb853b96e2818488",
+  "sha": "0b101d50362ce23e56be5d0a91ec2ab93b698536",
   "dirty": false
  },
  "argv": ["--mode", "treatments", "--counts", "1250", "2500", "5000", "10000", "20000", "40000", "--data-dir", "paper/data"],
@@ -26,8 +26,8 @@
   "geometry": "case 1"
  },
  "timings": {
-  "treatments": 0.5265244170004735,
-  "total": 0.5302317500027129
+  "treatments": 0.5321207080050954,
+  "total": 0.5357844169993768
  },
  "tables_sha256": "a5b513b28e6cc58ff8e456af1d8a8ed1a839fd172f4b9728f2d85244d8782326",
  "tables": {
