@@ -1825,6 +1825,18 @@ constant α the solution is the monomial itself (`g_a = ηᵇ`, every lower
 level zero, by induction on the degree as in §1.2), which is E4.4's first
 check.
 
+*The seeds are again the profiles of solutions polynomial in time* (E5.7,
+#48: the 2-D form of §1.2's general `u_k`, the manuscript's Lemma 3.2).
+Where the chain holds exactly (α a function of η alone),
+
+    u_ab(ξ, η, t) = Σ_{i ≤ a/2, k ≤ b/2} c^a_i c^b_k (α_e t)^{i+k} φ_{a−2i, b−2k},
+    c^a_i = a! / (i! (a − 2i)!),
+
+solves `u_t = L u` with `u_ab(·, 0) = φ_ab`: `∂_t` lowers `i + k` by one, `L`
+sends `φ_{a−2i, b−2k}` to the chain's two lower seeds, and the 1-D identity
+`(i + 1) c^a_{i+1} = c^a_i (a − 2i)(a − 2i − 1)` matches the two in each index
+separately. The chain's algebra; no number.
+
 **Four seeds in closed form, and the one that is not a product.** The
 linear seeds are the 1-D ones stretched along the tangent: `φ₁₀ = ξ`
 through any edge (`ψ₁ ≡ 0` gives `g₁ ≡ 1`), `φ₀₁ = φ₁(η) = α_e ∫₀^η
@@ -3597,6 +3609,25 @@ noise. So a seed row costs 1.2–5× a translated one, and §3.3's estimate
 holds: every row of a 40,000-node set seeded at
 δ/h ≈ 8 is about two minutes of marches. The straddling-row batching of
 §3.3 is not needed at these costs and is not built.
+
+**The manuscript's seed figure** (E5.7, #48; `fig:seeds2d`, drawn by
+`scripts/paper_figures.py` from `stencils/seed_functions`, which `--mode
+stencils` now writes). One stencil of this set, anchored on the *second*
+straddling row below the band (`SEED_FIGURE_ROW = 1`, `(½ + √3/2) h = 1.37 h`
+below `y = 0.6`; the anchor at (0.5104, 0.5715), `h_s = 0.0606`), so that the
+edge is at `η = 0.47` and 7 of the 30 nodes lie across it. Along `ξ = 0` it
+stores α and the profiles of `φ₀₁`, `φ₀₂` and `φ₂₀`'s levels `g₂`, `g₀` on 401
+points at δ = 0, h/2 and h/10, and the warp at the nodes, to six figures. The
+row is chosen so that the anchor sits on its piece: `α_e` is 0.9966 at δ = h/2
+and 1.0000 at h/10 (0.905 at h/2 on the innermost row, H1's anchor), so the
+seeds compare across δ as marched, without §2.5's `(α₀/α_e)^⌈k/2⌉`, which has
+no single-factor form for `φ₂₀`. At δ = 0 the curves are the closed forms
+(slope 1 below the edge and `α_e/0.2 = 5` times the monomial's flux above it,
+`g₀ = 4 (η − η_c)₊²`; to 5e-15 in scratch, to the six stored figures in
+`tests/test_heat2d_stiff.py`) and `g₂ ≡ 1` exactly (the shift identity). At
+η = 1, `φ₀₁` is 3.12, 2.56 and 3.01 at δ = 0, h/2 and h/10: at h/2 the smooth
+edge's resistance deficit (§4.1; `c δ/h_s α_e = 0.55` in stencil units), at
+h/10 the jump's value approached.
 
 **H1 and the δ = 0 half of H2, ticked; H2's δ > 0 half is recorded;
 H3, ticked on case 1.** What E4.5 inherits:
@@ -5861,6 +5892,10 @@ belongs to and the documented run that writes it:
 | `heat2d_ring_convergence.png`, `heat2d_ring_conditioning.png`, `heat2d_ring_smooth.png` | §4.8, §4.10 | `heat2d_ring.py`, the documented command |
 | `heat2d_stiff_treatments.png`, `heat2d_stiff_treatments_a0.02_sine.png` | §4.9 | `--mode treatments`, both geometries |
 | `heat2d_stiff_snapshot.png` | §5.1 | `--mode snapshot` |
+
+The manuscript's seed figure (`paper/figures/heat2d_stiff_seed_functions.pdf`,
+E5.7) has no PNG here: `scripts/paper_figures.py` draws it from
+`stencils/seed_functions` alone (§4.3).
 
 Rerun from the caches on 2026-09-23, every figure committed before E4.10 but
 the knee (which gained the seed line) is byte-identical to its copy under
