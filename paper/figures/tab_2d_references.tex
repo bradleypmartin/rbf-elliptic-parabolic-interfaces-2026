@@ -2,7 +2,7 @@
 % finer: the largest difference from a finer reference (case 1: in y, at
 % c = 0 and c = 1; case 2: in x and in y, the larger over c); at delta = 0
 % the sup |v_delta - v_0| column is the distance to the analytic solution;
-% case 2's last line: RMS from E2.6's 160,000-node jump-aware run.
+% case 2's last line: RMS from a 160,000-node jump-aware run (port E2.6).
 \begin{tabular}{@{}l@{\hspace{7pt}}r@{\hspace{7pt}}r@{\hspace{7pt}}r@{\hspace{7pt}}r@{\hspace{7pt}}r@{\hspace{7pt}}r@{}}
 \toprule
  & \multicolumn{4}{c}{case 1: Chebyshev in $y$} & \multicolumn{2}{c}{case 2: Fourier $\times$ Chebyshev} \\
@@ -18,6 +18,6 @@ $\delta$ & finer, $c = 0$ & finer, $c = 1$ & $\sup |v_\delta - v_0|$ & $\div \de
 0.001 & $\sci{9.4}{-12}$ & $\sci{1.8}{-11}$ & $\sci{1.55}{-3}$ & 1.549 & -- & -- \\
 0.0005 & $\sci{2.1}{-11}$ & $\sci{2.4}{-11}$ & $\sci{7.89}{-4}$ & 1.578 & -- & -- \\
 \midrule
-\multicolumn{7}{l}{case 2, $\delta = 0$, vs.\ E2.6's run: $\sci{4.32}{-9}$} \\
+\multicolumn{7}{l}{case 2, $\delta = 0$, vs.\ a 160{,}000-node jump-aware run: $\sci{4.32}{-9}$} \\
 \bottomrule
 \end{tabular}

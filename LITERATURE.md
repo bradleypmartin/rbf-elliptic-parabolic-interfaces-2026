@@ -455,8 +455,9 @@ disc means at radii h/2 and h, and T0 with m = 1, 2:
 
 - none beats plain sampling by more than 1.75× in the RMS norm (in the max
   norm up to 3.1× on the coarsest sets, 1.55× from 5000 nodes on);
-- the radius-h means are 1.6–3.4× *worse* than sampling at the jump from
-  5000 nodes on;
+- the radius-h means are *worse* than sampling at the jump from 5000 nodes
+  on, the harmonic one 1.6–3.4× and the arithmetic one 1.3–3.0× (#49: this
+  had read 1.6–3.4× for both, the notes' figure before E5.3's number check);
 - the seeds' lead over the best of them grows from 2.3 to 4.7 orders over
   1250–40,000 nodes.
 

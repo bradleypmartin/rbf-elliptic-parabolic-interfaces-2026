@@ -431,12 +431,16 @@ def tab_2d_references(data: Any) -> str:
             )
         )
     e26 = next(r for r in curved if r["delta"] == 0.0 and "e26_rms" in r)
-    body += note(7, rf"case 2, $\delta = 0$, vs.\ E2.6's run: {sci(e26['e26_rms'])}")
+    body += note(
+        7,
+        rf"case 2, $\delta = 0$, vs.\ a 160{{,}}000-node jump-aware run:"
+        rf" {sci(e26['e26_rms'])}",
+    )
     comments = [
         "finer: the largest difference from a finer reference (case 1: in y, at",
         "c = 0 and c = 1; case 2: in x and in y, the larger over c); at delta = 0",
         "the sup |v_delta - v_0| column is the distance to the analytic solution;",
-        "case 2's last line: RMS from E2.6's 160,000-node jump-aware run.",
+        "case 2's last line: RMS from a 160,000-node jump-aware run (port E2.6).",
     ]
     return fragment(table, cols("l", "rrrrrr", "7pt"), head, body, comments)
 
@@ -504,7 +508,7 @@ def tab_2d_floor(data: Any) -> str:
     ]
     body = []
     for k, (d, rows) in enumerate(knee.items()):
-        title = "the jump (E2.4's line)" if d == 0 else rf"$\delta = {d:g}$"
+        title = "the jump: the jump-aware operator" if d == 0 else rf"$\delta = {d:g}$"
         body += group(6, title, rule=k > 0)
         for r in rows:
             body.append(
@@ -518,7 +522,7 @@ def tab_2d_floor(data: Any) -> str:
                 )
             )
     comments = [
-        "E2.3's warped rows reading the pieces as if delta were 0, equilibrium:",
+        "the jump-aware rows reading the pieces as if delta were 0, equilibrium:",
         "RMS over all nodes; floor: the two references' difference at the nodes;",
         "naive: the naive product's RMS on the same nodes.",
     ]
@@ -804,7 +808,7 @@ def tab_2d_curved(data: Any) -> str:
         (r["delta"], r["n"]): r for r in tables["flat"] if r["problem"] == "elliptic"
     }
     labels = ("naive", "construction", "seeds", "tangential", "tangential-plain")
-    names = ("naive", "constr.", "route (a)", "tangential", "tang., plain")
+    names = ("naive", "constr.", "frozen", "tangential", "tang., plain")
     head = [row(r"$\delta$", r"$h/\delta$", *names, r"$\div$ flat")]
     body = group(8, "case 2, equilibrium, RMS error at the finest count")
     for d, rows in lines.items():
@@ -834,7 +838,7 @@ def tab_2d_curved(data: Any) -> str:
             )
         )
     comments = [
-        "route (a): the flat seeds along the foot point's normal; tang. / flat:",
+        "frozen: the flat seeds along the foot point's normal; tang. / flat:",
         "the tangential chain over the flat seeds (case 1) at the same (delta, N).",
     ]
     return fragment(table, cols("l", "rrrrrrr", "5pt"), head, body, comments)
@@ -856,7 +860,12 @@ def tab_2d_curved_ratios(data: Any) -> str:
         return {d: [v[n] for n in counts] for d, v in out.items()}
 
     blocks = (
-        ("case 2: route (a) $\\div$ flat seeds", CURVED, "curved/seeds", "flat/seeds"),
+        (
+            "case 2: the frozen profile $\\div$ flat seeds",
+            CURVED,
+            "curved/seeds",
+            "flat/seeds",
+        ),
         (
             "case 2: tangential $\\div$ flat seeds",
             CURVED,
@@ -893,7 +902,9 @@ def tab_2d_curved_ratios(data: Any) -> str:
         ]
         body.append(row(delta_text(d), *(ratio(v) for v in values)))
     sweep = curved[0.0]
-    body += group(len(counts) + 1, "case 2, the jump: tangential $\\div$ E2.3", True)
+    body += group(
+        len(counts) + 1, "case 2, the jump: tangential $\\div$ jump-aware", True
+    )
     body.append(
         row(
             "jump",
@@ -912,8 +923,8 @@ def tab_2d_probe(data: Any) -> str:
     geometries = (("case 2", CURVED), ("A", SPLIT_A), ("B", SPLIT_B))
     lines = (
         ("tangential", "tangential"),
-        ("seeds", "route (a)"),
-        ("construction", "E2.3"),
+        ("seeds", "frozen"),
+        ("construction", "jump-aware"),
     )
     first = rows_by_delta(data.tables(CURVED)["sweep"]["elliptic"])[0.0]
     head = [
@@ -934,7 +945,7 @@ def tab_2d_probe(data: Any) -> str:
         for d, rows in sweep.items():
             for key, text in lines:
                 if key == "construction" and d > 0:
-                    continue  # E2.3 reads the smooth edge as a jump: not a probe
+                    continue  # it reads the smooth edge as a jump: not a probe
                 values = [r[f"{key}/probe_crossing"] for r in rows]
                 body.append(
                     row(
@@ -963,10 +974,10 @@ def tab_2d_circles(data: Any) -> str:
         row(
             "$N$",
             "rows",
-            "E2.3",
-            "route (a)",
+            "jump-aware",
+            "frozen",
             "tangential",
-            r"E2.3 $\div$ tang.",
+            r"jump-aware $\div$ tang.",
         )
     ]
     body = [
@@ -1010,13 +1021,13 @@ def tab_2d_ring(data: Any) -> str:
     head = [
         row(
             "",
-            rf"\multicolumn{{{len(counts)}}}{{c}}{{ratio to E2.3, $N$ =}}",
+            rf"\multicolumn{{{len(counts)}}}{{c}}{{ratio to jump-aware, $N$ =}}",
             r"\multicolumn{2}{c}{fit to 40{,}000}",
             "RMS at",
         ),
         rf"\cmidrule(lr){{2-{len(counts) + 1}}}"
         rf"\cmidrule(lr){{{len(counts) + 2}-{len(counts) + 3}}}",
-        row("$s$", *(count(n) for n in counts), "E2.3", "line", last),
+        row("$s$", *(count(n) for n in counts), "j.-aware", "line", last),
     ]
     width = len(counts) + 4
     body = []
@@ -1037,8 +1048,9 @@ def tab_2d_ring(data: Any) -> str:
                 )
             )
     comments = [
-        "RMS errors against E2.9's per-s references at delta = 0: the line over",
-        "E2.3's at each count, the two fits over 1250-40,000 nodes, and the line's",
+        "RMS errors against the port's per-s references at delta = 0: the line",
+        "over the jump-aware operator's at each count, the two fits over",
+        "1250-40,000 nodes, and the line's",
         "own RMS error at the finest count.",
     ]
     return fragment(table, cols("l", "r" * (width - 1), "6pt"), head, body, comments)
@@ -1053,10 +1065,12 @@ def tab_2d_ring_conditioning(data: Any) -> str:
             "",
             r"\multicolumn{2}{c}{worst residual}",
             r"\multicolumn{3}{c}{seeds: mean cond}",
-            r"\multicolumn{2}{c}{E2.3: mean cond}",
+            r"\multicolumn{2}{c}{jump-aware: mean cond}",
         ),
         r"\cmidrule(lr){2-3}\cmidrule(lr){4-6}\cmidrule(lr){7-8}",
-        row("$s$", "seeds", "E2.3", "block", "scaled", "system", "block", "system"),
+        row(
+            "$s$", "seeds", "jump-aware", "block", "scaled", "system", "block", "system"
+        ),
     ]
     body = [
         row(
@@ -1075,7 +1089,7 @@ def tab_2d_ring_conditioning(data: Any) -> str:
         f"N = {int(rows[0]['n'])}, delta = 0: the worst relative residual on the",
         "matched radial profile over every seeded row, and the mean 2-norm condition",
         "numbers of the seed block (raw, columns scaled), the seed stencil system,",
-        "E2.3's P block and its system.",
+        "the jump-aware operator's P block and its system.",
     ]
     return fragment(table, cols("l", "rrrrrrr", "6pt"), head, body, comments)
 
@@ -1108,7 +1122,7 @@ def tab_2d_ring_smooth(data: Any) -> str:
             out.append(fixed(fit(h, e)) if len(kept) > 1 else "--")
         return out
 
-    body = group(width, "the seeds (E4.12's rule), RMS error away from the ring")
+    body = group(width, "the seeds (the diagonal rule), RMS error away from the ring")
     for i, n in enumerate(counts):
         body.append(row(count(n), *far("seeds", i)))
     body.append(row(r"fit to 20{,}000", *fits("error-seeds", 20000)))
@@ -1127,7 +1141,7 @@ def tab_2d_ring_smooth(data: Any) -> str:
         body.append(row(count(n), *cells))
     body += group(width, f"the others at $N = {count(counts[-1])}$", rule=True)
     for label, text in (
-        ("construction", "E2.3"),
+        ("construction", "constr."),
         ("naive", "naive"),
         ("direct", "direct"),
     ):
@@ -1152,7 +1166,7 @@ def tab_2d_ring_smooth(data: Any) -> str:
         )
     comments = [
         "RMS error on the far field (the nodes away from the ring) against the",
-        "fine seed run at 160,000 nodes. The rule: E4.12's diagonal rule, warped",
+        "fine seed run at 160,000 nodes. The rule: the diagonal rule, warped",
         "or plain Gaussians per row; -- where no row takes plain ones (the rule",
         "is the warp there). vs. plain-built: the seeds against the fine run",
         "built with plain Gaussians; the note: the two fine runs' RMS difference.",

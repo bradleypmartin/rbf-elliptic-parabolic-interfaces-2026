@@ -969,7 +969,12 @@ def results_1d(f: Files, b: Book) -> None:
         rows["naive"]["at"] / snap["h"],
         "-1.5",
     )
-    b.eq(w, "naive's ‖e‖² beyond 2h, %", 100 * (1 - rows["naive"]["local"]), "84")
+    b.eq(
+        cited("stiff §2.5 snapshot", "§4.6", "§6.8"),
+        "naive's ‖e‖² beyond 2h, %",
+        100 * (1 - rows["naive"]["local"]),
+        "84",
+    )
     b.eq(
         w,
         "the construction's largest error, in h from the edge",
@@ -996,6 +1001,8 @@ TREATMENTS = {
     "case 1": "heat2d_stiff_treatments.json",
     "case 2": "heat2d_stiff_treatments_a0.02_sine.json",
 }
+NAIVE_SEEDS = ("heat2d_stiff_naive_seed1.json", "heat2d_stiff_naive_seed2.json")
+CURVED_WIDTHS = (0.0, 0.01, 0.005, 0.0025)
 COUNTS_40K = (1250, 2500, 5000, 10000, 20000, 40000)
 COUNTS_160K = (*COUNTS_40K, 80000, 160000)
 WIDTHS = (0.04, 0.01, 0.005, 0.0025)
@@ -1035,7 +1042,7 @@ def snapshot_2d(f: Files, b: Book) -> None:
         ("direct", "direct/rms", ("3.71e-2", "1.52e-1", "0.250", "0.790", "0.58")),
         ("seeds", "seeds/rms", ("3.33e-6", "2.27e-5", "0.259", "0.980", "0.12")),
     )
-    w = "stiff §5.1 snapshot"
+    w = cited("stiff §5.1 snapshot", "§6.8")
     swept = at(sweep(f, SEEDS, "parabolic", field["delta"]), field["n"])
     for label, rms, quoted in table:
         for column_, q in zip(
@@ -1093,7 +1100,7 @@ def snapshot_2d(f: Files, b: Book) -> None:
         "1",
     )
 
-    w = "stiff §5.3 (11)"
+    w = cited("stiff §5.3 (11)", "§6.8")
     b.eq(w, "h/δ", h / field["delta"], "8.3")
     b.eq(w, "naive RMS", rows["naive"]["rms"], "2.63e-3")
     b.eq(
@@ -1108,37 +1115,46 @@ def references_2d(f: Files, b: Book) -> None:
     """Statement (1): the references (§4.1, §4.6). Skipped: the ring's reference
     error (E2.9's runs, port notes §2.9) and the product grid's two seconds."""
     w = "stiff §5.3 (1)"
+    w6 = cited(w, "§6.1")
     flat = f("heat2d_stiff_references.json", "references")
     elliptic = [r for r in flat if r["growth"] == 0.0]
     # §4.1's table, the equilibrium references (growth 0); the parabolic ones
     # agree to 4e-13 … 2.4e-11.
     b.span(
-        w,
+        w6,
         "case 1's agreement with a finer reference",
         [r["agreement"] for r in elliptic],
         "7e-13",
         "2e-11",
     )
+    b.eq(
+        w6,
+        "case 1's parabolic references against a finer one, worst",
+        max(r["agreement"] for r in flat if r["growth"] == 1.0),
+        "2.4e-11",
+    )
+    (wide,) = [r for r in elliptic if r["delta"] == 0.04]
+    b.eq(w6, "α on the band's midline at δ = 0.04", 0.2 + wide["plateau"], "0.2107")
     (zero,) = [r for r in elliptic if r["delta"] == 0.0]
     b.eq(
-        w, "case 1 at δ = 0 against the analytic solution", zero["distance"], "3.8e-13"
+        w6, "case 1 at δ = 0 against the analytic solution", zero["distance"], "3.8e-13"
     )
     b.eq(
-        w,
+        w6,
         "sup |v_δ − v₀| / δ, largest (5e-4)",
         max(r["distance"] / r["delta"] for r in elliptic if r["delta"] > 0),
         "1.6",
     )
     curved = f("heat2d_stiff_references_a0.02_sine.json", "references")
     b.le(
-        w,
+        w6,
         "case 2's grids against finer ones, both directions",
         max(max(r["n_x"], r["elements_check"]) for r in curved),
         "1e-11",
     )
     (jump,) = [r for r in curved if r["delta"] == 0.0 and "e26_rms" in r]
     b.eq(
-        w,
+        w6,
         "E2.6's 160,000-node run against the product grid, RMS",
         jump["e26_rms"],
         "4.3e-9",
@@ -1148,12 +1164,13 @@ def references_2d(f: Files, b: Book) -> None:
 def naive_knee(f: Files, b: Book) -> None:
     """Statement (2): the naive product's knee (§4.2, H10)."""
     w = "stiff §5.3 (2)"
+    w6 = cited(w, "§6.2")
     ell = {d: knee_2d(f, "elliptic", d) for d in (0.0, *WIDTHS)}
     par = {d: knee_2d(f, "parabolic", d) for d in (0.0, *WIDTHS)}
-    b.eq(w, "the jump's fit, 1250–160,000", fit(ell[0.0], "naive/rms"), "1.23")
+    b.eq(w6, "the jump's fit, 1250–160,000", fit(ell[0.0], "naive/rms"), "1.23")
     for problem, lines, low, high, where in (
-        ("elliptic", ell, "0.86", "0.94", cited(w, "§1")),
-        ("parabolic", par, "0.78", "0.97", w),
+        ("elliptic", ell, "0.86", "0.94", cited(w, "§1", "§6.2")),
+        ("parabolic", par, "0.78", "0.97", w6),
     ):
         b.span(
             where,
@@ -1168,32 +1185,32 @@ def naive_knee(f: Files, b: Book) -> None:
             high,
         )
     b.span(
-        cited(w, "§1"),
+        cited(w, "§1", "§6.2"),
         "naive ÷ jump at h ≈ δ, elliptic",
         [r["naive/vs_jump"] for d in WIDTHS for r in near(ell[d], 1.05)],
         "0.081",
         "0.084",
     )
     b.eq(
-        w,
+        w6,
         "naive ÷ jump at 0.53δ, δ = 0.01",
         near(ell[0.01], 0.526, 0.01)[0]["naive/vs_jump"],
         "0.007",
     )
     b.eq(
-        w,
+        w6,
         "naive ÷ jump at 0.53δ, δ = 0.005",
         near(ell[0.005], 0.526, 0.01)[0]["naive/vs_jump"],
         "0.006",
     )
     b.eq(
-        w,
+        w6,
         "naive ÷ jump at 0.52δ, δ = 0.04",
         near(ell[0.04], 0.521, 0.01)[0]["naive/vs_jump"],
         "0.0026",
     )
     b.eq(
-        cited(w, "§1"),
+        cited(w, "§1", "§6.2"),
         "naive's fit at δ = 0.04, 1250–160,000 (§1: 'the fifth order')",
         fit(ell[0.04], "naive/rms"),
         "5.31",
@@ -1205,51 +1222,51 @@ def naive_knee(f: Files, b: Book) -> None:
         naive = column(ell[delta], "naive/rms")
         jump = column(ell[0.0], "naive/rms")
         b.eq(
-            w,
+            w6,
             f"the knee's depth in the jump's units, δ = {delta:g}",
             (naive[first] / naive[last]) / (jump[first] / jump[last]),
             quoted,
         )
     matched = [r["naive/flux"] for r in f(NAIVE, "matched/elliptic")]
     b.eq(
-        w,
+        w6,
         "the flux as a function of h/δ alone, matched pairs",
         max(max(matched), 1 / min(matched)),
         "1.7",
     )
     b.span(
-        w,
+        w6,
         "flux error while h ≥ 4δ",
         [r["naive/flux"] for d in WIDTHS for r in ell[d] if r["h_over_delta"] >= 4],
         "0.31",
         "0.86",
     )
     b.span(
-        w,
+        w6,
         "flux error on the jump, 10,000–160,000",
         [r["naive/flux"] for r in ell[0.0] if r["n"] >= 10000],
         "0.34",
         "0.37",
     )
     jump = column(ell[0.0], "naive/rms")
-    b.eq(w, "the jump's RMS falls, 1250 → 160,000", jump[1250] / jump[160000], "20")
+    b.eq(w6, "the jump's RMS falls, 1250 → 160,000", jump[1250] / jump[160000], "20")
     # Corrected by E5.3: the notes had "4–5 %"; δ = 0.0025 at 160,000 is 3.5 %.
     b.span(
-        w,
+        w6,
         "flux error at h ≈ δ, %",
         [100 * r["naive/flux"] for d in WIDTHS for r in near(ell[d], 1.05)],
         "3.5",
         "5.0",
     )
     b.span(
-        w,
+        w6,
         "flux error at 0.75δ, %",
         [100 * r["naive/flux"] for d in WIDTHS for r in near(ell[d], 0.745, 0.01)],
         "1",
         "1",
     )
     b.span(
-        w,
+        w6,
         "parabolic ÷ elliptic, naive, from 2500",
         [
             p["naive/rms"] / e["naive/rms"]
@@ -1261,7 +1278,7 @@ def naive_knee(f: Files, b: Book) -> None:
         "1.09",
     )
     b.span(
-        w,
+        w6,
         "the 1250-node growing mode, max Re λ",
         [
             r["max_re"]
@@ -1276,10 +1293,11 @@ def naive_knee(f: Files, b: Book) -> None:
 def construction_floor(f: Files, b: Book) -> None:
     """Statement (3): the δ = 0 construction on its floor (§4.2, H10)."""
     w = "stiff §5.3 (3)"
+    w6 = cited(w, "§6.2")
     ell = {d: knee_2d(f, "elliptic", d) for d in WIDTHS}
     # The floor in δ, at the finest count (the floor moves a few per cent with n).
     b.span(
-        w,
+        w6,
         "the floor ÷ δ at 160,000",
         [at(ell[d], 160000)["floor"] / d for d in WIDTHS],
         "0.12",
@@ -1291,42 +1309,42 @@ def construction_floor(f: Files, b: Book) -> None:
         for r in ell[d]
         if r["h_over_delta"] >= 2.1
     ]
-    b.span(w, "construction ÷ floor while h ≥ 2.1δ (three digits)", on, "1.00", "1.00")
+    b.span(w6, "construction ÷ floor while h ≥ 2.1δ (three digits)", on, "1.00", "1.00")
     dips = [
         100 * (1 - r["construction/rms"] / r["floor"])
         for d in WIDTHS
         for r in near(ell[d], 1.05)
     ]
-    b.span(w, "the dip at h ≈ δ, %", dips, "5", "10")
+    b.span(w6, "the dip at h ≈ δ, %", dips, "5", "10")
     b.eq(
-        w,
+        w6,
         "construction ÷ floor, δ = 0.01 at 160,000",
         at(ell[0.01], 160000)["construction/rms"] / at(ell[0.01], 160000)["floor"],
         "5.0",
     )
     b.eq(
-        w,
+        w6,
         "construction ÷ floor, δ = 0.005 at 160,000",
         at(ell[0.005], 160000)["construction/rms"] / at(ell[0.005], 160000)["floor"],
         "3",
     )
     wide = column(ell[0.04], "construction/rms")
-    b.eq(w, "construction, δ = 0.04, 1250", wide[1250], "4.7e-3")
-    b.eq(w, "construction, δ = 0.04, 160,000", wide[160000], "2.2e-2")
+    b.eq(w6, "construction, δ = 0.04, 1250", wide[1250], "4.7e-3")
+    b.eq(w6, "construction, δ = 0.04, 160,000", wide[160000], "2.2e-2")
     b.le(
-        w,
+        w6,
         "construction's fit at δ = 0.04 (negative)",
         fit(ell[0.04], "construction/rms"),
         "0",
     )
     b.eq(
-        cited(w, "§1"),
+        cited(w, "§1", "§6.2"),
         "its best lead over naive",
         max(r["naive/rms"] / r["construction/rms"] for d in WIDTHS for r in ell[d]),
         "6",
     )
     b.eq(
-        cited(w, "§1"),
+        cited(w, "§1", "§6.2"),
         "the least h/δ at which it beats naive",
         min(
             r["h_over_delta"]
@@ -1347,6 +1365,7 @@ def seeds_flat(f: Files, b: Book) -> None:
     30 / 4 groups (1.30e-6, 8.40e-6, 1.76e-7: §5.6's scratch).
     """
     w = "stiff §5.3 (4)"
+    w6 = cited(w, "§6.4")
     stencils = f(STENCILS, "stencils")
     (case1,) = [r for r in stencils["jump_limit"] if r["material"] == "case 1"]
     b.eq(
@@ -1358,18 +1377,18 @@ def seeds_flat(f: Files, b: Book) -> None:
     b.eq(cited(w, "§5.2"), "case 1's crossing stencils", case1["stencils"], "576")
     jump = f(JUMP, "sweep")["elliptic"]["0"]
     seeds = column(jump, "seeds/rms")
-    b.eq(w, "the seed line at δ = 0, 1250", seeds[1250], "1.598e-5")
-    b.eq(w, "the seed line at δ = 0, 160,000", seeds[160000], "3.58e-10")
-    b.eq(w, "its fit over eight counts", fit(jump, "seeds/rms"), "4.54")
+    b.eq(w6, "the seed line at δ = 0, 1250", seeds[1250], "1.598e-5")
+    b.eq(w6, "the seed line at δ = 0, 160,000", seeds[160000], "3.58e-10")
+    b.eq(w6, "its fit over eight counts", fit(jump, "seeds/rms"), "4.54")
     b.eq(
-        w,
+        w6,
         "its fit over the port's six (to 40,000)",
         fit(jump, "seeds/rms", COUNTS_40K),
         "4.77",
     )
     for problem, quoted, where in (
-        ("elliptic", ("4.23", "4.31", "4.23", "4.48"), cited(w, "§1")),
-        ("parabolic", ("4.22", "4.28", "4.18", "4.44"), w),
+        ("elliptic", ("4.23", "4.31", "4.23", "4.48"), cited(w, "§1", "§6.4")),
+        ("parabolic", ("4.22", "4.28", "4.18", "4.44"), w6),
     ):
         b.each(
             where,
@@ -1385,9 +1404,11 @@ def seeds_flat(f: Files, b: Book) -> None:
     ]
     # Corrected by E5.3: the notes had 3.8–4.8 at δ > 0; the 4.8 is δ = 0's
     # (4.78 and 4.80 from 10,000), checked on its own below.
-    b.span(w, "fits over the windows from 5000 or 10,000, δ > 0", windows, "3.8", "4.3")
     b.span(
-        w,
+        w6, "fits over the windows from 5000 or 10,000, δ > 0", windows, "3.8", "4.3"
+    )
+    b.span(
+        w6,
         "… and at the jump",
         [
             fit(sweep(f, SEEDS, problem, 0.0), "seeds/rms", COUNTS_40K[k:])
@@ -1406,32 +1427,42 @@ def seeds_flat(f: Files, b: Book) -> None:
             n: max(c[n] for c in lines) / min(c[n] for c in lines) for n in COUNTS_40K
         }
     b.span(
-        cited(w, "§1"),
+        cited(w, "§1", "§6.4"),
         "the five widths' spread at every count, elliptic",
         spreads["elliptic"].values(),
         "1.2",
         "2.4",
     )
     for n, quoted in ((1250, "1.16"), (20000, "2.38"), (40000, "1.67")):
-        b.eq(w, f"the spread at {n}", spreads["elliptic"][n], quoted)
+        b.eq(w6, f"the spread at {n}", spreads["elliptic"][n], quoted)
     b.eq(
-        w, "the spread, parabolic, largest", max(spreads["parabolic"].values()), "2.53"
+        w6, "the spread, parabolic, largest", max(spreads["parabolic"].values()), "2.53"
     )
     row = at(sweep(f, SEEDS, "elliptic", 0.0025), 40000)
-    b.eq(cited(w, "§1"), "seeds at 40,000, δ = 0.0025", row["seeds/rms"], "7.99e-9")
-    b.eq(cited(w, "§1"), "naive at 40,000, δ = 0.0025", row["naive/rms"], "8.36e-5")
-    b.eq(w, "construction at 40,000, δ = 0.0025", row["construction/rms"], "6.18e-4")
+    b.eq(
+        cited(w, "§1", "§6.4"),
+        "seeds at 40,000, δ = 0.0025",
+        row["seeds/rms"],
+        "7.99e-9",
+    )
+    b.eq(
+        cited(w, "§1", "§6.4"),
+        "naive at 40,000, δ = 0.0025",
+        row["naive/rms"],
+        "8.36e-5",
+    )
+    b.eq(w6, "construction at 40,000, δ = 0.0025", row["construction/rms"], "6.18e-4")
     # "Where the grid resolves the edge": δ = 0.04, resolved at every count.
     wide = sweep(f, SEEDS, "elliptic", 0.04)
     b.span(
-        w,
+        w6,
         "seeds ÷ direct, resolved (δ = 0.04)",
         [r["seeds/rms"] / r["direct/rms"] for r in wide],
         "0.10",
         "0.22",
     )
     b.span(
-        w,
+        w6,
         "seeds ÷ direct-reach, resolved (δ = 0.04)",
         [r["seeds/rms"] / r["direct-reach/rms"] for r in wide],
         "0.086",
@@ -1444,13 +1475,13 @@ def seeds_flat(f: Files, b: Book) -> None:
     ):
         row = at(sweep(f, SEEDS, problem, 0.04), n)
         b.eq(
-            w,
+            w6,
             f"seeds ÷ naive at δ = 0.04, {n}, {problem}",
             row["seeds/rms"] / row["naive/rms"],
             quoted,
         )
-    b.eq(w, "naive's fit at δ = 0.04, 1250–40,000", fit(wide, "naive/rms"), "5.2")
-    b.eq(w, "the seeds' fit at δ = 0.04", fit(wide, "seeds/rms"), "4.2")
+    b.eq(w6, "naive's fit at δ = 0.04, 1250–40,000", fit(wide, "naive/rms"), "5.2")
+    b.eq(w6, "the seeds' fit at δ = 0.04", fit(wide, "seeds/rms"), "4.2")
     b.within(
         w,
         "direct ÷ seeds at δ = 0.04, 20,000–40,000",
@@ -1556,7 +1587,7 @@ def elliptic_ranks(f: Files, b: Book) -> None:
     b.eq(w, "2-D seeds at equilibrium, 1250", seeds[1250], "1.6e-5")
     b.eq(w, "2-D seeds at equilibrium, 40,000", seeds[40000], "5.3e-9")
     b.span(
-        w,
+        cited(w, "§6.4"),
         "parabolic ÷ elliptic at 40,000, every δ",
         [
             at(sweep(f, SEEDS, "parabolic", d), 40000)["seeds/rms"]
@@ -1569,7 +1600,7 @@ def elliptic_ranks(f: Files, b: Book) -> None:
     for delta, quoted in ((0.0, "2000"), (0.0025, "670")):
         flux = column(sweep(f, SEEDS, "elliptic", delta), "seeds/flux")
         b.eq(
-            w,
+            cited(w, "§6.4"),
             f"the seeds' flux reading falls, 1250 → 40,000, δ = {delta:g}",
             flux[1250] / flux[40000],
             quoted,
@@ -1580,6 +1611,7 @@ def solvability(f: Files, b: Book) -> None:
     """Statement (6): solvability and spectra (§4.4; H5, H6). Skipped: SuperLU's
     0.04–0.06 s (timings) and 'every solve converged' (not a number)."""
     w = "stiff §5.3 (6)"
+    w6 = cited(w, "§6.3")
     rows = {
         n: f(name, "rows")
         for n, name in (
@@ -1589,26 +1621,26 @@ def solvability(f: Files, b: Book) -> None:
     }
     for n, quoted in ((2500, ("0.409", "0.239")), (10000, ("0.404", "0.211"))):
         seeds = {r["ratio"]: r for r in rows[n] if r["label"] == "seeds"}
-        b.eq(w, f"seeds' least DDR at δ = 8h, {n}", seeds[8.0]["least"], quoted[0])
-        b.eq(w, f"seeds' least DDR at δ = 0, {n}", seeds[0.0]["least"], quoted[1])
+        b.eq(w6, f"seeds' least DDR at δ = 8h, {n}", seeds[8.0]["least"], quoted[0])
+        b.eq(w6, f"seeds' least DDR at δ = 0, {n}", seeds[0.0]["least"], quoted[1])
         b.ge(
-            w,
+            w6,
             f"seeds' least DDR at every δ, never below the jump's, {n}",
             min(r["least"] for r in seeds.values()),
             quoted[1],
         )
     seeds = {r["ratio"]: r for r in rows[2500] if r["label"] == "seeds"}
     ratios = (8.0, 1.0, 0.125, 0.015625, 0.0)
-    b.eq(w, "seeds' condition estimate at 8h", seeds[8.0]["cond"], "7.1e3")
+    b.eq(w6, "seeds' condition estimate at 8h", seeds[8.0]["cond"], "7.1e3")
     b.eq(
-        w,
+        w6,
         "seeds' condition estimate, largest",
         max(r["cond"] for r in seeds.values()),
         "1.7e4",
     )
-    b.eq(w, "seeds' condition estimate at δ = 0", seeds[0.0]["cond"], "1.5e4")
+    b.eq(w6, "seeds' condition estimate at δ = 0", seeds[0.0]["cond"], "1.5e4")
     b.each(
-        w,
+        w6,
         "seeds' gmres iterations, 8h → 0",
         [seeds[r]["gmres/none"]["iterations"] for r in ratios],
         ["134", "155", "147", "160", "161"],
@@ -1618,9 +1650,9 @@ def solvability(f: Files, b: Book) -> None:
         for r in rows[2500]
         if r["label"] == "construction"
     ]
-    b.span(w, "the construction's gmres iterations", built, "161", "208")
+    b.span(w6, "the construction's gmres iterations", built, "161", "208")
     b.le(
-        w,
+        w6,
         "the direct solves' residual, 2500",
         max(r["residual"] for r in rows[2500]),
         "1e-14",
@@ -1631,18 +1663,18 @@ def solvability(f: Files, b: Book) -> None:
     }
     seed_rows = [r for (d, label), r in spectra.items() if label == "seeds"]
     b.eq(
-        w,
+        w6,
         "the seeds' eigenvalues right of the axis, 1600",
         max(r["positive"] for r in seed_rows),
         "0",
     )
-    b.eq(w, "seeds' max Re λ at δ = 0", spectra[(0.0, "seeds")]["max_re"], "-7.27")
-    b.eq(w, "seeds' max Re λ at δ = 0.04", spectra[(0.04, "seeds")]["max_re"], "-7.73")
+    b.eq(w6, "seeds' max Re λ at δ = 0", spectra[(0.0, "seeds")]["max_re"], "-7.27")
+    b.eq(w6, "seeds' max Re λ at δ = 0.04", spectra[(0.04, "seeds")]["max_re"], "-7.73")
     b.le(
-        w, "seeds' h² max |Im λ|, 1600", max(r["max_im_h2"] for r in seed_rows), "0.23"
+        w6, "seeds' h² max |Im λ|, 1600", max(r["max_im_h2"] for r in seed_rows), "0.23"
     )
     b.eq(
-        w,
+        w6,
         "plain seeds' BD4 root at δ = 0, 1600",
         spectra[(0.0, "seeds-plain")]["bd4"],
         "0.826",
@@ -1658,16 +1690,16 @@ def solvability(f: Files, b: Book) -> None:
         ("max_im_h2", "0.385"),
         ("bd4", "0.897"),
     ):
-        b.eq(w, f"seeds at 4900, δ = 0: {field}", seeds[field], quoted)
+        b.eq(w6, f"seeds at 4900, δ = 0: {field}", seeds[field], quoted)
     b.eq(
-        w,
+        w6,
         "plain seeds at 4900, δ = 0: h² max |Im λ|",
         at4900[(0.0, "seeds-plain")]["max_im_h2"],
         "1.49",
     )
     case2 = f("heat2d_stiff_tangential.json", "tangential")["spectra"]
     b.eq(
-        w,
+        w6,
         "case 2: eigenvalues right of the axis",
         max(r["positive"] for r in case2),
         "0",
@@ -1677,14 +1709,15 @@ def solvability(f: Files, b: Book) -> None:
 def warp(f: Files, b: Book) -> None:
     """Statement (7): the warp (§4.5–§4.7; H7)."""
     w = "stiff §5.3 (7)"
+    w6 = cited(w, "§6.4")
     ell = {d: sweep(f, SEEDS, "elliptic", d) for d in (0.0, *WIDTHS)}
     jump = column(ell[0.0], "seeds-plain/rms")
     seeds = column(ell[0.0], "seeds/rms")
-    b.eq(w, "plain ÷ warped at δ = 0, 1250", jump[1250] / seeds[1250], "2.3")
-    b.eq(w, "plain ÷ warped at δ = 0, 40,000", jump[40000] / seeds[40000], "6.9")
+    b.eq(w6, "plain ÷ warped at δ = 0, 1250", jump[1250] / seeds[1250], "2.3")
+    b.eq(w6, "plain ÷ warped at δ = 0, 40,000", jump[40000] / seeds[40000], "6.9")
     curved = sweep(f, TANGENTIAL, "elliptic", 0.0)
     b.span(
-        w,
+        w6,
         "plain ÷ warped at δ = 0 on case 2, from 5000 (the chain)",
         [
             r["tangential-plain/rms"] / r["tangential/rms"]
@@ -1696,7 +1729,7 @@ def warp(f: Files, b: Book) -> None:
     )
     # "While the edge is unresolved": h ≥ 3δ, the rows before the turn at 2δ.
     b.span(
-        w,
+        w6,
         "plain ÷ warped at δ = 0.0025, h ≥ 3δ",
         [
             r["seeds-plain/rms"] / r["seeds/rms"]
@@ -1707,7 +1740,7 @@ def warp(f: Files, b: Book) -> None:
         "7.9",
     )
     b.le(
-        w,
+        w6,
         "warped ÷ plain where the warp loses, both problems",
         max(
             r["seeds/rms"] / r["seeds-plain/rms"]
@@ -1718,7 +1751,7 @@ def warp(f: Files, b: Book) -> None:
         "2.6",
     )
     b.span(
-        w,
+        w6,
         "the chain's plain ÷ warped on case 2 once h ≲ 2δ",
         [
             r["tangential-plain/rms"] / r["tangential/rms"]
@@ -1730,8 +1763,8 @@ def warp(f: Files, b: Book) -> None:
         "1.1",
     )
     row = at(ell[0.01], 5000)
-    b.eq(w, "δ = 0.01 at 5000, warped", row["seeds/rms"], "7.95e-7")
-    b.eq(w, "δ = 0.01 at 5000, plain", row["seeds-plain/rms"], "4.39e-7")
+    b.eq(w6, "δ = 0.01 at 5000, warped", row["seeds/rms"], "7.95e-7")
+    b.eq(w6, "δ = 0.01 at 5000, plain", row["seeds-plain/rms"], "4.39e-7")
 
 
 def flat_ratio(
@@ -1746,9 +1779,10 @@ def curved_feature(f: Files, b: Book) -> None:
     """Statement (8): route (a) and the tangential chain (§4.6–§4.7; H9, H13–H17).
     Skipped: the cost of a row (2.5–3.8× route (a)'s, 4.2–7.3× case 1's; timings)."""
     w = "stiff §5.3 (8)"
+    w6 = cited(w, "§6.5")
     route = sweep(f, CURVED, "elliptic", 0.0)
     b.eq(
-        w,
+        w6,
         "route (a)'s crossing rows at δ = 0, fit",
         fit(route, "seeds/probe_crossing"),
         "0.38",
@@ -1758,14 +1792,14 @@ def curved_feature(f: Files, b: Book) -> None:
     # range over every δ and count, elliptic. At δ = 0 alone: 24–6742.
     elliptic = [r for r in flat if r["problem"] == "elliptic"]
     b.span(
-        w,
+        w6,
         "route (a) over the flat seeds, every δ and count",
         flat_ratio(elliptic, "seeds"),
         "17",
         "6742",
     )
     b.span(
-        w,
+        w6,
         "… at δ = 0",
         flat_ratio([r for r in elliptic if r["delta"] == 0.0], "seeds"),
         "24",
@@ -1775,7 +1809,7 @@ def curved_feature(f: Files, b: Book) -> None:
         "0"
     ]
     b.eq(
-        w,
+        w6,
         "route (a) on flat lines with α along them (B), fit",
         fit(line_b, "seeds/rms"),
         "1.00",
@@ -1783,7 +1817,7 @@ def curved_feature(f: Files, b: Book) -> None:
     mid = sweep(f, CURVED, "elliptic", 0.01)
     rows = [at(mid, n) for n in (10000, 20000, 40000)]
     b.each(
-        w,
+        w6,
         "route (a) at δ = 0.01, the last two rates",
         [
             rate_in_h(rows[0], rows[1], "seeds/rms"),
@@ -1797,7 +1831,7 @@ def curved_feature(f: Files, b: Book) -> None:
         if r["delta"] == 0.01 and r["n"] == 40000 and r["problem"] == "elliptic"
     ]
     b.eq(
-        w,
+        w6,
         "route (a) over the flat seeds, δ = 0.01, 40,000",
         last["curved/seeds"] / last["flat/seeds"],
         "130",
@@ -1808,7 +1842,7 @@ def curved_feature(f: Files, b: Book) -> None:
         if r["n"] >= 5000 and r["problem"] == "elliptic"
     ]
     b.span(
-        cited(w, "§1"),
+        cited(w, "§1", "§6.5"),
         "the chain over the flat seeds from 5000, RMS",
         flat_ratio(chain, "tangential"),
         "1.4",
@@ -1825,7 +1859,7 @@ def curved_feature(f: Files, b: Book) -> None:
         if r["n"] >= 5000
     ]
     b.span(
-        w, "the chain over the flat seeds from 5000, max norm", chain_max, "1.9", "4.8"
+        w6, "the chain over the flat seeds from 5000, max norm", chain_max, "1.9", "4.8"
     )
     split = [
         v
@@ -1839,15 +1873,15 @@ def curved_feature(f: Files, b: Book) -> None:
             "tangential",
         )
     ]
-    b.span(w, "the chain over the flat seeds on A and B", split, "1.1", "4.4")
+    b.span(w6, "the chain over the flat seeds on A and B", split, "1.1", "4.4")
     b.eq(
-        cited(w, "§5.3"),
+        cited(w, "§5.3", "§6.5"),
         "the chain at 40,000 on case 2, δ = 0",
         at(sweep(f, TANGENTIAL, "elliptic", 0.0), 40000)["tangential/rms"],
         "7.18e-9",
     )
     b.each(
-        w,
+        w6,
         "the chain at 40,000 on case 2, δ = 0.01, 0.005, 0.0025",
         [
             at(sweep(f, TANGENTIAL, "elliptic", d), 40000)["tangential/rms"]
@@ -1857,7 +1891,7 @@ def curved_feature(f: Files, b: Book) -> None:
     )
     zero = sweep(f, TANGENTIAL, "elliptic", 0.0)
     b.span(
-        w,
+        w6,
         "the chain over E2.3's curved construction at δ = 0, from 5000",
         [r["tangential/rms"] / r["construction/rms"] for r in zero if r["n"] >= 5000],
         "0.14",
@@ -1873,7 +1907,7 @@ def curved_feature(f: Files, b: Book) -> None:
         for d in widths
     ]
     b.span(
-        w,
+        w6,
         "the chain's crossing rows, fits on every geometry and width",
         crossing,
         "2.7",
@@ -1887,7 +1921,7 @@ def curved_feature(f: Files, b: Book) -> None:
     # Corrected by E5.3: the notes had 2.8–8.1; the largest is 8.047 (δ = 0.0025
     # at 1250).
     b.span(
-        w,
+        w6,
         "the chain over the flat seeds at the coarsest two counts",
         flat_ratio(coarse, "tangential"),
         "2.8",
@@ -1895,13 +1929,13 @@ def curved_feature(f: Files, b: Book) -> None:
     )
     circles = f("heat2d_stiff_tangential.json", "tangential")["circles"]
     b.eq(
-        w,
+        w6,
         "the chain's rows on concentric circles, fit",
         fit(circles, "tangential"),
         "3.45",
     )
     b.span(
-        w,
+        w6,
         "E2.3 over the chain on the circles",
         [r["construction"] / r["tangential"] for r in circles],
         "4.6",
@@ -1914,39 +1948,40 @@ def ring(f: Files, b: Book) -> None:
     differences between fine-run rebuilds (1.3–3.9e-6, §4.8's scratch) and the
     global matrix's conditioning (not measured)."""
     w = "stiff §5.3 (9)"
+    w6 = cited(w, "§6.6")
     zero = [r for r in f(RING, "conditioning") if r["delta"] == 0.0]
     b.span(
-        cited(w, "§1"),
+        cited(w, "§1", "§6.6"),
         "the seeds' worst residual on the matched profile, every s",
         [r["seeds-worst"] for r in zero],
         "1.3e-15",
         "2.1e-15",
     )
     (top,) = [r for r in zero if r["s"] == 1e11]
-    b.eq(w, "E2.3's worst residual at s = 1e11", top["e23-worst"], "1.36e-7")
+    b.eq(w6, "E2.3's worst residual at s = 1e11", top["e23-worst"], "1.36e-7")
     upper = [r for r in zero if r["s"] >= 1e5]
     # Corrected by E5.3: §5.3 (9) had single values 7.1e3 / 5.0e3 and 1.0e6; §4.8's
     # table has 7.2e3 / 5.1e3 and 1.1e6 at 10⁵ (5.1e3 to 10⁷).
     b.span(
-        w,
+        w6,
         "the seed block's mean condition number, raw, 1e5–1e11",
         [r["block-raw-mean"] for r in upper],
         "7.1e3",
         "7.2e3",
     )
     b.span(
-        w,
+        w6,
         "the seed block's, column-scaled",
         [r["block-scaled-mean"] for r in upper],
         "5.0e3",
         "5.1e3",
     )
-    b.span(w, "the seed system's", [r["system-mean"] for r in upper], "1.0e6", "1.1e6")
-    b.eq(w, "E2.3's block at s = 1e11", top["e23-block-mean"], "4.6e10")
-    b.eq(w, "E2.3's system at s = 1e11", top["e23-system-mean"], "2.7e13")
+    b.span(w6, "the seed system's", [r["system-mean"] for r in upper], "1.0e6", "1.1e6")
+    b.eq(w6, "E2.3's block at s = 1e11", top["e23-block-mean"], "4.6e10")
+    b.eq(w6, "E2.3's system at s = 1e11", top["e23-system-mean"], "2.7e13")
     convergence = {float(s): rows for s, rows in f(RING, "convergence").items()}
     b.span(
-        w,
+        w6,
         "seeds ÷ E2.3, 5000–40,000, every s",
         [
             r["seeds"]["full"] / r["construction"]["full"]
@@ -1958,8 +1993,8 @@ def ring(f: Files, b: Book) -> None:
         "0.97",
     )
     for label, low, high, where in (
-        ("seeds", "4.43", "4.71", cited(w, "§1")),
-        ("construction", "4.08", "4.13", w),
+        ("seeds", "4.43", "4.71", cited(w, "§1", "§6.6")),
+        ("construction", "4.08", "4.13", w6),
     ):
         b.span(
             where,
@@ -1973,7 +2008,7 @@ def ring(f: Files, b: Book) -> None:
         )
     # Corrected by E5.3: the notes had 1.4e-7 at s ≥ 10⁸; it is 1.4–1.6e-7.
     b.span(
-        w,
+        w6,
         "the seeds at 80,000, s ≥ 1e8",
         [
             at(rows, 80000)["seeds"]["full"]
@@ -1987,7 +2022,7 @@ def ring(f: Files, b: Book) -> None:
         for n, q in zip((40000, 80000), quoted, strict=True):
             row = at(convergence[s], n)
             b.eq(
-                w,
+                w6,
                 f"without the flux seeds ÷ E2.3, s = {s:g}, {n}",
                 row["seeds15"]["full"] / row["construction"]["full"],
                 q,
@@ -1999,14 +2034,14 @@ def ring(f: Files, b: Book) -> None:
         smooth[(float(s), float(d))] = rows
     widths = {k: v for k, v in smooth.items() if k[1] > 0}
     b.span(
-        w,
+        w6,
         "the far field's share of the nodes, %",
         [100 * r["error-seeds"]["far-share"] for rows in widths.values() for r in rows],
         "74",
         "96",
     )
     b.span(
-        w,
+        w6,
         "the seeds' far-field fits, 2500–20,000, every (s, δ)",
         [
             fit([r["error-seeds"] for r in rows], "far", (2500, 5000, 10000, 20000))
@@ -2020,21 +2055,21 @@ def ring(f: Files, b: Book) -> None:
     )
     # The one line that floors is the lowest fit (s = 1e11, δ = 0.001, §4.10).
     b.span(
-        w,
+        w6,
         "the seeds' far-field fits to 40,000, the five that do not floor",
         to_40k[1:],
         "4.4",
         "4.8",
     )
     b.span(
-        w,
+        w6,
         "E2.3's far-field floor",
         [r["error-construction"]["far"] for rows in widths.values() for r in rows],
         "1e-4",
         "7e-4",
     )
     b.span(
-        w,
+        w6,
         "naive and direct at δ = 0.00025, far field",
         [
             r[f"error-{lab}"]["far"]
@@ -2048,7 +2083,7 @@ def ring(f: Files, b: Book) -> None:
     )
     # s = 1e11, δ = 0.001 is the rule's discrepant fine run, read apart below.
     b.span(
-        w,
+        w6,
         "the seeds at 40,000, δ ≤ 0.001 (the discrepant pair aside)",
         [
             at_error(rows, 40000)
@@ -2059,13 +2094,13 @@ def ring(f: Files, b: Book) -> None:
         "1.0e-6",
     )
     b.each(
-        w,
+        w6,
         "the steep last rates at s = 1e3, δ = 0.0025 and 0.001",
         [last_rate(widths[(1e3, d)]) for d in (0.0025, 0.001)],
         ["6.7", "6.9"],
     )
     b.eq(
-        w,
+        w6,
         "the warp on every row, δ = 0.001 at 20,000 (the outlier)",
         max(
             at(rows, 20000)["error-seeds-warp"]["far"]
@@ -2082,7 +2117,7 @@ def ring(f: Files, b: Book) -> None:
         if 0 < r["error-seeds"]["plain"] < r["error-seeds"]["rows"]
     ]
     b.span(
-        w,
+        w6,
         "the rule over the better uniform choice, where it fires",
         fired,
         "0.91",
@@ -2090,19 +2125,19 @@ def ring(f: Files, b: Book) -> None:
     )
     gap = f(RING, "fine-gap")["1e11|0.001"]
     b.eq(
-        w,
+        w6,
         "the rule's fine run against the plain-built one, s = 1e11, δ = 0.001",
         gap["rms"],
         "3.55e-6",
     )
     plain = [r["error-seeds|seeds-plain"] for r in smooth[(1e11, 0.001)]]
     b.eq(
-        w,
+        w6,
         "the seeds against the plain-built run at 40,000",
         at(plain, 40000)["far"],
         "8.0e-7",
     )
-    b.eq(w, "their fit", fit(plain, "far"), "4.77")
+    b.eq(w6, "their fit", fit(plain, "far"), "4.77")
 
 
 def at_error(rows: Sequence[dict], n: int) -> float:
@@ -2127,6 +2162,7 @@ TREATMENT_LABELS = (
 def treatments(f: Files, b: Book) -> None:
     """Statement (10): the six coefficient treatments (§4.9; H12)."""
     w = "stiff §5.3 (10)"
+    w6 = cited(w, "§6.7")
     gains = []
     for case, name in TREATMENTS.items():
         for problem in PROBLEMS:
@@ -2136,7 +2172,7 @@ def treatments(f: Files, b: Book) -> None:
                     continue
                 gains.extend(1 / r[label] for label in TREATMENT_LABELS)
     b.le(
-        cited(w, "abstract", "§1", "§1.1"),
+        cited(w, "abstract", "§1", "§1.1", "§6.7"),
         "the most a treatment beats sampling by, RMS, anywhere",
         max(gains),
         "1.75",
@@ -2156,19 +2192,19 @@ def treatments(f: Files, b: Book) -> None:
 
     # The parabolic 1250-node set of case 1 aside again (its growing mode).
     b.eq(
-        w,
+        w6,
         "the max-norm gain on case 1 at 1250",
         max_gain(TREATMENTS["case 1"], lambda p, n: n == 1250 and p == "elliptic"),
         "3.1",
     )
     b.eq(
-        w,
+        w6,
         "the max-norm gain on case 2 at 2500",
         max_gain(TREATMENTS["case 2"], lambda p, n: n == 2500),
         "2.4",
     )
     b.le(
-        w,
+        w6,
         "the most a treatment beats sampling from 5000, max norm",
         max(max_gain(name, lambda p, n: n >= 5000) for name in TREATMENTS.values()),
         "1.55",
@@ -2176,7 +2212,7 @@ def treatments(f: Files, b: Book) -> None:
     # Corrected by E5.3: §5.3 (10) had 1.55× "in either norm" from 5000; in the RMS
     # it is 1.60 (case 1, arithmetic h/2, δ = 0.0025, 10,000 nodes: §4.9's 0.62).
     b.eq(
-        w,
+        w6,
         "the most a treatment beats sampling from 5000, RMS",
         max(
             1 / r[label]
@@ -2196,7 +2232,7 @@ def treatments(f: Files, b: Book) -> None:
         if r["delta"] == 0.0 and r["n"] >= 5000
     ]
     b.span(
-        w,
+        w6,
         "the radius-h harmonic mean over sampling at the jump, from 5000",
         [r["harmonic-1h"] for r in at_jump],
         "1.6",
@@ -2205,7 +2241,7 @@ def treatments(f: Files, b: Book) -> None:
     # Corrected by E5.3: §5.3 (10) had "the radius-h means are 1.6–3.4×", the
     # harmonic one's; the arithmetic radius-h mean is 1.28–3.00× (§4.9's table).
     b.span(
-        w,
+        w6,
         "the radius-h arithmetic mean over sampling at the jump, from 5000",
         [r["arithmetic-1h"] for r in at_jump],
         "1.3",
@@ -2214,7 +2250,7 @@ def treatments(f: Files, b: Book) -> None:
 
     resolved = at(sweep(f, TREATMENTS["case 1"], "elliptic", 0.04), 40000)
     b.span(
-        w,
+        w6,
         "the disc means over naive at 40,000, δ = 0.04",
         [
             resolved[f"{label}/rms"] / resolved["naive/rms"]
@@ -2231,19 +2267,421 @@ def treatments(f: Files, b: Book) -> None:
         for xs in f(name, f"crossovers/{p}")[label].values()
         for x in xs
     ]
-    b.span(w, "the half-spacing discs' crossovers, h/δ", crossings, "1.8", "3.5")
+    b.span(w6, "the half-spacing discs' crossovers, h/δ", crossings, "1.8", "3.5")
     orders = {
         r["n"]: r["orders"]
         for r in f(TREATMENTS["case 1"], "h12/parabolic/rms")
         if r["delta"] == 0.0
     }
     b.eq(
-        cited(w, "abstract", "§1"),
+        cited(w, "abstract", "§1", "§6.7"),
         "the seeds' lead over the best treatment at 1250, orders",
         orders[1250],
         "2.3",
     )
-    b.eq(cited(w, "abstract", "§1"), "… at 40,000", orders[40000], "4.7")
+    b.eq(cited(w, "abstract", "§1", "§6.7"), "… at 40,000", orders[40000], "4.7")
+
+
+def results_2d(f: Files, b: Book) -> None:
+    """The 2-D study's own tables that §6 of the manuscript quotes.
+
+    Keyed by the hypothesis of the notes' §3.7 or §3.10 each table answers: H10,
+    the naive knee and the construction (stiff §4.2); H5 and H6, the matrices
+    (§4.4); H4 and H8, the flat sweep (§4.5); H9 and H16, the curved feature
+    (§4.6, §4.7); H11, the ring (§4.8, §4.10); H12, the treatments (§4.9). E5.8
+    (#49) added them; the statements' own numbers are tagged in their functions.
+    Skipped, and traced to the notes: the timings (the marches' 167 s against
+    2.6 s, a row's milliseconds, SuperLU's), the naive product on the seeds' own
+    30 / 4 groups (§5.6's scratch), the frozen profile against the flat
+    construction on A (that line is not in A's results file), the differences
+    between rebuilds of the ring's fine runs (§4.8), and where the naive
+    operator's growing mode sits (§4.2's scratch).
+    """
+    # H10: the naive knee and the δ = 0 construction (§6.2).
+    w = cited("stiff §4.2 H10", "§6.2")
+    ell = {d: knee_2d(f, "elliptic", d) for d in (0.0, *WIDTHS)}
+    par = {d: knee_2d(f, "parabolic", d) for d in (0.0, *WIDTHS)}
+    jump = column(ell[0.0], "naive/rms")
+    b.eq(w, "the jump's naive line at 1250", jump[1250], "4.14e-3")
+    b.eq(w, "the jump's naive line at 160,000", jump[160000], "2.07e-4")
+    b.span(
+        w,
+        "the jump's naive rates between successive counts",
+        [
+            rate_in_h(a, c, "naive/rms")
+            for a, c in zip(ell[0.0], ell[0.0][1:], strict=False)
+        ],
+        "-0.5",
+        "3.1",
+    )
+    spread = []
+    for d in (0.0, *WIDTHS):
+        sets = [
+            column(f(name, "knee")["elliptic"][key(d)], "naive/rms")
+            for name in (NAIVE, *NAIVE_SEEDS)
+        ]
+        for n in set.intersection(*(set(c) for c in sets)):
+            values = [c[n] for c in sets]
+            spread.append(max(values) / min(values))
+    b.span(
+        cited("stiff §4.2 H10", "§6", "§6.2"),
+        "the naive error's spread over three node sets at one count and width",
+        spread,
+        "1.03",
+        "2.0",
+    )
+    b.span(
+        w,
+        "naive ÷ jump at h ≈ 2δ",
+        [r["naive/vs_jump"] for d in WIDTHS for r in near(ell[d], 2.1, 0.02)],
+        "0.19",
+        "0.27",
+    )
+    for delta, first, last, drop, jump_drop in (
+        (0.01, 2500, 40000, "311", "8.1"),
+        (0.005, 10000, 160000, "211", "6.2"),
+    ):
+        naive = column(ell[delta], "naive/rms")
+        b.eq(
+            w,
+            f"naive's drop from h ≈ 2δ to δ/2, δ = {delta:g}",
+            naive[first] / naive[last],
+            drop,
+        )
+        b.eq(
+            w,
+            f"the jump's over the same counts, δ = {delta:g}",
+            jump[first] / jump[last],
+            jump_drop,
+        )
+    b.eq(
+        w,
+        "naive with α ≡ 1 on the same nodes, fit from 2500",
+        fit([r for r in ell[0.0] if r["n"] >= 2500], "uniform"),
+        "4.98",
+    )
+    b.span(
+        w,
+        "naive parabolic ÷ elliptic at 1250, the jump and δ ≤ 0.01",
+        [
+            at(par[d], 1250)["naive/rms"] / at(ell[d], 1250)["naive/rms"]
+            for d in (0.0, 0.01, 0.005, 0.0025)
+        ],
+        "1.7",
+        "2.0",
+    )
+    b.le(
+        w,
+        "the naive operators' rightmost eigenvalue at 2500 (none growing)",
+        max(
+            r["max_re"]
+            for r in f(NAIVE, "spectra")
+            if r["n"] == 2500 and r["operator"] == "naive"
+        ),
+        "-7.3",
+    )
+    b.span(
+        w,
+        "the construction's flux reading while h ≥ 4δ, δ = 0.0025",
+        [r["construction/flux"] for r in ell[0.0025] if r["h_over_delta"] >= 4],
+        "0.018",
+        "0.020",
+    )
+    b.span(
+        w,
+        "the construction's flux reading at h ≈ δ",
+        [r["construction/flux"] for d in WIDTHS for r in near(ell[d], 1.05)],
+        "0.81",
+        "0.89",
+    )
+
+    # H5 and H6: the matrices (§6.3).
+    rows = f("heat2d_stiff_eigenvalues.json", "rows")
+    w = cited("stiff §4.4 H5", "§6.3")
+    for label, low, high in (
+        ("construction", "1.3e4", "1.7e4"),
+        ("naive", "2.0e4", "5.5e4"),
+    ):
+        b.span(
+            w,
+            f"the {label}'s condition estimates at 2500",
+            [r["cond"] for r in rows if r["label"] == label],
+            low,
+            high,
+        )
+    for label, low, high in (("seeds", "95", "101"), ("construction", "100", "147")):
+        b.span(
+            w,
+            f"BiCGSTAB's iterations for the {label}, 2500",
+            [r["bicgstab/none"]["iterations"] for r in rows if r["label"] == label],
+            low,
+            high,
+        )
+    b.eq(
+        w,
+        "solves that did not converge, every method, preconditioner and width",
+        sum(
+            r[f"{method}/{pre}"]["info"] != 0
+            for name in (
+                "heat2d_stiff_eigenvalues.json",
+                "heat2d_stiff_eigenvalues_rows_n10000.json",
+            )
+            for r in f(name, "rows")
+            for method in ("gmres", "bicgstab")
+            for pre in ("none", "appendix-b", "spilu")
+        ),
+        "0",
+    )
+    w = cited("stiff §4.4 H6", "§6.3")
+    (naive,) = [
+        r
+        for r in f("heat2d_stiff_eigenvalues.json", "spectra")
+        if r["label"] == "naive" and r["delta"] == 0.0
+    ]
+    b.eq(
+        w, "the naive operator's rightmost eigenvalue at 1600", naive["max_re"], "1003"
+    )
+    b.eq(w, "… and BD4's largest root there", naive["bd4"], "1.038")
+
+    # H4 and H8: the flat sweep (§6.4).
+    w = cited("stiff §4.5 H4", "§6.4")
+    lines = {d: sweep(f, SEEDS, "elliptic", d) for d in (0.0, *WIDTHS)}
+    b.span(
+        w,
+        "the seeds' rates between successive counts",
+        [
+            rate_in_h(a, c, "seeds/rms")
+            for rows_ in lines.values()
+            for a, c in zip(rows_, rows_[1:], strict=False)
+        ],
+        "2.6",
+        "5.9",
+    )
+    for label, fits in (
+        ("naive", ((0.0, "1.50"), (0.04, "5.18"))),
+        ("direct", ((0.0025, "1.87"), (0.04, "4.24"))),
+    ):
+        for delta, quoted in fits:
+            b.eq(
+                w,
+                f"{label}'s fit over 1250–40,000, δ = {delta:g}",
+                fit(lines[delta], f"{label}/rms"),
+                quoted,
+            )
+    w = cited("stiff §4.5 H8", "§6.4")
+    for delta, quoted in ((0.0, "6"), (0.0025, "25"), (0.01, "61"), (0.04, "100")):
+        b.eq(
+            w,
+            f"the seeded share of the rows at 40,000, δ = {delta:g}, %",
+            100 * at(lines[delta], 40000)["seeds/rows"] / 40000,
+            quoted,
+        )
+    b.span(
+        w,
+        "the seeds over naive at δ = 0.01, 20,000 and 40,000",
+        [
+            at(lines[0.01], n)["seeds/rms"] / at(lines[0.01], n)["naive/rms"]
+            for n in (20000, 40000)
+        ],
+        "0.003",
+        "0.004",
+    )
+
+    # H9 and H16: the curved feature (§6.5).
+    w = cited("stiff §4.6 H9", "§6.5")
+    b.each(
+        w,
+        "the frozen profile's fits, δ = 0, 0.01, 0.005, 0.0025",
+        [fit(sweep(f, CURVED, "elliptic", d), "seeds/rms") for d in CURVED_WIDTHS],
+        ["1.33", "3.07", "2.40", "1.71"],
+    )
+    smooth = [r for d in CURVED_WIDTHS[1:] for r in sweep(f, CURVED, "elliptic", d)]
+    b.span(
+        w,
+        "the frozen profile over the naive operator, δ > 0",
+        [r["seeds/rms"] / r["naive/rms"] for r in smooth],
+        "0.04",
+        "0.39",
+    )
+    for label, quoted in (("direct", "0.05"), ("construction", "0.46")):
+        b.le(
+            w,
+            f"the frozen profile over the {label}, δ > 0, largest",
+            max(r["seeds/rms"] / r[f"{label}/rms"] for r in smooth),
+            quoted,
+        )
+    b.eq(
+        w,
+        "the jump-aware rows' probe fit on case 2",
+        fit(sweep(f, TANGENTIAL, "elliptic", 0.0), "construction/probe_crossing"),
+        "2.86",
+    )
+    for geometry, frozen in (("A", "0.36"), ("B", "0.18")):
+        rows = sweep(f, SPLIT[geometry], "elliptic", 0.0)
+        b.eq(
+            w,
+            f"the jump-aware rows' probe fit on {geometry}",
+            fit(rows, "construction/probe_crossing"),
+            "3.0",
+        )
+        b.eq(
+            w,
+            f"the frozen rows' probe fit on {geometry}",
+            fit(rows, "seeds/probe_crossing"),
+            frozen,
+        )
+    w = cited("stiff §4.7 H16", "§6.5")
+    chain = {d: sweep(f, TANGENTIAL, "elliptic", d) for d in CURVED_WIDTHS}
+    b.each(
+        w,
+        "the chain's fits from 5000, δ = 0, 0.01, 0.005, 0.0025",
+        [fit(chain[d], "tangential/rms", COUNTS_40K[2:]) for d in CURVED_WIDTHS],
+        ["4.96", "4.23", "3.86", "4.13"],
+    )
+    b.span(
+        w,
+        "the chain's fits over 1250–40,000",
+        [fit(chain[d], "tangential/rms") for d in CURVED_WIDTHS],
+        "4.24",
+        "5.72",
+    )
+    line_b = f("heat2d_stiff_seeds_tangential_a0_sine_jump.json", "sweep")["elliptic"]
+    line_b = line_b["0"]
+    b.eq(
+        w,
+        "the chain on B at the jump to 160,000",
+        fit(line_b, "tangential/rms"),
+        "4.49",
+    )
+    b.eq(
+        w,
+        "the jump-aware operator on B to 160,000",
+        fit(line_b, "construction/rms"),
+        "4.21",
+    )
+    probe, error = [], []
+    for name in (TANGENTIAL, SPLIT["A"], SPLIT["B"]):
+        rows = sweep(f, name, "elliptic", 0.0025)
+        first, last = at(rows, 20000), at(rows, 40000)
+        probe.append(rate_in_h(first, last, "tangential/probe_crossing"))
+        error.append(rate_in_h(first, last, "tangential/rms"))
+    b.span(w, "the chain's probe, 20,000 → 40,000, δ = 0.0025", probe, "1.7", "2.2")
+    b.span(w, "… and its errors over the same step", error, "2.5", "3.0")
+
+    # H11: the ring (§6.6).
+    w = cited("stiff §4.8 H11", "§6.6")
+    (top,) = [
+        r for r in f(RING, "conditioning") if r["delta"] == 0.0 and r["s"] == 1e11
+    ]
+    b.eq(w, "the seeds on the stored radii at s = 1e11", top["stored-worst"], "1.2e-10")
+    convergence = f(RING, "convergence")
+    b.span(
+        w,
+        "the seeds over the jump-aware operator at 1250 and 2500",
+        [
+            r["seeds"]["full"] / r["construction"]["full"]
+            for rows in convergence.values()
+            for r in rows
+            if r["n"] <= 2500
+        ],
+        "1.03",
+        "1.46",
+    )
+    probes = f(RING, "smooth")
+    b.span(
+        w,
+        "the jump-aware rows over the seeds' on the probe at δ = 0",
+        [
+            r["probe-construction"]["seeded"] / r["probe-seeds"]["seeded"]
+            for name in ("1e3|0", "1e11|0")
+            for r in probes[name]
+        ],
+        "43",
+        "144",
+    )
+    spectrum = [r for r in f(RING, "spectrum") if r["label"] == "seeds"]
+    b.eq(
+        w,
+        "the seed operator's eigenvalues right of the axis, 5000, every (s, δ)",
+        max(r["positive"] for r in spectrum),
+        "0",
+    )
+    b.span(w, "its slowest mode", [r["max_re"] for r in spectrum], "-14.3", "-14.1")
+    b.eq(
+        w,
+        "the seeds against the rule's fine run, s = 1e11, δ = 0.001, 40,000",
+        at(probes["1e11|0.001"], 40000)["error-seeds"]["far"],
+        "3.6e-6",
+    )
+
+    # H12: the treatments (§6.7).
+    w = cited("stiff §4.9 H12", "§6.7")
+    b.span(
+        w,
+        "T0 over sampling at the jump, from 5000",
+        [
+            r[label]
+            for name in TREATMENTS.values()
+            for p in PROBLEMS
+            for r in f(name, f"ratios/{p}")
+            if r["delta"] == 0.0 and r["n"] >= 5000
+            for label in ("widened-1h", "widened-2h")
+        ],
+        "1.7",
+        "8.2",
+    )
+    fits = []
+    for p in PROBLEMS:
+        rows = sweep(f, TREATMENTS["case 1"], p, 0.04)
+        if p == "parabolic":  # the 1250-node growing mode (§4.9's GROWING_BELOW)
+            rows = [r for r in rows if r["n"] >= 2500]
+        fits += [
+            fit(rows, f"{label}/{norm}")
+            for label in TREATMENT_LABELS[:4]
+            for norm in ("rms", "max")
+        ]
+    b.span(
+        w,
+        "the disc means' fits at δ = 0.04, both norms and problems",
+        fits,
+        "1.95",
+        "2.05",
+    )
+    resolved = at(sweep(f, TREATMENTS["case 1"], "elliptic", 0.04), 40000)
+    b.span(
+        w,
+        "the radius-h mean over the half-spacing one, δ = 0.04, 40,000",
+        [
+            resolved[f"{mean}-1h/rms"] / resolved[f"{mean}-0.5h/rms"]
+            for mean in ("harmonic", "arithmetic")
+        ],
+        "4.00",
+        "4.00",
+    )
+    b.span(
+        w,
+        "T0 (m = 2) over its own floor, case 1",
+        [
+            r["widened-2h/rms"] / r["widened-2h/own_floor"]
+            for d in (0.0, *WIDTHS)
+            for r in sweep(f, TREATMENTS["case 1"], "elliptic", d)
+            if r.get("widened-2h/own_floor")
+        ],
+        "0.996",
+        "1.000",
+    )
+    jump_row = at(sweep(f, TREATMENTS["case 1"], "elliptic", 0.0), 40000)
+    b.span(
+        w,
+        "the flux on the first rows at the jump, 40,000, the treatments moving α",
+        [
+            jump_row[f"{label}/flux"]
+            for label in ("harmonic-1h", "arithmetic-1h", "widened-1h", "widened-2h")
+        ],
+        "0.30",
+        "0.59",
+    )
+    b.eq(w, "… and sampling's", jump_row["naive/flux"], "0.34")
 
 
 STATEMENTS = (
@@ -2262,6 +2700,7 @@ STATEMENTS = (
     curved_feature,
     ring,
     treatments,
+    results_2d,
 )
 
 

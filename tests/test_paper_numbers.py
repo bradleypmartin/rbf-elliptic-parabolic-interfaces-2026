@@ -101,17 +101,30 @@ def test_every_where_is_the_notes_statement_after_any_quoting_sections():
     assert all(WHERE.match(c.where) for c in checks), [
         c.where for c in checks if not WHERE.match(c.where)
     ]
-    # The drafts so far (E5.4, #45; E5.5, #46; E5.6, #47; E5.7, #48) quote from
-    # the abstract and §1–5; §3 and §4 quote the 1-D study's own tables too,
-    # keyed by the prediction of stiff §1.9 each answers, §4.6 the snapshot, and
-    # §5 the 2-D stencil study's, keyed by the hypothesis of stiff §3.7.
+    # The drafts so far (E5.4, #45; E5.5, #46; E5.6, #47; E5.7, #48; E5.8, #49)
+    # quote from the abstract and §1–6; §3 and §4 quote the 1-D study's own
+    # tables too, keyed by the prediction of stiff §1.9 each answers, §4.6 the
+    # snapshot, and §5 and §6 the 2-D study's, keyed by the hypothesis of stiff
+    # §3.7 or §3.10 each answers.
     quoting = {
         s for c in checks if "; " in c.where for s in c.where.split("; ")[0].split(", ")
     }
     assert {"abstract", "§1", "§1.1", "§2.1", "§3.1", "§3.2"} <= quoting
     assert {f"§4.{k}" for k in range(1, 7)} <= quoting
     assert {"§5.1", "§5.2", "§5.3"} <= quoting
+    assert {"§6", *(f"§6.{k}" for k in range(1, 9))} <= quoting
     notes = {c.where.split("; ")[-1] for c in checks}
+    assert {
+        "stiff §4.2 H10",
+        "stiff §4.4 H5",
+        "stiff §4.4 H6",
+        "stiff §4.5 H4",
+        "stiff §4.5 H8",
+        "stiff §4.6 H9",
+        "stiff §4.7 H16",
+        "stiff §4.8 H11",
+        "stiff §4.9 H12",
+    } <= notes
     assert {f"stiff §2.3 P{k}" for k in (4, 5, 6, 7, 9)} <= notes
     assert {"stiff §2.2 P2", "stiff §2.2 P3", "stiff §2.4 P10"} <= notes
     assert "stiff §2.5 snapshot" in notes

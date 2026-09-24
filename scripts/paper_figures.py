@@ -95,14 +95,17 @@ def _figure(height: float, **kwargs):
 def _counts(ax) -> None:
     """A log axis of node counts ticked at the counts drawn, every other one past four.
 
-    Called after the lines are drawn; a vertical marker line (two equal x) is not
-    a count.
+    Called after the lines are drawn. Only lines in data coordinates count: an
+    ``axhline``'s x data are the axes' own 0 and 1, which as counts put a tick at
+    0 on the log axis and crushed every warp panel to its right edge (#49); a
+    vertical marker line (two equal x) is not a count either.
     """
     counts = sorted(
         {
             int(round(x))
             for line in ax.get_lines()
-            if len(set(np.atleast_1d(line.get_xdata()))) > 1
+            if line.get_transform() is ax.transData
+            and len(set(np.atleast_1d(line.get_xdata()))) > 1
             for x in line.get_xdata()
         }
     )
@@ -126,9 +129,9 @@ def _key(colour: str, label: str, **kwargs) -> Line2D:
     return Line2D([], [], color=colour, label=label, **kwargs)
 
 
-def _line_key(label: str, **kwargs) -> Line2D:
-    """A legend entry in a 2-D line's ``STYLE``."""
-    return Line2D([], [], label=label, **_line(label), **kwargs)
+def _line_key(label: str, name: str | None = None, **kwargs) -> Line2D:
+    """A legend entry in a 2-D line's ``STYLE``, under its manuscript name."""
+    return Line2D([], [], label=name or _name(label), **_line(label), **kwargs)
 
 
 def _delta_keys(deltas: Sequence[float], markers: Sequence[str]) -> list[Line2D]:
@@ -335,6 +338,34 @@ def heat1d_snapshot(data: Data):
 
 # --- two dimensions (stiff note §4, §5) -----------------------------------------------
 
+# The manuscript's names for the drivers' line labels (its §2 notation and the 2-D
+# fragments'), where a label is a code name; the others print as they are (#49).
+# ``construction`` at the jump is the jump-aware operator, which the ring's
+# figures, all but the smooth one at δ = 0 alone, call by that name.
+LINE_NAME = {
+    "construction-flat": "construction, no curvature",
+    "direct-reach": "direct, seed stencils",
+    "seeds-plain": "seeds, plain",
+    "tangential": "tangential chain",
+    "tangential-plain": "tangential, plain",
+    "harmonic-0.5h": "harmonic, $h/2$",
+    "harmonic-1h": "harmonic, $h$",
+    "arithmetic-0.5h": "arithmetic, $h/2$",
+    "arithmetic-1h": "arithmetic, $h$",
+    "widened-1h": "widened, $h$",
+    "widened-2h": "widened, $2h$",
+}
+RING_NAME = {
+    **ring.NAMES,
+    "construction": r"$\delta = 0$ construction",
+    "seeds-warp": "seeds, warp",
+    "seeds-plain": "seeds, plain",
+}
+
+
+def _name(label: str) -> str:
+    return LINE_NAME.get(label, label)
+
 
 def _h_equals_delta(delta: float) -> float:
     """The count at which ``h = 1/round(0.95 √N)`` equals δ (port notes §2.10)."""
@@ -533,9 +564,19 @@ def heat2d_knee(data: Data):
 
 
 def _seed_figure(
-    data: Data, name: str, top_lines: Sequence[str], seeds: str, plain: str
+    data: Data,
+    name: str,
+    top_lines: Sequence[str],
+    seeds: str,
+    plain: str,
+    names: dict[str, str] | None = None,
 ):
-    """§4.5–§4.7: three widths, the seeds at every δ, the ratios, and the warp."""
+    """§4.5–§4.7: three widths, the seeds at every δ, the ratios, and the warp.
+
+    ``names`` overrides a line's legend name: on case 2 the ``seeds`` line is the
+    straight-feature seeds with a frozen profile (route (a), §4.6).
+    """
+    names = names or {}
     sweep = data.tables(name)["sweep"]
     elliptic = by_delta(sweep["elliptic"])
     parabolic = by_delta(sweep["parabolic"])
@@ -608,7 +649,7 @@ def _seed_figure(
     ax.set_title("plain ÷ warped")
     ax.set_xlabel("nodes $N$")
     _counts(ax)
-    handles = [_line_key(label, lw=0.9, ms=3) for label in top_lines]
+    handles = [_line_key(label, names.get(label), lw=0.9, ms=3) for label in top_lines]
     handles += [
         _key(CONSTRUCTION, "floor", ls=":", lw=0.7),
         _key(REFERENCE, "$h^4$", ls="-.", lw=0.8),
@@ -618,6 +659,11 @@ def _seed_figure(
     ]
     _legend(fig, handles, 4)
     return fig
+
+
+FROZEN = {"seeds": "frozen profile"}
+"""Case 2's ``seeds`` line: the straight-feature seeds along the foot point's
+normal, the manuscript's frozen profile (its §5.3)."""
 
 
 def heat2d_seeds(data: Data):
@@ -630,7 +676,12 @@ def heat2d_seeds_curved(data: Data):
     """§4.6: route (a), the flat seeds along the foot point's normal, on case 2."""
     lines = ("naive", "construction", "construction-flat", "direct", "seeds")
     return _seed_figure(
-        data, "heat2d_stiff_seeds_a0.02_sine.json", lines, "seeds", "seeds-plain"
+        data,
+        "heat2d_stiff_seeds_a0.02_sine.json",
+        lines,
+        "seeds",
+        "seeds-plain",
+        FROZEN,
     )
 
 
@@ -643,6 +694,7 @@ def heat2d_tangential_curved(data: Data):
         lines,
         "tangential",
         "tangential-plain",
+        FROZEN,
     )
 
 
@@ -700,7 +752,8 @@ def _treatment_figure(data: Data, name: str, seeds: str):
         ax.minorticks_off()
     axes[1][0].set_ylabel("RMS ÷ naive RMS")
     handles = [
-        Line2D([], [], label=label, ms=3, lw=0.8, **style(label)) for label in lines
+        Line2D([], [], label=_name(label), ms=3, lw=0.8, **style(label))
+        for label in lines
     ]
     handles += _delta_keys(positive, d2.MARKERS)
     _legend(fig, handles, 4)
@@ -791,7 +844,8 @@ def heat2d_spectra(data: Data):
             rasterized=True,
         )
         ax.axvline(0.0, color=REFERENCE, lw=0.5)
-        ax.set_title(label)
+        # A fifth of the width: "seeds, plain" overruns the page by a letter.
+        ax.set_title("plain" if label == "seeds-plain" else _name(label))
         ax.set_xlabel(r"$h^2\,\mathrm{Re}\,\lambda$")
         ax.tick_params(labelsize=6)
         if k == 0:
@@ -806,7 +860,7 @@ def heat2d_spectra(data: Data):
             color=eig.STYLE[label][0],
             ms=1.6,
             rasterized=True,
-            label=rf"{label} (max Re ${lam.real.max():.4g}$)",
+            label=rf"{_name(label)} (max Re ${lam.real.max():.4g}$)",
         )
     curve = bd4_stability_boundary(np.linspace(0.0, 2 * np.pi, 721)) / h
     zoom.plot(curve.real, curve.imag, "k-", lw=0.8, label="BD4 boundary, $dt = h$")
@@ -862,7 +916,7 @@ def heat2d_dominance(data: Data):
         ax.set_title(title)
     axes[0].set_yscale("log")
     handles = [
-        _key(eig.STYLE[label][0], label, marker=eig.STYLE[label][1], ms=3)
+        _key(eig.STYLE[label][0], _name(label), marker=eig.STYLE[label][1], ms=3)
         for label in eig.LABELS
     ]
     _legend(fig, handles, 5)
@@ -894,7 +948,7 @@ def heat2d_ring_convergence(data: Data):
     ax.loglog(n, first[0]["seeds"]["full"] * (n / n[0]) ** -2.0, "k-.", lw=0.6)
     ax.set_xlabel("nodes $N$")
     ax.set_ylabel("RMS error in $u$")
-    ax.set_title(r"eq. 40's ring at $\delta = 0$")
+    ax.set_title(r"case 3 at $\delta = 0$")
     _counts(ax)
     handles = [
         _key(colours[s], ring.power(s), marker=ring.MARKERS.get(s, "s"), ms=3)
@@ -902,7 +956,7 @@ def heat2d_ring_convergence(data: Data):
     ]
     handles += [
         _key("k", "seeds"),
-        _key("k", "E2.3", ls="--", marker="o", mfc="none", ms=3, lw=0.7),
+        _key("k", "jump-aware", ls="--", marker="o", mfc="none", ms=3, lw=0.7),
         _key("k", "seeds without the flux seeds", ls=":"),
         _key("k", "$h^4$", ls="-.", lw=0.6),
     ]
@@ -948,7 +1002,7 @@ def heat2d_ring_conditioning(data: Data):
     for ax in (left, right):
         ax.minorticks_off()
     handles = [
-        _key(CONSTRUCTION, "E2.3 (block; dashed: system)", marker="o", ms=3),
+        _key(CONSTRUCTION, "jump-aware (block; dashed: system)", marker="o", ms=3),
         _key(NAIVE, "seeds on the stored radii", marker="^", ms=3),
         _key(
             AWARE,
@@ -959,7 +1013,7 @@ def heat2d_ring_conditioning(data: Data):
         _key(
             AWARE, r"seeds, $\delta > 0$ (lighter: narrower)", ls=":", marker="s", ms=3
         ),
-        _key("k", r"$1.5 \times 10^{-18}\, s$ (E2.9)", ls=":", lw=0.6),
+        _key("k", r"$1.5 \times 10^{-18}\, s$", ls=":", lw=0.6),
     ]
     _legend(fig, handles, 2)
     return fig
@@ -1021,9 +1075,13 @@ def heat2d_ring_smooth(data: Data):
             ax.tick_params(labelsize=6)
         axes[1, j].set_xlabel("$N$")
     axes[0, 0].set_ylabel("RMS of $Lu$, seeded rows")
-    axes[1, 1].set_ylabel("RMS error, far field")
+    # ``sharey`` labels only the first column, and δ = 0 has no far field: the
+    # row's first visible panel carries its scale (#49: it had none).
+    far = next(j for j, d in enumerate(deltas) if d > 0.0)
+    axes[1, far].tick_params(labelleft=True)
+    axes[1, far].set_ylabel("RMS error, far field")
     handles = [
-        _key(ring.COLOURS[lab], ring.NAMES[lab], marker="o", ms=2)
+        _key(ring.COLOURS[lab], RING_NAME[lab], marker="o", ms=2)
         for lab in (*ring.LABELS, "seeds-warp")
     ]
     handles += [_key("k", ring.power(s), ls=styles[s]) for s in s_values]

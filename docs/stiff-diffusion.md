@@ -3107,7 +3107,8 @@ RMS error (order per halving of h):
   MATLAB δ = 0.0025 went at rate 0.96 into `h = δ` and 6.84 out of it):
   δ = 0.01 at rates 1.08 then 6.70 and δ = 0.005 at 2.19 then 4.53.
 - *Its depth.* From `h ≈ 2δ` to `h ≈ δ/2` the naive error falls 311×
-  (δ = 0.01, 2500 → 40,000) and 212× (δ = 0.005, 10,000 → 160,000). Over
+  (δ = 0.01, 2500 → 40,000) and 211× (δ = 0.005, 10,000 → 160,000; *E5.8's
+  number check: 210.96, which the table's rounded entries had made 212*). Over
   the same counts the jump's falls 8.1× and 6.2×, so the knee is 38× and
   34× in the jump's units. 1-D fell 220× (MATLAB medium) and 1000× (eq.
   75) over the same range while its jump fell 4×: 55× and 250× in the
@@ -4162,7 +4163,8 @@ this is the whole matrix marched:
   costs at most 15 % at δ/h = 7.6. The parabolic column of the same table:
   0.223, 0.414, 0.340, 0.437, 1.109, 1.145.
 - The other resolved column in the sweep, δ = 0.01 at 20,000 and 40,000
-  (δ/h 1.34 and 1.90, 62 % of the rows seeded), has the seeds at 4e-4 and
+  (δ/h 1.34 and 1.90, 61–62 % of the rows seeded; *E5.8's number check: 61.5 %
+  at 40,000, which the table below had as 62 %*), has the seeds at 4e-4 and
   6e-4 of `direct` and 0.004 and 0.003 of `naive`: at a width the grid only
   just resolves, the seeds are two and a half orders below the naive product
   and three below the direct operator. **H8, ticked, with the
@@ -4258,7 +4260,7 @@ and the operator's build (one march per row, both warps):
 | 0 | 408 (33 %) | 576 (23 %) | 792 (16 %) | 1134 (11 %) | 1601 (8 %) | 2278 (6 %) |
 | 0.0025 | 566 (45 %) | 1036 (41 %) | 1821 (36 %) | 3050 (31 %) | 5578 (28 %) | 10166 (25 %) |
 | 0.005 | 716 (57 %) | 1237 (49 %) | 2367 (47 %) | 4540 (45 %) | 8808 (44 %) | 17090 (43 %) |
-| 0.01 | 839 (67 %) | 1627 (65 %) | 3192 (64 %) | 6300 (63 %) | 12444 (62 %) | 24595 (62 %) |
+| 0.01 | 839 (67 %) | 1627 (65 %) | 3192 (64 %) | 6300 (63 %) | 12444 (62 %) | 24595 (61 %) |
 | 0.04 | 1250 (100 %) | 2500 (100 %) | 5000 (100 %) | 10000 (100 %) | 20000 (100 %) | 40000 (100 %) |
 
 1.3–4.4 ms a row (the jump march is the cheap one; the cost per row grows
@@ -4847,7 +4849,8 @@ tangential rows converge at 2.7–3.6, E2.3's rate or better, on every geometry 
 where route (a)'s stall at 0.2–0.6 (1.1–2.0 once the edge is resolved), and at δ = 0
 they end within 0.7–1.1× of E2.3's rows; on B to 160,000 nodes they are 4.78e-6 against
 E2.3's 4.34e-6. One thing slows: at δ = 0.0025 the tangential probe falls at only
-1.7–2.3 between 20,000 and 40,000 nodes on all three geometries, where `h/δ` passes
+1.7–2.2 (*E5.8's number check: 1.70, 2.22, 2.24; this had read 1.7–2.3*) between
+20,000 and 40,000 nodes on all three geometries, where `h/δ` passes
 from 3 to 2.1, the resolution transition of §4.5; the errors keep falling there, at
 2.5–3.0 per halving over that step (case 2, A, B), and the transition is where the flat
 seeds' warp turned too.
@@ -5482,8 +5485,10 @@ switches itself off, since `max(δ, m h)` knows δ.
 **H12, clause by clause.**
 
 - *"Cap the naive operator at second order once h ≲ δ/4"*: **holds for the
-  disc means, not for T0.** At δ = 0.04 the four disc means fit 1.95–2.06 in
-  both norms and both problems, sit 584–3100× above the naive line at 40,000
+  disc means, not for T0.** At δ = 0.04 the four disc means fit 1.95–2.05 in
+  both norms and both problems (*E5.8's number check: this had read 1.95–2.06;
+  the largest is the h/2 arithmetic mean's 2.048, elliptic, RMS, in the table
+  above*), sit 584–3100× above the naive line at 40,000
   nodes, and the radius-h line is 4.00× the h/2 one (3.996 harmonic, 3.998
   arithmetic): the `r²/8` term of the mean-value expansion, measured. T0 is
   the naive line there, fifth order (5.18), as 1-D found ("naive = T0"
