@@ -2341,24 +2341,26 @@ Section~\ref{sec:curved2d} measures the two apart.
 % kappa d); L in divergence form with no cross term; xi = mu_e (sigma -
 % sigma_0)/h_s, eta = (d - d_e)/h_s, m^ = m/mu_e = 1 at the anchor; the
 % normal line xi = 0 is route (a)'s; the foot curve a coordinate line).
+% The notes' curve parameter sigma and scale factor m are theta and mu here:
+% sigma is the blend weight and m the rows per unit length in section 2.
 \para{The curve's own coordinates}
-Write every point near the foot curve $\gamma(\sigma)$, in its own
-parameter, as $x = \gamma(\sigma) + d\, n(\sigma)$, with $n$ the unit normal
+Write every point near the foot curve $\gamma(\theta)$, in its own
+parameter, as $x = \gamma(\theta) + d\, n(\theta)$, with $n$ the unit normal
 and $\kappa$ the signed curvature. These coordinates are one-to-one inside
 the focal distance, and the implementation refuses a stencil whose normal
 line reaches within a margin of it, $\kappa_{\max} (|d_e| + 2 h_s) \ge 0.8$,
 with $\kappa_{\max}$ the curve's largest curvature and $d_e$ the anchor's
 distance to it. The metric is diagonal, with scale factors
-$m = |\gamma'| (1 - \kappa d)$ along $\sigma$ and $1$ along $d$, so that
+$\mu = |\gamma'| (1 - \kappa d)$ along $\theta$ and $1$ along $d$, so that
 \begin{equation}
   \label{eq:curvilinear}
-  L u = \frac{1}{m} \Bigl[ \partial_\sigma \Bigl( \frac{\alpha}{m}\,
-  \partial_\sigma u \Bigr) + \partial_d (\alpha m\, \partial_d u) \Bigr],
+  L u = \frac{1}{\mu} \Bigl[ \partial_\theta \Bigl( \frac{\alpha}{\mu}\,
+  \partial_\theta u \Bigr) + \partial_d (\alpha \mu\, \partial_d u) \Bigr],
 \end{equation}
-in divergence form with no cross term. About the anchor $(\sigma_0, d_e)$
-the stencil coordinates are $\xi = \mu_e (\sigma - \sigma_0) / h_s$ and
-$\eta = (d - d_e) / h_s$, with $\mu_e = m(\sigma_0, d_e)$; the operator keeps
-its form with $\hat m = m / \mu_e$ in place of $m$, and $\hat m = 1$ at the
+in divergence form with no cross term. About the anchor $(\theta_0, d_e)$
+the stencil coordinates are $\xi = \mu_e (\theta - \theta_0) / h_s$ and
+$\eta = (d - d_e) / h_s$, with $\mu_e = \mu(\theta_0, d_e)$; the operator keeps
+its form with $\hat\mu = \mu / \mu_e$ in place of $\mu$, and $\hat\mu = 1$ at the
 anchor, so that $\xi$ is arclength along the anchor's parallel curve in
 stencil radii. The normal line $\xi = 0$ is the frozen profile's, with the
 same $\alpha_n$, segment boundaries and pieces. What changes is that the
@@ -2376,10 +2378,10 @@ coordinate line and its conditions hold along one.
 Keep the ansatz \eqref{eq:ansatz}, now with every level,
 $\phi_{ab} = \sum_{j=0}^{4} g_j(\eta)\, \xi^j$, and expand the coefficients
 of \eqref{eq:curvilinear} along the coordinate lines,
-$\alpha / \hat m = \sum_k A_k(\eta)\, \xi^k$,
-$\alpha \hat m = \sum_k B_k(\eta)\, \xi^k$ and
-$\hat m = \sum_k M_k(\eta)\, \xi^k$, $k \le 4$. The chain
-\eqref{eq:chain2d} is kept as it stands, multiplied through by $\hat m$.
+$\alpha / \hat\mu = \sum_k A_k(\eta)\, \xi^k$,
+$\alpha \hat\mu = \sum_k B_k(\eta)\, \xi^k$ and
+$\hat\mu = \sum_k M_k(\eta)\, \xi^k$, $k \le 4$. The chain
+\eqref{eq:chain2d} is kept as it stands, multiplied through by $\hat\mu$.
 With $S \phi_{ab}$ its right-hand side and $\psi_i = \sum_k B_k\, g_{i-k}'$
 the coefficient of $\xi^i$ in the normal flux, collecting $\xi^i$ gives
 \begin{equation}
@@ -2447,7 +2449,7 @@ satisfies $L \phi_{10} = 0$, so the march carries the tangential derivative.
 The warp is $\phi_{01}$ with all its levels, and at the anchor
 $(L G)(x_e) = \alpha_e (G_{\xi\xi} + G_{\tilde\eta\tilde\eta}) + A_1(0)\,
 G_\xi$, the form of \eqref{eq:gaussrhs} with $A_1(0) = \partial_\xi (\alpha
-/ \hat m)$ in place of $h_s \alpha_\xi$. The coefficients $A_k$, $B_k$ and
+/ \hat\mu)$ in place of $h_s \alpha_\xi$. The coefficients $A_k$, $B_k$ and
 $M_k$ come from Fornberg's weights \cite{Fornberg1988} at $\xi = 0$ on $11$
 points $0.2$ apart along the coordinate lines, whose positions are formed
 once per stencil and are exact. The foot edge's factor $\sigma(d / \delta)$
@@ -2493,7 +2495,7 @@ $w / h_s$ apart, both of order one in stencil units, crosses the width only
 to $\mathrm{ulp}(1) / (w / h_s)$, about $10^{-7}$ at $s = 10^{11}$. The
 band therefore carries the gap $1/s$ exactly, and the march runs in the
 offset from the outer circle's crossing, so that the segment it crosses is
-the gap to rounding. Across the ring $1 / (\alpha \hat m)$ is $1.5 s$ at
+the gap to rounding. Across the ring $1 / (\alpha \hat\mu)$ is $1.5 s$ at
 $\delta = 0$, and it multiplies the rounding of the sampled series into the
 small tangential levels, past the integrator's absolute tolerance; on a
 ring each segment's series are a piecewise Chebyshev interpolant in $\eta$,
