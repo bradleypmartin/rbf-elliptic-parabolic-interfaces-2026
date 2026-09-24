@@ -36,9 +36,13 @@ tables cache in ``outputs/heat2d_stiff_rows.json``.
 
 Figures: ``heat2d_stiff_spectra.png`` (the four spectra at ``--figure-delta``
 with BD4's boundary at ``dt = h``) and ``heat2d_stiff_dominance.png`` (the
-DDR and the iteration counts against δ/h).
+DDR and the iteration counts against δ/h), ``_n<N>`` before ``.png`` off the
+default counts. Every run writes its tables to a results file (E4.10,
+``results_cache``): ``heat2d_stiff_eigenvalues.json`` for the default run,
+``heat2d_stiff_eigenvalues_rows_n<N>.json`` and ``…_spectra_n<N>.json`` for
+the others, under ``--outputs`` and, with ``--data-dir``, there too.
 
-    uv run python scripts/heat2d_stiff_eigenvalues.py       # 2.7 min cold, 4 s cached
+    uv run python scripts/heat2d_stiff_eigenvalues.py       # 2.7 min cold, 1.4 s cached
     uv run python scripts/heat2d_stiff_eigenvalues.py --mode rows --n 10000   # 6.7 min
     uv run python scripts/heat2d_stiff_eigenvalues.py --mode spectra \
         --spectrum-n 4900 --deltas 0 0.005 --figure-delta 0.005               # 2.1 min
@@ -95,6 +99,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     solve_iterative,
 )
 from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
+from heat_interfaces.results_cache import ResultsCache, finite  # noqa: E402
 
 RATIOS = (8.0, 1.0, 0.125, 1.0 / 64.0, 0.0)
 """δ/h of H5's table: two resolved widths, a marginal one, and two unresolved."""
@@ -143,6 +148,15 @@ ROW_CACHE_META = {
 Everything a *row* depends on goes in ``row_key`` instead, so that changing a
 solver flag recomputes the rows it moves and keeps the rest.
 """
+
+RESULTS = "heat2d_stiff_eigenvalues"
+"""The results files' stem (``results_cache``, E4.10): ``<stem>.json`` for the
+default ``--mode all``, ``<stem>_rows_n<N>.json`` and ``<stem>_spectra_n<N>.json``
+for the documented 10,000- and 4900-node runs, under ``--outputs`` and
+``--data-dir``."""
+
+NOT_APPLICABLE = frozenset({"least", "median", "below1"})
+"""``dominance`` of an empty row group: written as JSON null."""
 
 VALUES = (0.0, lambda x, y: np.sin(2.0 * np.pi * x))
 """The elliptic problem's Dirichlet rows: 0 on ``y = 0``, ``sin 2πx`` on ``y = 1``."""
@@ -574,6 +588,14 @@ def figure_dominance(rows: list[dict], labels: Sequence[str]):
 # --- the driver ---------------------------------------------------------------------
 
 
+def figure_name(what: str, n: int, default: int) -> str:
+    """``heat2d_stiff_<what>.png`` at the default count, ``…_n<N>.png`` at another,
+    so that the documented 10,000- and 4900-node runs keep the default figures."""
+    return (
+        f"heat2d_stiff_{what}.png" if n == default else f"heat2d_stiff_{what}_n{n}.png"
+    )
+
+
 def run_rows(args: argparse.Namespace) -> list[dict]:
     cache = load_cache(args.outputs)
     t0 = time.perf_counter()
@@ -581,7 +603,7 @@ def run_rows(args: argparse.Namespace) -> list[dict]:
     save_cache(args.outputs, cache)
     print_rows(rows, args.n)
     print(f"\nrow study {time.perf_counter() - t0:.1f} s")
-    figure = args.outputs / "heat2d_stiff_dominance.png"
+    figure = args.outputs / figure_name("dominance", args.n, N)
     figure_dominance(rows, args.labels).savefig(figure)
     plt.close("all")
     print(f"wrote {figure}")
@@ -597,7 +619,7 @@ def run_spectra(args: argparse.Namespace) -> list[dict]:
     print_spectra(rows, args.spectrum_n)
     print(f"\nspectra {time.perf_counter() - t0:.1f} s")
     spec = spectra(args.spectrum_n, args.figure_delta, args)
-    figure = args.outputs / "heat2d_stiff_spectra.png"
+    figure = args.outputs / figure_name("spectra", args.spectrum_n, SPECTRUM_N)
     figure_spectra(spec, args.figure_delta, args.labels).savefig(figure)
     plt.close("all")
     print(f"wrote {figure}")
@@ -620,18 +642,46 @@ def main(argv: Sequence[str] | None = None) -> dict:
     parser.add_argument("--neighbours", type=int, default=NEIGHBOURS)
     parser.add_argument("--sweeps", type=int, default=SWEEPS)
     parser.add_argument("--outputs", type=Path, default=Path("outputs"))
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="also write the run's results file here (paper/data, E5.3)",
+    )
     args = parser.parse_args(argv)
     if any(r < 0 for r in args.ratios):
         parser.error("δ/h must be non-negative")
     if args.figure_delta not in args.deltas:
         args.deltas = [*args.deltas, args.figure_delta]
     args.outputs.mkdir(parents=True, exist_ok=True)
+    results = ResultsCache(RESULTS, vars(args))
+    start = time.perf_counter()
     tables: dict = {}
     if args.mode in ("all", "rows"):
+        t0 = time.perf_counter()
         tables["rows"] = run_rows(args)
+        results.time("rows", time.perf_counter() - t0)
     if args.mode in ("all", "spectra"):
+        t0 = time.perf_counter()
         tables["spectra"] = run_spectra(args)
+        results.time("spectra", time.perf_counter() - t0)
+    for name, table in tables.items():
+        results.add(name, finite(table, NOT_APPLICABLE, name))
+    results.time("total", time.perf_counter() - start)
+    name = results_name(args)
+    paths = [args.outputs / name]
+    if args.data_dir is not None:
+        paths.append(args.data_dir / name)
+    results.write(*paths)
     return tables
+
+
+def results_name(args: argparse.Namespace) -> str:
+    """The run's results file: the default run's, or the mode and its node count."""
+    if args.mode == "all":
+        return f"{RESULTS}.json"
+    n = args.n if args.mode == "rows" else args.spectrum_n
+    return f"{RESULTS}_{args.mode}_n{n}.json"
 
 
 if __name__ == "__main__":

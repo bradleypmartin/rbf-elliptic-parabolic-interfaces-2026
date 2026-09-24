@@ -27,6 +27,7 @@ from heat2d_stiff_eigenvalues import (  # noqa: E402
     save_cache,
     spectra_path,
 )
+from heat_interfaces.results_cache import read_results  # noqa: E402
 
 
 def test_condition_estimate_is_a_lower_bound_on_the_one_norm_condition_number():
@@ -109,7 +110,12 @@ def test_the_row_table_at_1250_nodes(tmp_path, capsys):
     rows = main(argv)["rows"]
     out = capsys.readouterr().out
     assert "diagonal dominance" not in out and "DDR least" in out
-    assert (tmp_path / "heat2d_stiff_dominance.png").exists()
+    assert (tmp_path / "heat2d_stiff_dominance_n1250.png").exists()
+    # E4.10: the run's results file, named by the mode and the count.
+    written = read_results(tmp_path / "heat2d_stiff_eigenvalues_rows_n1250.json")
+    assert written["driver"] == "heat2d_stiff_eigenvalues"
+    assert len(written["tables"]["rows"]) == len(rows)
+    assert set(written["timings"]) == {"rows", "total"}
     table = {(r["ratio"], r["label"]): r for r in rows}
     assert set(table) == {(r, label) for r in (0.125, 0.0) for label in LABELS}
 
@@ -160,7 +166,8 @@ def test_the_spectra_at_900_nodes(tmp_path, capsys):
     argv += ["--figure-delta", "0.005", "--outputs", str(tmp_path)]
     rows = main(argv)["spectra"]
     assert "h² max |Im|" in capsys.readouterr().out
-    assert (tmp_path / "heat2d_stiff_spectra.png").exists()
+    assert (tmp_path / "heat2d_stiff_spectra_n900.png").exists()
+    assert (tmp_path / "heat2d_stiff_eigenvalues_spectra_n900.json").exists()
     assert (tmp_path / "heat2d_stiff_spectra_n900_d0.005_i100_s0.npz").exists()
     table = {(r["delta"], r["label"]): r for r in rows}
     for delta in (0.0, 0.005):

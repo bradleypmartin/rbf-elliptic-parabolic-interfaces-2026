@@ -19,19 +19,24 @@ from heat2d_stiff import (  # noqa: E402
     EDGE,
     KNEE_CACHE,
     KNEE_CACHE_META,
+    NOT_APPLICABLE,
     OPERATORS,
     QUANTITIES,
+    SNAPSHOT,
     STUDY_DELTAS,
     TREATMENT_LABELS,
     Geometry,
+    cached_line,
     curve_level,
     edge_diagnostics,
+    figure_name,
     flat_twin,
     knee_key,
     load_knee_cache,
     main,
     matched_ratios,
     pair_fluxes,
+    results_name,
     row_profile,
     save_knee_cache,
     seed_label,
@@ -58,6 +63,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     naive_operator,
     seed_operator,
 )
+from heat_interfaces.results_cache import read_results  # noqa: E402
 
 _nodes = {}
 
@@ -68,9 +74,20 @@ def nodes_2500():
     return _nodes["set"]
 
 
-def test_the_reference_table_at_the_study_deltas(capsys):
-    tables = main(["--mode", "references", "--deltas", *map(str, STUDY_DELTAS)])
+def test_the_reference_table_at_the_study_deltas(tmp_path, capsys):
+    argv = ["--mode", "references", "--deltas", *map(str, STUDY_DELTAS)]
+    argv += ["--outputs", str(tmp_path), "--data-dir", str(tmp_path / "data")]
+    tables = main(argv)
     rows = tables["references"]
+    # E4.10: the results file, the same under --outputs and --data-dir.
+    name = "heat2d_stiff_references.json"
+    written = read_results(tmp_path / name)
+    assert (tmp_path / "data" / name).read_text() == (tmp_path / name).read_text()
+    assert written["driver"] == "heat2d_stiff"
+    assert written["args"]["geometry"] == "case 1"
+    assert written["args"]["mode"] == "references"
+    assert set(written["timings"]) == {"references", "total"}
+    assert len(written["tables"]["references"]) == len(rows)
     out = capsys.readouterr().out
     assert "separable reference" in out and "distance / δ" in out
     assert len(rows) == 2 * len(STUDY_DELTAS)
@@ -201,6 +218,13 @@ def test_the_naive_baseline_at_the_two_smallest_counts(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "growing-mode check" in out and "matched h/δ" not in out
     assert (tmp_path / "heat2d_stiff_knee.png").exists()
+    # E4.10: the results file; the jump's h/δ, inf on screen, is null in it.
+    written = read_results(tmp_path / "heat2d_stiff_naive.json")["tables"]
+    assert [r["h_over_delta"] for r in written["knee"]["elliptic"]["0"]] == [
+        None,
+        None,
+    ]
+    assert written["knee"]["elliptic"]["0.0025"][0]["h_over_delta"] > 11
     ell, par = tables["knee"]["elliptic"], tables["knee"]["parabolic"]
     # δ = 0: port notes §2.2's naive and uniform (control) lines and §2.4's
     # warped aware line, on the same node sets.
@@ -241,10 +265,14 @@ def test_the_naive_baseline_at_the_two_smallest_counts(tmp_path, capsys):
     assert again["knee"] == tables["knee"]
 
 
-def test_the_stencil_study_at_1250_nodes(capsys):
+def test_the_stencil_study_at_1250_nodes(tmp_path, capsys):
     # E4.4 (#35), stiff note §4.3: H1–H3 and the march's cost on the smallest
     # set; the 2500-node numbers the notes quote are the default run's.
-    tables = main(["--mode", "stencils", "--stencil-n", "1250"])["stencils"]
+    argv = ["--mode", "stencils", "--stencil-n", "1250", "--outputs", str(tmp_path)]
+    tables = main(argv)["stencils"]
+    # δ = 0's residual is a placeholder (no edge to difference across): null.
+    written = read_results(tmp_path / "heat2d_stiff_stencils.json")
+    assert written["tables"]["stencils"]["chain"][0]["residual"] is None
     out = capsys.readouterr().out
     assert "H1, the march is the chain" in out and "stencil study" in out
     for r in tables["chain"]:
@@ -415,7 +443,10 @@ def test_the_delta_zero_regression_run(tmp_path, capsys):
     )
     out = capsys.readouterr().out
     assert "H4 at δ = 0" in out and "seed sweep" in out
-    assert (tmp_path / "heat2d_stiff_seeds.png").exists()
+    # Its own figure and results file, so that the full sweep's survive (E4.10).
+    assert (tmp_path / "heat2d_stiff_seeds_jump.png").exists()
+    assert not (tmp_path / "heat2d_stiff_seeds.png").exists()
+    assert (tmp_path / "heat2d_stiff_seeds_jump.json").exists()
     for lines in tables["sweep"].values():
         (row,) = lines[0.0]
         assert row["seeds/rms"] == pytest.approx(row["construction/rms"], rel=1e-7)
@@ -551,7 +582,7 @@ def test_the_tangential_line_on_the_curved_sweep(tmp_path, capsys):
     assert again["sweep"] == tables["sweep"]
 
 
-def test_the_tangential_tables(capsys, monkeypatch):
+def test_the_tangential_tables(tmp_path, capsys, monkeypatch):
     # E4.11's own tables: H14 on the concentric circles (from 2500 nodes, the
     # focal-distance guard), H15's span distance on case 2, and H6's twin on
     # case 2 (here on 900 nodes at two widths; the documented run is 1600 at
@@ -561,7 +592,9 @@ def test_the_tangential_tables(capsys, monkeypatch):
     monkeypatch.setattr(heat2d_stiff, "TANGENTIAL_SPECTRUM_N", 900)
     monkeypatch.setattr(heat2d_stiff, "TANGENTIAL_TIMING", (1250, 10))
     monkeypatch.setattr(heat2d_stiff, "CURVED_DELTAS", (0.0, 0.0025))
-    tables = main(["--mode", "tangential", "--counts", "1250", "2500"])["tangential"]
+    argv = ["--mode", "tangential", "--counts", "1250", "2500"]
+    tables = main([*argv, "--outputs", str(tmp_path)])["tangential"]
+    assert (tmp_path / "heat2d_stiff_tangential.json").exists()
     out = capsys.readouterr().out
     assert "H14, the concentric circles" in out and "H15, case 2" in out
     (circle,) = tables["circles"]
@@ -755,3 +788,66 @@ def test_the_treatment_sweep_on_case_2(tmp_path, capsys):
             # Case 2's inside piece varies, so every disc mean moves nodes
             # the jump does not reach; T0 at m = 1 changes the edge only.
             assert r["harmonic-0.5h/rows"] > 0
+
+
+def test_one_results_file_per_documented_run():
+    # E4.10, stiff note §5: the documented runs write distinct files.
+    a, b = Geometry(0.02, "constant"), Geometry(0.0, "sine")
+    case2 = Geometry(0.02, "sine")
+    assert results_name("all", CASE1) == "heat2d_stiff.json"
+    assert results_name("naive", CASE1) == "heat2d_stiff_naive.json"
+    assert results_name("naive", CASE1, 1) == "heat2d_stiff_naive_seed1.json"
+    assert results_name("seeds", CASE1, 0, [0.0]) == "heat2d_stiff_seeds_jump.json"
+    assert results_name("seeds", CASE1, 0, [0.0, 0.0025]) == "heat2d_stiff_seeds.json"
+    assert results_name("seeds", case2) == "heat2d_stiff_seeds_a0.02_sine.json"
+    assert (
+        results_name("seeds", case2, tangential=True)
+        == "heat2d_stiff_seeds_tangential_a0.02_sine.json"
+    )
+    assert results_name("seeds", a) == "heat2d_stiff_seeds_a0.02_constant.json"
+    assert results_name("seeds", b, 0, [0.0]) == "heat2d_stiff_seeds_a0_sine_jump.json"
+    assert NOT_APPLICABLE == {"h_over_delta", "residual"}
+    assert figure_name(CASE1, False, [0.0]) == "heat2d_stiff_seeds_jump.png"
+    assert figure_name(b, True, [0.0, 0.0025]) == "heat2d_stiff_tangential_a0_sine.png"
+    assert figure_name(b, True, [0.0]) == "heat2d_stiff_tangential_a0_sine_jump.png"
+
+
+def test_the_knee_figure_reads_the_seed_line_from_the_cache_only():
+    # E4.10: the seeds of §4.5 over E4.3's knee, where the cache holds them.
+    cache = {
+        knee_key("elliptic", 0.01, 1250, "seeds", 0, 100, 0.1): {"rms": 1e-5},
+        knee_key("elliptic", 0.01, 2500, "seeds", 0, 100, 0.1): {"rms": 2e-6},
+        knee_key("parabolic", 0.0, 1250, "seeds", 0, 100, 0.1): {"rms": 3e-5},
+        knee_key("elliptic", 0.01, 1250, "naive", 0, 100, 0.1): {"rms": 1.0},
+    }
+    line = cached_line(cache, "seeds", [1250, 2500, 5000], [0.0, 0.01], 0, 100, 0.1)
+    assert line == {
+        "elliptic": {0.01: [(1250, 1e-5), (2500, 2e-6)]},
+        "parabolic": {0.0: [(1250, 3e-5)]},
+    }
+
+
+def test_the_snapshot_is_the_sweeps_grid(tmp_path, capsys):
+    # E4.10, stiff note §5: every operator on one grid (h = 8.3 δ), the
+    # parabolic errors the sweep cached for it (§4.5, 2026-09-22), ordered,
+    # and the table and figure written.
+    tables = main(["--mode", "snapshot", "--outputs", str(tmp_path)])
+    assert "the snapshot" in capsys.readouterr().out
+    assert (tmp_path / "heat2d_stiff_snapshot.png").exists()
+    rows = {r["operator"]: r for r in tables["snapshot"]}
+    assert SNAPSHOT == (2500, 0.0025)
+    assert rows["naive"]["rms"] == pytest.approx(2.6317e-3, rel=1e-3)
+    assert rows["construction"]["rms"] == pytest.approx(6.9679e-4, rel=1e-3)
+    assert rows["seeds"]["rms"] == pytest.approx(3.3253e-6, rel=1e-3)
+    assert (
+        rows["seeds"]["rms"]
+        < 1e-2 * rows["construction"]["rms"]
+        < rows["naive"]["rms"]
+        < rows["direct"]["rms"]
+    )
+    for r in rows.values():
+        assert r["max"] >= r["rms"] and 0.0 <= r["near_share"] <= 1.0
+    # The construction's error sits at the edges, the seeds' mostly away.
+    assert rows["construction"]["near_share"] > 0.5 > rows["seeds"]["near_share"]
+    written = read_results(tmp_path / "heat2d_stiff_snapshot.json")
+    assert [r["operator"] for r in written["tables"]["snapshot"]] == list(rows)

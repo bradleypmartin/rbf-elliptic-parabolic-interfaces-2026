@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -70,6 +71,31 @@ def jsonable(obj: Any) -> Any:
     if isinstance(obj, Path):
         return str(obj)
     return obj
+
+
+def finite(table: Any, placeholders: Collection[str], key: str | None = None) -> Any:
+    """``table`` with a driver's non-finite placeholders as None; any other raises.
+
+    A driver's printed tables may use ``inf`` or ``nan`` for "not applicable"
+    (the jump's h/δ, a rate with no earlier count), which strict JSON cannot
+    hold and ``write`` refuses. The keys a driver names in ``placeholders``
+    become null; a non-finite value under any other key is a failed solve or
+    march, and it raises here, naming the key, rather than being recorded. A
+    value in a list takes the key of the dict it sits under, and a dict keyed
+    by numbers (δ, counts) keeps its parent's.
+    """
+    if isinstance(table, dict):
+        return {
+            k: finite(v, placeholders, k if isinstance(k, str) else key)
+            for k, v in table.items()
+        }
+    if isinstance(table, (list, tuple)):
+        return [finite(v, placeholders, key) for v in table]
+    if isinstance(table, (float, np.floating)) and not np.isfinite(table):
+        if key in placeholders:
+            return None
+        raise ValueError(f"{key!r} is {table}, and it is not a placeholder")
+    return table
 
 
 def _key(k: Any) -> str:

@@ -137,54 +137,73 @@ unresolved; the ranking; every line's fit (the parabolic ones again from
 ``GROWING_BELOW``); and off case 1 each line over its case-1 twin. Figure:
 ``heat2d_stiff_treatments[_<tag>].png``.
 
-    uv run python scripts/heat2d_stiff.py              # 2.5 min cold, 21 s cached
+``--mode snapshot`` (E4.10, #41; stiff note §5) is §2.5's snapshot on
+scattered nodes: case 1 at 2500 nodes and δ = 0.0025 (``h = 8.3 δ``,
+``SNAPSHOT``), the parabolic problem, the naive, construction, direct and
+seed operators built as the sweep builds them, so that their RMS errors are
+the sweep's; per operator the RMS and max errors, where the max is, and the
+share of the squared error within ``2h`` of a curve. Figure:
+``heat2d_stiff_snapshot.png`` (10 s, nothing cached). The default ``--mode
+all`` runs it after the stencils. ``--mode naive`` draws ``--mode seeds``'s
+seed line on the knee figure wherever the cache holds it (``cached_line``),
+solving nothing.
+
+Every run writes its tables and its phases' seconds to a results file
+(``results_cache``, schema 1): ``heat2d_stiff.json`` for ``--mode all``,
+``heat2d_stiff_<mode>[_<tag>][_seed<k>][_jump].json`` otherwise
+(``results_name``), under ``--outputs`` and, with ``--data-dir paper/data``,
+there too. The jump's ``h/δ`` and δ = 0's chain residual, printed as inf and
+nan, are written as null (``NOT_APPLICABLE``); any other non-finite value
+stops the write. The runs below are the documented ones, one results file
+each (stiff note §5 lists them); from the caches each takes under a second
+except ``--mode references --amplitude 0.02`` (76 s, the product grids),
+``--mode stencils`` (21 s) and ``--mode tangential`` (8 min), none of which
+cache. The comments give each run's cost once, cold.
+
+    uv run python scripts/heat2d_stiff.py              # 2.5 min cold, 26 s cached
+    uv run python scripts/heat2d_stiff.py --mode references \
+        --deltas 0 0.04 0.01 0.005 0.0025 0.002 0.001 0.0005   # 0.2 s
     uv run python scripts/heat2d_stiff.py --mode naive \
         --counts 1250 2500 5000 10000 20000 40000 80000 160000   # 58 min once
     uv run python scripts/heat2d_stiff.py --mode naive --seed 1 \
         --counts 1250 2500 5000 10000 20000 --spectrum-counts   # the scatter
-    uv run python scripts/heat2d_stiff.py --mode references --deltas 0 0.001 0.0005
+    uv run python scripts/heat2d_stiff.py --mode naive --seed 2 \
+        --counts 1250 2500 5000 10000 20000 --spectrum-counts
     uv run python scripts/heat2d_stiff.py --mode stencils       # 21 s
+    uv run python scripts/heat2d_stiff.py --mode snapshot       # 10 s
     uv run python scripts/heat2d_stiff.py --mode seeds \
-        --counts 1250 2500 5000 10000 20000 40000               # 32 min once
+        --operators naive construction direct direct-reach seeds seeds-plain \
+        seeds-edge --counts 1250 2500 5000 10000 20000 40000
+        # 32 min once, 25 more for E4.12's seeds-edge
     uv run python scripts/heat2d_stiff.py --mode seeds --deltas 0 \
         --operators naive construction seeds \
-        --counts 1250 2500 5000 10000 20000 40000 80000 160000  # H4 to the end
-    uv run python scripts/heat2d_stiff.py --mode references --amplitude 0.02  # 67 s
+        --counts 1250 2500 5000 10000 20000 40000 80000 160000  # H4 to the end, 3 min
+    uv run python scripts/heat2d_stiff.py --mode references --amplitude 0.02  # 76 s
     uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
-        --counts 1250 2500 5000 10000 20000 40000               # case 2, once
-    uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
-        --inside constant --deltas 0 0.0025 --operators naive construction seeds \
-        --counts 1250 2500 5000 10000 20000 40000               # the curvature alone
-    uv run python scripts/heat2d_stiff.py --mode seeds --inside sine \
-        --deltas 0 0.0025 --operators naive construction seeds \
-        --counts 1250 2500 5000 10000 20000 40000               # alpha along the edge
+        --operators naive construction construction-flat direct direct-reach \
+        seeds seeds-plain --counts 1250 2500 5000 10000 20000 40000  # route (a), 34 min
     uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
         --operators naive construction direct direct-reach seeds seeds-plain \
-        tangential tangential-plain \
-        --counts 1250 2500 5000 10000 20000 40000               # E4.11 on case 2
+        tangential tangential-plain tangential-edge \
+        --counts 1250 2500 5000 10000 20000 40000
+        # case 2 with the chain: 58 min more once, 61 for the rule
     uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
         --inside constant --deltas 0 0.0025 --operators naive construction seeds \
         tangential tangential-plain --counts 1250 2500 5000 10000 20000 40000
+        # A, the curvature alone: 10 + 13 min
     uv run python scripts/heat2d_stiff.py --mode seeds --inside sine \
         --deltas 0 0.0025 --operators naive construction seeds tangential \
-        tangential-plain --counts 1250 2500 5000 10000 20000 40000   # E4.11's A, B
+        tangential-plain --counts 1250 2500 5000 10000 20000 40000
+        # B, alpha along the edge: 8 + 13 min
     uv run python scripts/heat2d_stiff.py --mode seeds --inside sine --deltas 0 \
         --operators naive construction seeds tangential tangential-plain \
         --counts 1250 2500 5000 10000 20000 40000 80000 160000  # B's δ = 0, 23 min
     uv run python scripts/heat2d_stiff.py --mode tangential \
         --counts 1250 2500 5000 10000 20000 40000               # H14, H15, spectra
-    uv run python scripts/heat2d_stiff.py --mode seeds \
-        --operators naive construction direct direct-reach seeds seeds-plain \
-        seeds-edge --counts 1250 2500 5000 10000 20000 40000    # E4.12's rule, case 1
-    uv run python scripts/heat2d_stiff.py --mode seeds --amplitude 0.02 \
-        --operators naive construction direct direct-reach seeds seeds-plain \
-        tangential tangential-plain tangential-edge \
-        --counts 1250 2500 5000 10000 20000 40000               # E4.12 on case 2
-    uv run python scripts/heat2d_stiff.py --mode treatments     # 3 min cold, s cached
     uv run python scripts/heat2d_stiff.py --mode treatments \
-        --counts 1250 2500 5000 10000 20000 40000               # E4.9 on case 1
+        --counts 1250 2500 5000 10000 20000 40000               # E4.9 on case 1, 21 min
     uv run python scripts/heat2d_stiff.py --mode treatments --amplitude 0.02 \
-        --counts 1250 2500 5000 10000 20000 40000               # E4.9 on case 2
+        --counts 1250 2500 5000 10000 20000 40000               # E4.9 on case 2, 21 min
 """
 
 from __future__ import annotations
@@ -269,6 +288,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     widened_edge,
 )
 from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
+from heat_interfaces.results_cache import ResultsCache, finite  # noqa: E402
 
 STUDY_DELTAS = (0.0, 0.04, 0.01, 0.005, 0.0025)
 """The jump and E4.3's four edge widths (#34)."""
@@ -472,6 +492,11 @@ CASE2_REFERENCE = "heat2d_case2_reference_n160000_seed0.npz"
 
 CHECK_N_X = 65
 """The finer Fourier grid the product-grid reference is checked against."""
+
+RESULTS = "heat2d_stiff"
+"""The results files' stem (``results_cache``, E4.10): one per mode and geometry,
+``heat2d_stiff.json`` for ``--mode all`` and ``heat2d_stiff_<mode>[_<tag>].json``
+otherwise, under ``--outputs`` and ``--data-dir``."""
 
 
 @dataclass(frozen=True)
@@ -1456,12 +1481,45 @@ def print_spectra(rows: list[dict]) -> None:
         )
 
 
-def plot_knee(results: dict[str, dict[float, list[dict]]], path: Path) -> None:
+def cached_line(
+    cache: dict[str, dict],
+    label: str,
+    counts: Sequence[int],
+    deltas: Sequence[float],
+    seed: int,
+    iterations: int,
+    t_end: float,
+) -> dict[str, dict[float, list[tuple[int, float]]]]:
+    """``{problem: {δ: [(n, RMS error), …]}}`` of one case-1 line, from the cache only.
+
+    What the knee figure draws of a line another mode computed (E4.10: the seeds
+    of §4.5 over E4.3's knee): the counts the cache holds, nothing solved.
+    """
+    out: dict[str, dict[float, list[tuple[int, float]]]] = {}
+    for problem in PROBLEMS:
+        for delta in deltas:
+            points = []
+            for n in counts:
+                k = knee_key(problem, delta, n, label, seed, iterations, t_end)
+                if k in cache:
+                    points.append((n, cache[k]["rms"]))
+            if points:
+                out.setdefault(problem, {})[delta] = points
+    return out
+
+
+def plot_knee(
+    results: dict[str, dict[float, list[dict]]],
+    path: Path,
+    seeds: dict[str, dict[float, list[tuple[int, float]]]] | None = None,
+) -> None:
     """Top: RMS error against N, elliptic and parabolic; bottom: the collapse in h/δ.
 
     Orange is naive, purple the δ = 0 construction, one marker per δ; the
     jump's naive line is thin and unmarked, dotted purple the floors, grey
-    the uniform (α ≡ 1) naive run, dashed verticals ``h = δ``. The bottom
+    the uniform (α ≡ 1) naive run, dashed verticals ``h = δ``. ``seeds``
+    (``cached_line``) adds the seed operator in blue where the cache holds it,
+    the jump's thin and unmarked as the naive one is (E4.10). The bottom
     panels plot three readings of the naive elliptic solution against
     ``h/δ``: the relative flux error on the innermost pair, the RMS error
     over the jump's on the same node set, and the RMS error itself, with
@@ -1498,6 +1556,13 @@ def plot_knee(results: dict[str, dict[float, list[dict]]], path: Path) -> None:
             at = (1.0 / (0.95 * delta)) ** 2
             if n[0] <= at <= n[-1]:
                 ax.axvline(at, color=REFERENCE, lw=0.6, ls="--")
+        for delta, points in (seeds or {}).get(problem, {}).items():
+            m, e = zip(*points, strict=True)
+            if delta == 0.0:
+                ax.loglog(m, e, color=AWARE, lw=0.8)
+                continue
+            marker = MARKERS[positive.index(delta) % len(MARKERS)]
+            ax.loglog(m, e, color=AWARE, marker=marker, ms=4, lw=0.9)
         ax.set_xticks(n, [f"{int(k)}" for k in n], fontsize=7, rotation=45)
         ax.set_xticks([], minor=True)
         ax.set_title(f"case 1, tanh edges: {names[problem]}", fontsize=10)
@@ -1537,6 +1602,8 @@ def plot_knee(results: dict[str, dict[float, list[dict]]], path: Path) -> None:
         Line2D([], [], color=NAIVE, lw=0.8, label="naive, δ = 0 (jump; band below)"),
         Line2D([], [], color=REFERENCE, ls="--", lw=0.6, label="h = δ"),
     ]
+    if seeds:
+        handles.insert(2, Line2D([], [], color=AWARE, label="seeds (§4.5)"))
     positive = [d for d in elliptic if d > 0]
     for k, delta in enumerate(positive):
         handles.append(
@@ -1619,7 +1686,10 @@ def run_naive(args) -> dict:
         print_spectra(spectra)
         tables["spectra"] = spectra
     args.outputs.mkdir(parents=True, exist_ok=True)
-    plot_knee(results, args.outputs / "heat2d_stiff_knee.png")
+    seeds = cached_line(
+        cache, "seeds", args.counts, args.deltas, args.seed, args.iterations, args.t_end
+    )
+    plot_knee(results, args.outputs / "heat2d_stiff_knee.png", seeds)
     print(
         f"\nknee study {time.perf_counter() - t0:.1f} s; figure and {KNEE_CACHE}"
         f" in {args.outputs}/"
@@ -2133,8 +2203,9 @@ def _counts_axis(ax, n: np.ndarray) -> None:
 def _style(label: str) -> tuple[str, str]:
     """``STYLE``'s colour and marker for a line, its ``--seed-reach`` suffix aside."""
     for chain in ("seeds", "tangential"):
-        if label.startswith(f"{chain}-plain"):
-            return STYLE[f"{chain}-plain"]
+        for variant in ("plain", "edge"):
+            if label.startswith(f"{chain}-{variant}"):
+                return STYLE[f"{chain}-{variant}"]
         if label.startswith(chain):
             return STYLE[chain]
     return STYLE[label]
@@ -2423,16 +2494,20 @@ def print_flat_comparison(
         print(line)
 
 
-def figure_name(geometry: Geometry, tangential: bool = False) -> str:
+def figure_name(
+    geometry: Geometry, tangential: bool = False, deltas: Sequence[float] = ()
+) -> str:
     """``heat2d_stiff_seeds.png`` for case 1, the geometry's tag in it otherwise.
 
     With the tangential chain as the sweep's main line (E4.11) ``seeds``
-    becomes ``tangential``, so E4.6's and E4.7's figures are never overwritten.
+    becomes ``tangential``, so E4.6's and E4.7's figures are never overwritten;
+    a sweep of δ = 0 alone (the columns run to 160,000 nodes) adds ``_jump``, so
+    that it does not overwrite its geometry's full figure with one panel (E4.10).
     """
     stem = "heat2d_stiff_tangential" if tangential else "heat2d_stiff_seeds"
-    if geometry.is_case1:
-        return f"{stem}.png"
-    return f"{stem}_{geometry.tag.replace(' ', '_')}.png"
+    if not geometry.is_case1:
+        stem = f"{stem}_{geometry.tag.replace(' ', '_')}"
+    return f"{stem}_jump.png" if list(deltas) == [0.0] else f"{stem}.png"
 
 
 def run_seeds(args) -> dict:
@@ -2578,19 +2653,22 @@ def run_seeds(args) -> dict:
                 " flat (E4.3–E4.6's cache), curved, and curved ÷ flat",
             )
     args.outputs.mkdir(parents=True, exist_ok=True)
-    # E4.11's figure keeps one line per role in its top row: the ablations
+    # E4.12's rule off the ring is the tables', not a line of the figure: it
+    # stays a ring's switch (stiff note §5.2), so the figures are E4.6's and
+    # E4.11's. E4.11's keeps one line per role in its top row: the ablations
     # (the two plain lines, direct-reach) are the tables' and the warp panel's.
+    drawn = [r for r in labels if "-edge" not in r]
     top = (
-        [r for r in labels if "-plain" not in r and r != "direct-reach"]
+        [r for r in drawn if "-plain" not in r and r != "direct-reach"]
         if tangential
         else None
     )
     plot_seeds(
         results,
-        labels,
+        drawn,
         seeds,
         plain,
-        args.outputs / figure_name(geometry, tangential),
+        args.outputs / figure_name(geometry, tangential, args.deltas),
         None if geometry.is_case1 else f"{geometry.name}: {chain} seeds",
         top,
     )
@@ -3340,6 +3418,180 @@ def run_treatments(args) -> dict:
     return tables
 
 
+# --- E4.10: the snapshot ---------------------------------------------------------
+
+SNAPSHOT = (2500, 0.0025)
+"""The snapshot's grid and width: ``h = 1/48 = 8.3 δ``, §2.5's ``h = 8δ`` in 2-D,
+where the naive, construction and seed lines are ordered and apart."""
+
+SNAPSHOT_LABELS = ("naive", "construction", "direct", "seeds")
+"""The snapshot's operators: the two baselines, the blind smooth stencil, the seeds."""
+
+
+def snapshot(
+    n: int, delta: float, seed: int, iterations: int, t_end: float
+) -> tuple[list[dict], NodeSet, dict[str, np.ndarray]]:
+    """``(rows, nodes, errors)``: every operator of ``SNAPSHOT_LABELS`` on one grid.
+
+    §2.5's 1-D snapshot on case 1's scattered nodes: the parabolic problem at
+    ``t_end`` (BD4 at ``dt = h`` from the analytic history), each operator built
+    by ``sweep_operators`` as the sweep builds it, so its RMS error is the
+    sweep's at this (n, δ). Per operator: the RMS and max errors, where the max
+    is, and the share of the squared error within ``2h`` of either curve.
+    """
+    domain = case1()
+    nodes = build_node_set(domain, n, seed=seed, iterations=iterations)
+    groups = {
+        "plain": build_stencils(nodes, domain),
+        "crossing": build_stencils(nodes, domain, interface=BOUNDARY),
+    }
+    medium = SmoothBand(domain.material, delta)
+    ref = CASE1.reference(delta, PROBLEMS["parabolic"])
+    built = sweep_operators(SNAPSHOT_LABELS, nodes, medium, groups, domain=domain)
+    near = np.zeros(nodes.n, dtype=bool)
+    for curve in domain.material.interfaces:
+        near |= np.abs(curve.signed_distance(nodes.x, nodes.y)) < 2.0 * nodes.h
+    rows, errors = [], {}
+    for label in SNAPSHOT_LABELS:
+        op, permc, _ = built[label]
+        u, t = _solve("parabolic", op, nodes, ref, t_end, permc)
+        e = u - ref(nodes.x, nodes.y, t)
+        at = int(np.argmax(np.abs(e)))
+        rows.append(
+            {
+                "operator": label,
+                "rms": rms_error(u, ref(nodes.x, nodes.y, t)),
+                "max": float(np.abs(e[at])),
+                "x": float(nodes.x[at]),
+                "y": float(nodes.y[at]),
+                "near_share": float(np.sum(e[near] ** 2) / np.sum(e**2)),
+            }
+        )
+        errors[label] = e
+    return rows, nodes, errors
+
+
+def print_snapshot(rows: list[dict], n: int, delta: float, h: float) -> None:
+    print(
+        f"\nthe snapshot: case 1, δ = {delta:g}, {n} nodes (h = {h:.4f} ="
+        f" {h / delta:.1f} δ), parabolic at t = {T_END:g}"
+    )
+    print("  operator          RMS       max  at (x, y)        share within 2h")
+    for r in rows:
+        print(
+            f"  {r['operator']:<13} {r['rms']:9.2e} {r['max']:9.2e}"
+            f"  ({r['x']:.3f}, {r['y']:.3f})  {r['near_share']:6.2f}"
+        )
+
+
+def plot_snapshot(
+    rows: list[dict], nodes: NodeSet, errors: dict[str, np.ndarray], path: Path
+) -> None:
+    """Top: ``log10 |e|`` over the strip per operator, one scale; bottom: ``|e|`` in y.
+
+    The band's curves are dashed; the colour scale is shared, so the panels
+    read against one another as the RMS column does.
+    """
+    import matplotlib.tri as mtri
+    from matplotlib.colors import LogNorm
+
+    fig = plt.figure(figsize=(11.0, 7.4), layout="constrained")
+    top, bottom = fig.subfigures(2, 1, height_ratios=(1.0, 1.0))
+    axes = top.subplots(1, len(rows), sharey=True)
+    tri = mtri.Triangulation(nodes.x, nodes.y)
+    lows = [np.percentile(np.abs(errors[r["operator"]]), 5) for r in rows]
+    norm = LogNorm(vmin=max(min(lows), 1e-12), vmax=max(r["max"] for r in rows))
+    image = None
+    for ax, r in zip(axes, rows, strict=True):
+        e = np.abs(errors[r["operator"]])
+        image = ax.tripcolor(
+            tri, np.maximum(e, norm.vmin), norm=norm, cmap="viridis", shading="gouraud"
+        )
+        for y in (0.6, 0.8):
+            ax.axhline(y, color="w", lw=0.6, ls="--")
+        ax.set_aspect("equal")
+        ax.set_title(f"{r['operator']}: RMS {r['rms']:.2e}", fontsize=9)
+        ax.set_xlabel("x")
+    axes[0].set_ylabel("y")
+    top.colorbar(image, ax=axes, shrink=0.9, label="|error|")
+    ax = bottom.subplots()
+    for r in rows:
+        label = r["operator"]
+        ax.semilogy(
+            nodes.y,
+            np.abs(errors[label]),
+            ".",
+            ms=2.0,
+            color=STYLE[label][0],
+            label=f"{label} (share within 2h: {r['near_share']:.2f})",
+        )
+    ax.axvspan(0.6, 0.8, color=REFERENCE, alpha=0.12, lw=0)
+    for y in (0.6, 0.8):
+        ax.axvline(y, color=REFERENCE, lw=0.6, ls="--")
+    ax.set_xlabel("y")
+    ax.set_ylabel("|error| at the nodes")
+    ax.set_ylim(bottom=norm.vmin)
+    ax.grid(True, alpha=0.25)
+    bottom.legend(
+        *ax.get_legend_handles_labels(),
+        fontsize=8,
+        loc="outside lower center",
+        ncol=len(rows),
+        markerscale=4,
+    )
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def run_snapshot(args) -> dict:
+    """§5's snapshot: the table, the figure ``heat2d_stiff_snapshot.png``."""
+    t0 = time.perf_counter()
+    n, delta = SNAPSHOT
+    rows, nodes, errors = snapshot(n, delta, args.seed, args.iterations, args.t_end)
+    print_snapshot(rows, n, delta, nodes.h)
+    plot_snapshot(rows, nodes, errors, args.outputs / "heat2d_stiff_snapshot.png")
+    print(f"\nsnapshot {time.perf_counter() - t0:.1f} s")
+    return {"snapshot": rows}
+
+
+# --- E4.10: the results file -----------------------------------------------------
+
+
+NOT_APPLICABLE = frozenset({"h_over_delta", "residual"})
+"""The row keys whose non-finite value is a placeholder, written as JSON null: the
+jump's ``h/δ`` (inf) and the chain's residual at δ = 0 (nan, no edge to difference
+across). Found by running every documented command (stiff note §5)."""
+
+
+def results_name(
+    mode: str,
+    geometry: Geometry,
+    seed: int = 0,
+    deltas: Sequence[float] = (),
+    tangential: bool = False,
+) -> str:
+    """``heat2d_stiff.json`` for ``--mode all``; the run's mode, geometry and set else.
+
+    One file per documented run (stiff note §5), so that the runs, each a few
+    seconds from the caches, do not overwrite one another's tables: the mode
+    (``seeds_tangential`` for a seed sweep with the tangential line, E4.11's,
+    beside route (a)'s, E4.7's), the geometry's tag off case 1, ``seed<k>`` off
+    node set 0 (§4.2's scatter) and ``jump`` for a sweep of δ = 0 alone (the
+    columns run to 160,000 nodes). The counts and widths a file holds are in
+    its ``args``.
+    """
+    parts = [RESULTS] if mode == "all" else [RESULTS, mode]
+    if mode == "seeds" and tangential:
+        parts.append("tangential")
+    if not geometry.is_case1:
+        parts.append(geometry.tag.replace(" ", "_"))
+    if seed:
+        parts.append(f"seed{seed}")
+    if list(deltas) == [0.0]:
+        parts.append("jump")
+    return "_".join(parts) + ".json"
+
+
 def main(argv: Sequence[str] | None = None) -> dict:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
@@ -3352,6 +3604,7 @@ def main(argv: Sequence[str] | None = None) -> dict:
             "seeds",
             "tangential",
             "treatments",
+            "snapshot",
         ),
         default="all",
     )
@@ -3402,6 +3655,12 @@ def main(argv: Sequence[str] | None = None) -> dict:
         help="the band's piece (default: constant on flat lines, sine on curves)",
     )
     parser.add_argument("--outputs", type=Path, default=Path("outputs"))
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="also write the run's results file here (paper/data, E5.3)",
+    )
     args = parser.parse_args(argv)
     inside = args.inside or ("constant" if args.amplitude == 0.0 else "sine")
     try:
@@ -3431,26 +3690,50 @@ def main(argv: Sequence[str] | None = None) -> dict:
     if args.mode == "seeds" and "seeds" not in args.operators:
         parser.error("the seed sweep needs the seeds line")
     args.outputs.mkdir(parents=True, exist_ok=True)
+    results = ResultsCache(RESULTS, {**vars(args), "geometry": args.geometry.name})
+    start = time.perf_counter()
     tables: dict = {}
+
+    def phase(name: str, run: Callable[[], dict]) -> None:
+        t0 = time.perf_counter()
+        tables.update(run())
+        results.time(name, time.perf_counter() - t0)
+
     if args.mode in ("all", "references"):
-        if args.geometry.is_case1:
-            tables["references"] = reference_rows(args.deltas, args.growth)
-            print_references(tables["references"])
-        else:
-            tables["references"] = curved_reference_rows(
-                args.geometry, args.deltas, args.growth, args.outputs
-            )
-            print_curved_references(tables["references"], args.geometry)
+
+        def references() -> dict:
+            if args.geometry.is_case1:
+                rows = reference_rows(args.deltas, args.growth)
+                print_references(rows)
+            else:
+                rows = curved_reference_rows(
+                    args.geometry, args.deltas, args.growth, args.outputs
+                )
+                print_curved_references(rows, args.geometry)
+            return {"references": rows}
+
+        phase("references", references)
     if args.mode in ("all", "naive"):
-        tables.update(run_naive(args))
+        phase("naive", lambda: run_naive(args))
     if args.mode in ("all", "stencils"):
-        tables.update(run_stencils(args))
+        phase("stencils", lambda: run_stencils(args))
+    if args.mode in ("all", "snapshot"):
+        phase("snapshot", lambda: run_snapshot(args))
     if args.mode == "seeds":
-        tables.update(run_seeds(args))
+        phase("seeds", lambda: run_seeds(args))
     if args.mode == "tangential":
-        tables.update(run_tangential(args))
+        phase("tangential", lambda: run_tangential(args))
     if args.mode == "treatments":
-        tables.update(run_treatments(args))
+        phase("treatments", lambda: run_treatments(args))
+    for name, table in tables.items():
+        results.add(name, finite(table, NOT_APPLICABLE, name))
+    results.time("total", time.perf_counter() - start)
+    tangential = any(label.startswith("tangential") for label in args.operators)
+    name = results_name(args.mode, args.geometry, args.seed, args.deltas, tangential)
+    paths = [args.outputs / name]
+    if args.data_dir is not None:
+        paths.append(args.data_dir / name)
+    results.write(*paths)
     return tables
 
 
