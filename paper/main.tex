@@ -1,0 +1,313 @@
+% Manuscript for epic E5 (#7): the 2016 RBF-FD heat-transfer construction
+% ported, and the seed stencils for sub-grid smooth edges of
+% docs/stiff-diffusion.md, written up for arXiv. Scaffold from E5.1 (#42);
+% each section is drafted by the ticket named in its TRACE block.
+%
+% SOURCE-OF-TRUTH RULE: docs/stiff-diffusion.md (the stiff note) is canonical
+% for the stiff-edge study and docs/port-notes.md for the port (plan D11).
+% This manuscript QUOTES them; it never becomes a second source of truth.
+% Every number in this file carries a TRACE comment naming a notes section
+% or a results file under paper/data/ (E5.3, #44), and the assembly pass
+% (E5.10, #51) re-checks all of them.
+%
+% Section map (plan section 6, E5; the stiff note's section 5.7 for section 6):
+%   Sec. 1  Introduction              stiff 1.1, 2.5, 5.3; LITERATURE.md 6a  #45
+%   Sec. 2  Setting                   stiff 1.1, 3.1; port notes 1-2          #45
+%   Sec. 3  Seeds in one dimension    stiff 1.2-1.8                           #46
+%   Sec. 4  1-D results               stiff 2.1-2.5                           #47
+%   Sec. 5  Seeds in two dimensions   stiff 3.2-3.4, 3.10, 3.11, 4.10, 5.2    #48
+%   Sec. 6  2-D results               stiff 4.1-4.10, 5.1, 5.3                #49
+%   Sec. 7  Discussion                stiff 2.5, 5.5-5.6; LITERATURE.md 6b    #50
+%   Literature #43 . Figures, tables, numbers #44 . Assembly #51 . arXiv #52
+%
+% Build: tectonic main.tex   (see paper/README.md)
+\documentclass[11pt]{amsart}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue]{hyperref}
+\graphicspath{{figures/}}
+% arXiv builds with pdfTeX, tectonic with XeTeX. Only the bibliography may
+% carry non-ASCII input (accented surnames as UTF-8, paper/README.md), which
+% pdfTeX reads with this; make_arxiv.py refuses anything else.
+\usepackage{iftex}
+\ifPDFTeX\usepackage[utf8]{inputenc}\fi
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% Recurring quantities. Only macros the current text uses are defined; the
+% section drafts add their own as they need them.
+\newcommand{\px}{\partial_x}
+\newcommand{\py}{\partial_y}
+\newcommand{\pt}{\partial_t}
+% Scientific notation for quoted measurements: $\sci{6.2}{-8}$.
+\newcommand{\sci}[2]{#1 \times 10^{#2}}
+% Draft stubs, visible in the PDF until the owning ticket replaces them.
+% make_arxiv.py refuses to package while one remains.
+\newcommand{\stub}[1]{\par\noindent\textit{[Stub, #1.]}\par}
+
+% Working title; the final wording is E5.10's (#51).
+\title[Seed stencils for diffusion]{Seed stencils for diffusion through
+material edges too steep for the grid}
+\author{Bradley P. Martin}
+\email{1bradley.martin1@gmail.com}
+% Fixed revision date, updated by hand with content changes. \today would
+% make the committed main.pdf non-reproducible from the committed source.
+\date{September 24, 2026}
+
+\begin{document}
+
+% ---------------------------------------------------------------------------
+% ABSTRACT. Drafted by #45 from the statements the notes make, worded by #51;
+% novelty only in LITERATURE.md section 6's words (#43). Sources:
+%   the knee, the seeds' rates, the ranking, the elliptic remark   stiff 2.5
+%   the eleven 2-D statements                                      stiff 5.3
+% ---------------------------------------------------------------------------
+\begin{abstract}
+\stub{\#45: the three regimes of a diffusion coefficient (smooth, a jump, an
+edge of width $\delta$ below the node spacing $h$); what standard stencils
+and the 2016 jump construction do through the sub-grid edge; the seeds and
+their $\delta \to 0$ limit; the 1-D and 2-D results, elliptic and parabolic,
+against the coefficient treatments in use}
+\end{abstract}
+
+\maketitle
+
+% ===========================================================================
+\section{Introduction}
+\label{sec:intro}
+% TRACE: stiff 1.1 (the setting), 2.5 (what the 1-D study states), 5.3 (what
+% the 2-D study states); plan sections 1 and 3; LITERATURE.md 6a (#43) for
+% the prior-work paragraph, verbatim. Drafted by #45.
+\stub{\#45: $u_t = \nabla \cdot (\alpha \nabla u)$ with a coefficient that
+is smooth, jumps, or changes over a width $\delta < h$; the knee of standard
+stencils at $h \approx \delta$; the 2016--2017 interface-aware RBF-FD
+construction and its role as the $\delta \to 0$ limit; the seeds, whose
+basis is continued through the edge by ODEs; what is measured, and
+against what}
+
+\subsection*{Contributions}
+\stub{\#45: the contributions, in the words LITERATURE.md section 6 allows
+(\#43)}
+
+\subsection{Relation to prior work}
+\label{sec:priorwork}
+\stub{\#43 supplies this paragraph (LITERATURE.md section 6a); \#45 places
+it}
+
+\subsection*{Outline}
+\stub{\#45: one sentence per section}
+
+% ===========================================================================
+\section{Setting}
+\label{sec:setting}
+% TRACE: stiff 1.1 (1-D) and 3.1 (2-D); the dissertation ch. 4-5 and EABE
+% 2017 sections 2-3 for the port, quoted, not re-derived (page map in
+% docs/paper-index.md); docs/port-notes.md sections 1-2 for what the port
+% reproduces. Drafted by #45.
+\subsection{The problem and its interface conditions}
+\label{sec:problem}
+\stub{\#45: the heat equation and its equilibrium; continuity of $u$ and of
+the flux $\alpha \partial_n u$ across a jump; the smooth sub-grid edge of
+width $\delta$ and the three regimes; the norms used}
+
+\subsection{One dimension}
+\label{sec:setting1d}
+\stub{\#45: equispaced grids, the naive operator assembled as $D_x A D_x$
+(dissertation eq.~76), BD4 with $\Delta t \propto h$, the media and test
+problems}
+
+\subsection{Two dimensions}
+\label{sec:setting2d}
+\stub{\#45: the $x$-periodic strip, scattered nodes with rows straddling
+each interface, Gaussian RBF-FD with polynomial augmentation (42 nodes and
+degree 5 in the bulk, 30 and degree 4 at interfaces and boundaries),
+Dirichlet rows, the direct and iterative solvers}
+
+\subsection{Interface-aware stencils for a jump}
+\label{sec:jump}
+\stub{\#45: the 2016--2017 construction as background: the translated
+polynomial basis, the continuity matrices with curvature, the warped RBFs}
+
+\subsection{Scope of the implementation}
+\label{sec:scope}
+\stub{\#45: the Python port and the published figures it reproduces
+(port notes); what it leaves out (the cornered interface), stated as scope}
+
+% ===========================================================================
+\section{Seeds for the diffusion operator in one dimension}
+\label{sec:seeds1d}
+% TRACE: stiff 1.2 (the chain), 1.3 (its first-order form), 1.4 (nested
+% kernels, the jump limit), 1.5 (ECT well-posedness), 1.6 (truncation
+% error), 1.8 (the elliptic degeneracy and its finite-volume twin); code
+% heat1d/stiff.py. Drafted by #46. Figure: the seed basis (#44; today
+% docs/figures/heat1d_stiff_seeds.png).
+\subsection{Seeds as the profiles of solutions polynomial in time}
+\label{sec:chain}
+\stub{\#46: the chain of seeds anchored at the evaluation node, continued
+through the edge in first-order form so that $\alpha$ is never
+differentiated; the seed-basis figure}
+
+\subsection{Nested kernels and the jump as the limit}
+\label{sec:jumplimit}
+\stub{\#46: the nested kernels of the operator; the translated basis of
+Section~\ref{sec:jump} as the $\delta \to 0$ limit}
+
+\subsection{Well-posedness}
+\label{sec:ect}
+\stub{\#46: the seeds form an extended complete Chebyshev system, so every
+stencil solve is nonsingular}
+
+\subsection{Truncation error}
+\label{sec:truncation}
+\stub{\#46: third order locally on the seeded rows, fourth globally; the two
+readings of the bound}
+
+\subsection{The elliptic problem in one dimension}
+\label{sec:elliptic1d}
+\stub{\#46: the exactness remark and its finite-volume twin, citing the
+literature \#43 finds}
+
+% ===========================================================================
+\section{One-dimensional results}
+\label{sec:results1d}
+% TRACE: stiff 2.1 (media and references), 2.2 (the knee, the delta = 0
+% construction), 2.3 (the seeds), 2.4 (the treatments), 2.5 (the four
+% statements, the snapshot); numbers from paper/data/heat1d_stiff.json
+% (#44), asserted by scripts/paper_numbers.py. Drafted by #47.
+\subsection{Media and references}
+\label{sec:media1d}
+\stub{\#47: the smooth-edged media and the references at every $\delta$}
+
+\subsection{The parabolic knee}
+\label{sec:knee1d}
+\stub{\#47: the naive knee at $h \approx \delta$; the snapshot of the four
+regimes on one grid}
+
+\subsection{The jump construction on a smooth edge}
+\label{sec:construction1d}
+\stub{\#47: the $\delta = 0$ construction's error on a smooth edge}
+
+\subsection{The seeds}
+\label{sec:seedrates1d}
+\stub{\#47: the seeds' rates at every $\delta$}
+
+\subsection{Coefficient treatments}
+\label{sec:treatments1d}
+\stub{\#47: the treatments' table and the ranking; the elliptic sanity
+figure as a remark}
+
+% ===========================================================================
+\section{Seeds in two dimensions}
+\label{sec:seeds2d}
+% TRACE: stiff 3.2-3.4 (the straight feature), 3.10 (the tangential chain),
+% 3.11 (the ring's gap, series, flux seeds and level-0 warp), 4.10 and 5.2
+% (the diagonal rule, and why it is the ring's); code heat2d/seeds.py.
+% Drafted by #48. Figure: a seed section (#44).
+\subsection{A straight feature}
+\label{sec:straight}
+\stub{\#48: the local frame and the anchor; seeds polynomial in the
+tangential coordinate with coefficient functions marched along the normal}
+
+\subsection{Stencil assembly}
+\label{sec:assembly2d}
+\stub{\#48: the seeds in the RBF-FD system, the warp they bring with them,
+which rows are seeded; the seed-section figure}
+
+\subsection{Curved and tangentially varying features}
+\label{sec:curved}
+\stub{\#48: why a frozen normal profile is inconsistent where $\alpha$
+varies along the edge; the tangential chain in the curve's own coordinates}
+
+\subsection{A thin resistive layer}
+\label{sec:ring}
+\stub{\#48: the double edge of a ring: its exact width, series composition,
+the flux seeds, the warp on rows anchored inside the layer}
+
+% ===========================================================================
+\section{Two-dimensional results}
+\label{sec:results2d}
+% TRACE: stiff 4.1-4.10 and 5.1 (the snapshot, the results files), in the
+% order of stiff 5.7; the statement numbers are stiff 5.3's; numbers from
+% paper/data/ (#44). Drafted by #49. Every table from a figures/tab_*.tex
+% fragment.
+\subsection{Test problems and references}
+\label{sec:problems2d}
+\stub{\#49: the flat band, the sine pair, the ring; the separable, product-grid
+and reference-free references (stiff 4.1, 4.6, 4.8; statement 1)}
+
+\subsection{Naive baseline}
+\label{sec:naive2d}
+\stub{\#49: the knee on scattered nodes and the jump construction on its
+floor (stiff 4.2; statements 2--3)}
+
+\subsection{Solvability and spectra}
+\label{sec:spectra2d}
+\stub{\#49: the seed rows in the global matrix (stiff 4.4; statement 6)}
+
+\subsection{The flat sweep}
+\label{sec:flat2d}
+\stub{\#49: the seeds against the baselines at every $(n, \delta)$, the
+warp, the elliptic ranking (stiff 4.5; statements 4, 5, 7)}
+
+\subsection{The curved feature}
+\label{sec:curved2d}
+\stub{\#49: the frozen profile and the tangential chain on the sine pair
+(stiff 4.6--4.7; statement 8)}
+
+\subsection{The ring and the extremizing sweep}
+\label{sec:ring2d}
+\stub{\#49: the twins of EABE Fig.~19--20 and the smooth ring (stiff 4.8,
+4.10; statement 9)}
+
+\subsection{Coefficient treatments}
+\label{sec:treatments2d}
+\stub{\#49: the treatments on scattered nodes (stiff 4.9; statement 10)}
+
+\subsection{A snapshot}
+\label{sec:snapshot2d}
+\stub{\#49: the four regimes on one node set (stiff 5.1; statement 11)}
+
+% ===========================================================================
+\section{Discussion}
+\label{sec:discussion}
+% TRACE: stiff 2.5 (the 1-D limitations), 5.5 (limitations), 5.6 (the
+% roundtable's deferred runs); plan D10 (the corner); LITERATURE.md 6b
+% (#43) for the conclusions, verbatim. Drafted by #50.
+\subsection{Limitations}
+\label{sec:limitations}
+\stub{\#50: corners, extreme contrasts, the cost in three dimensions, what
+the experiments leave open}
+
+\subsection{Future work}
+\label{sec:future}
+\stub{\#50: in the order to do it}
+
+\subsection{Conclusions}
+\label{sec:conclusions}
+\stub{\#50: LITERATURE.md section 6b, verbatim}
+
+\section*{Acknowledgments}
+% Drafted by #52.
+\stub{\#52: acknowledgments; where the code and data live}
+
+\section*{Tool and computational resource disclosure}
+% Drafted by #52, in the form used for the companion manuscript.
+\stub{\#52}
+
+% The scaffold cites nothing yet; \nocite{*} keeps the seeded bibliography
+% building until the drafts cite it. #51 removes it, and make_arxiv.py
+% refuses to package while it is here.
+\nocite{*}
+\bibliographystyle{amsalpha}
+\bibliography{references}
+
+\end{document}
