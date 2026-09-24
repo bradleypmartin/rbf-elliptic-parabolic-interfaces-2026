@@ -28,6 +28,9 @@
 \usepackage{booktabs}
 \usepackage[colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue]{hyperref}
 \graphicspath{{figures/}}
+% Long citation keys and verbatim ledger sentences leave a few lines a
+% few points too wide; this lets TeX loosen those lines instead.
+\setlength{\emergencystretch}{1.5em}
 % arXiv builds with pdfTeX, tectonic with XeTeX. Only the bibliography may
 % carry non-ASCII input (accented surnames as UTF-8, paper/README.md), which
 % pdfTeX reads with this; make_arxiv.py refuses anything else.
@@ -48,6 +51,8 @@
 \newcommand{\px}{\partial_x}
 \newcommand{\py}{\partial_y}
 \newcommand{\pt}{\partial_t}
+% A run-in paragraph heading.
+\newcommand{\para}[1]{\par\smallskip\noindent\textit{#1}.\enspace}
 % Scientific notation for quoted measurements: $\sci{6.2}{-8}$.
 \newcommand{\sci}[2]{#1 \times 10^{#2}}
 % Draft stubs, visible in the PDF until the owning ticket replaces them.
@@ -66,17 +71,47 @@ material edges too steep for the grid}
 \begin{document}
 
 % ---------------------------------------------------------------------------
-% ABSTRACT. Drafted by #45 from the statements the notes make, worded by #51;
-% novelty only in LITERATURE.md section 6's words (#43). Sources:
-%   the knee, the seeds' rates, the ranking, the elliptic remark   stiff 2.5
-%   the eleven 2-D statements                                      stiff 5.3
+% ABSTRACT. First draft by #45 from the statements the notes make; the final
+% wording is #51's. Novelty only in LITERATURE.md section 6's words (#43):
+% the fourth and fifth sentences are 6b's abstract-safe sentence verbatim, and
+% the last two are 6b's required caveat verbatim, since the comparison with
+% the coefficient treatments is a headline here.
+% TRACE: the knee, stiff 2.5 (1) and 5.3 (2); the construction's floor of
+% order delta and its growth once the edge is resolved, stiff 2.5 (1) and
+% 5.3 (3); the seeds, stiff 2.5 (2) and 5.3 (4); the caveat's numbers:
+%   801 nodes          stiff 2.5 (3), paper/data/heat1d_stiff.json
+%   1.75               stiff 5.3 (10), paper/data/heat2d_stiff_treatments*.json
+%   2.3 to 4.7 orders over 1250 to 40,000 nodes
+%                      stiff 5.3 (10), paper/data/heat2d_stiff_treatments.json
+% (scripts/paper_numbers.py: where "abstract, §1; stiff ...").
 % ---------------------------------------------------------------------------
 \begin{abstract}
-\stub{\#45: the three regimes of a diffusion coefficient (smooth, a jump, an
-edge of width $\delta$ below the node spacing $h$); what standard stencils
-and the 2016 jump construction do through the sub-grid edge; the seeds and
-their $\delta \to 0$ limit; the 1-D and 2-D results, elliptic and parabolic,
-against the coefficient treatments in use}
+A diffusion coefficient can vary smoothly on the scale of the grid, jump
+across an interface, or change smoothly over a width $\delta$ smaller than
+the node spacing $h$. Through such a sub-grid edge, standard high-order
+stencils that sample the coefficient at the nodes are first order until the
+grid resolves the edge, with a knee at $h \approx \delta$, and the
+interface-aware stencils built for a jump, applied at the edge's centre, sit
+on an error floor of order $\delta$ and leave it once the grid resolves the
+edge. We keep the nodes and replace the polynomial basis of the stencils
+that see the edge by \emph{seeds}. The seeds are the profiles of solutions
+polynomial in time, continued through the edge by ordinary differential
+equations along the normal or along the edge's own coordinates; in one
+dimension they are the classical formal powers of the Sturm--Liouville
+operator, and as $\delta \to 0$ they reduce to the interface-aware stencils
+of a jump. On scattered nodes the resulting RBF-FD stencils are fourth order
+at every $\delta$ tested, elliptic and parabolic, with no switch between
+regimes. We compare them with the coefficient treatments of diffusion
+practice. The comparison is against coefficient sampling on the same nodes
+and against our implementation of the cell harmonic and arithmetic means, a
+widened edge and, in one dimension, the conservative scheme with exact face
+conductances, on one contrast and one test problem per dimension. Through an
+edge the grid does not resolve none of them is better than second order; the
+conservative scheme is exact at the one-dimensional equilibrium and, on the
+sinusoidal medium at $\delta = 0$, ahead of the seeds below 801 nodes, where
+the seeds' line is pre-asymptotic; on the scattered nodes none improves on
+sampling by more than a factor of 1.75 in the RMS norm, and the seeds lie
+2.3 to 4.7 orders below the best of them over 1250 to 40,000 nodes.
 \end{abstract}
 
 \maketitle
@@ -84,27 +119,321 @@ against the coefficient treatments in use}
 % ===========================================================================
 \section{Introduction}
 \label{sec:intro}
-% TRACE: stiff 1.1 (the setting), 2.5 (what the 1-D study states), 5.3 (what
-% the 2-D study states); plan sections 1 and 3; LITERATURE.md 6a (#43) for
-% the prior-work paragraph, verbatim. Drafted by #45.
-\stub{\#45: $u_t = \nabla \cdot (\alpha \nabla u)$ with a coefficient that
-is smooth, jumps, or changes over a width $\delta < h$; the knee of standard
-stencils at $h \approx \delta$; the 2016--2017 interface-aware RBF-FD
-construction and its role as the $\delta \to 0$ limit; the seeds, whose
-basis is continued through the edge by ODEs; what is measured, and
-against what}
+% TRACE: stiff 1.1 (the setting, the three regimes), 1.2 (the chain), 1.7
+% and 2.2 (the construction on a smooth edge), 2.5 (what the 1-D study
+% states), 5.3 (what the 2-D study states); plan sections 1 and 3;
+% LITERATURE.md 6a for the prior-work paragraph and 6b for the claim
+% sentences (#43). Drafted by #45. Numbers are traced paragraph by
+% paragraph below; every cache-backed one is a check in
+% scripts/paper_numbers.py whose `where` starts with "§1" (or "abstract").
+
+Heat conduction through a composite material is governed by
+\begin{equation}
+  \label{eq:heat}
+  u_t = \nabla \cdot (\alpha \nabla u) \equiv L u
+\end{equation}
+and, at equilibrium, by $L u = 0$, with a conductivity $\alpha > 0$ that
+changes sharply between materials. At the two ends of the range of media
+the numerical picture is settled. Where $\alpha$ varies smoothly on
+the scale of the grid, a high-order stencil samples it at the nodes and
+keeps its order. Where $\alpha$ jumps across an interface, the temperature
+and the flux $\alpha\, \partial_n u$ are continuous while the gradient is
+not, a standard stencil across the interface is first order, and the
+remedies rebuild the stencils or the elements that the interface cuts so
+that they satisfy the interface conditions (Section~\ref{sec:priorwork}).
+One of them, the interface-aware RBF-FD stencils of
+\cite{Martin2016,MartinFornberg2017heat} that this paper extends, keeps
+fourth order on scattered nodes, elliptic and parabolic, with a few rows of
+nodes placed across each interface. Between the two ends lies a third case:
+an edge that is smooth, so that no interface condition applies, but
+changes over a width $\delta$ smaller than the node spacing $h$. Every
+material edge is smooth on some scale, a model that resolves an edge on a
+fine grid presents it as sub-grid on a coarser one, and any regularisation
+of a jump produces one.
+
+% TRACE: the 1-D knee, stiff 2.5 (1) (the two-constant medium's ramp
+% problem at delta = 0.01 and 0.0025, h = 2 delta and h = delta/2; the drop
+% "100 to 200 times", checked as bounds); the 2-D knee, stiff 5.3 (2)
+% (0.86-0.94 of the jump's error while h >~ 6 delta, 0.081-0.084 at
+% h ~ delta, the bulk stencils' order 5 below the knee). "Falls by four" is
+% the first-order line over a factor 4 in h, not a measurement.
+A standard stencil through a sub-grid edge samples $\alpha$ on its two
+sides, sees a jump, and treats the coefficient as smooth between its nodes,
+which is the first-order failure of the jump case. It recovers once the grid
+resolves the edge. In the one-dimensional ramp problem of
+Section~\ref{sec:knee1d}, the error of the standard fourth-order operator
+through a $9 : 1$ edge of width $\delta = 0.01$ or $0.0025$ falls by 100 to
+200 times between $h = 2\delta$ and $h = \delta/2$, where a first-order line
+falls by four. On scattered nodes in two dimensions
+(Section~\ref{sec:naive2d}) its elliptic error stays at $0.86$ to $0.94$ of
+its error at the jump while $h \gtrsim 6\delta$, falls to $0.081$ to
+$0.084$ of it at $h \approx \delta$ for the three widths that reach it, and
+converges at the fifth order of the bulk stencils below. We call the turn at
+$h \approx \delta$ the knee.
+
+% TRACE: c = (a - b) ln(a/b)/(2ab), stiff 1.7 and 2.2 (E3.3's closed form,
+% heat1d.exact.edge_resistance_deficit); 0.11 at 1600 nodes and
+% delta = 0.01, stiff 2.5 (1) (the two-constant medium's equilibrium);
+% "only while h >~ 3 delta, by at most a factor of 6", stiff 5.3 (3).
+The interface-aware stencils do not reach this regime either. Applied with
+the centre of the edge as the interface and the two sides' coefficients as
+if $\delta$ were $0$, they converge to the jump problem's solution, which is
+not the smooth problem's: the resistance $\int dx / \alpha$ of a $\tanh$ edge
+between conductivities $a$ and $b$ falls short of the jump's by $c\,\delta$,
+$c = (a - b) \ln(a/b) / (2ab)$, so their error sits on a floor of order
+$\delta$ while the grid does not resolve the edge. Once it does, the rebuilt
+rows keep enforcing a kink that the solution lacks, and their error grows:
+through a $9 : 1$ edge with $\delta = 0.01$ it reaches $0.11$ at 1600
+nodes in the one-dimensional equilibrium of
+Section~\ref{sec:construction1d}. On scattered nodes they
+beat the standard stencils only while $h \gtrsim 3\delta$, and by at most a
+factor of $6$. Using them means knowing $\delta$ and switching them off.
+
+% TRACE: the chain, stiff 1.2 (eq. 1.2's definition; the heat polynomials,
+% the even and odd seeds as the continuity conditions); 1.3 (the
+% first-order form); 1.4 (the jump as the limit); the companion,
+% LITERATURE.md 1b O1's last obligation (stiff 1.2: its u-field chain with
+% rho = 1, K = alpha).
+This paper keeps everything about the scheme except the basis of the
+stencils that see the edge. In place of the monomials a stencil is made
+exact on \emph{seeds}, the $t = 0$ profiles of solutions of \eqref{eq:heat}
+that are polynomial in time. With a constant $\alpha$ these profiles are
+the polynomials, the initial values of the heat polynomials
+\cite{RosenbloomWidder1959}. In one dimension, with $L = \px \alpha \px$
+and anchored at a stencil's evaluation point $x_e$, they form the chain
+\begin{equation}
+  \label{eq:chain}
+  \phi_0 = 1, \qquad
+  \alpha \phi_1' = \alpha(x_e), \qquad
+  L \phi_k = k (k - 1)\, \alpha(x_e)\, \phi_{k-2} \quad (k \ge 2),
+\end{equation}
+with $\phi_k(x_e) = 0$ for $k \ge 1$ and $\phi_k'(x_e) = 0$ for $k \ge 2$,
+integrated through the edge as a first-order system of ordinary
+differential equations that never differentiates $\alpha$
+(Section~\ref{sec:chain}). The seed $\phi_1$ has a constant flux, and
+$\phi_2$ is the profile of a solution whose rate of change $u_t$ is
+constant; in general the even seeds carry
+$\partial_t^k u = \text{const}$ and the odd ones
+$\alpha\, \px \partial_t^k u = \text{const}$, which are the interface
+conditions of a jump. Read across a jump, the chain is the translated
+polynomial basis of the interface-aware stencils
+(Section~\ref{sec:jumplimit}), so one construction covers the jump, the
+sub-grid edge and the resolved edge. In one dimension it is classical
+(Section~\ref{sec:priorwork}). It is also the construction of our companion
+paper for the wave equation \cite{Martin2026seeds}, specialised to a single
+field: the two interface conditions of diffusion, on $u$ and on its flux,
+are both conditions on $u$, so one chain serves every stencil.
+
+% TRACE: stiff 3.2-3.4 (the straight feature: seeds polynomial in x' with
+% coefficient functions marched in y'), 3.5 and 4.6 (a frozen normal profile
+% O(1)-inconsistent where alpha varies along an unresolved edge; route (a)),
+% 3.10 (the tangential chain in the curve's own coordinates), 3.11 (the
+% ring's exact width, series and flux seeds); the flux-seed sentence is
+% LITERATURE.md 6b's, required wherever the flux seeds are named (K9).
+In two dimensions the seeds replace the polynomial augmentation of the
+interface-aware RBF-FD stencils, and the Gaussian part and the
+saddle-point solve stay as they were. Where $\alpha$ varies along the
+normal only, as across a straight edge, seeds polynomial in the tangential
+coordinate turn the chain into a triangular system of ordinary differential
+equations in the normal coordinate, one short march per stencil
+(Section~\ref{sec:straight}). Where the edge is curved or $\alpha$ varies
+along it, a profile frozen along the normal is inconsistent at $O(1)$
+through an unresolved edge, and the chain is marched in the curve's own
+coordinates instead (Section~\ref{sec:curved}). A resistive layer thinner
+than the stencil, the insulating ring of \cite{MartinFornberg2017heat},
+needs its exact width, its own series and seeds of one degree higher that
+carry the flux (Section~\ref{sec:ring}). An imperfect contact costs
+strong-form schemes a derivative in the jump conditions, as Lombard and
+Piraux observed for elastic waves \cite{LombardPiraux2003,LombardPiraux2006};
+the flux seeds add the functions of one degree higher that carry the flux,
+and nothing else.
+
+% TRACE: the comparators, stiff 1.1 (baselines), 2.4 and 4.9 (the
+% treatments), plan 3.4; the 1-D elliptic degeneracy on constant pieces,
+% stiff 1.8 and 2.5 (4); the 2-D elliptic problem as a real test, stiff
+% 5.3 (5).
+We measure the seeds in one and two dimensions, on elliptic and parabolic
+problems, against three baselines: the standard stencils with $\alpha$
+sampled at the nodes; the interface-aware stencils of the jump applied at
+the edge's centre; and the coefficient treatments of diffusion practice,
+which change the coefficient and keep the scheme: harmonic and arithmetic
+means of $\alpha$ over a cell (over a disc on scattered nodes), the edge
+widened to the grid, and, in one dimension, the conservative scheme with
+exact face conductances. On constant pieces the one-dimensional equilibrium
+cannot rank these methods, since its solution has a constant flux and lies
+in the span of the first two seeds, on which the seeds and the exact face
+conductances are both exact (Section~\ref{sec:elliptic1d}); the
+one-dimensional ranking is the parabolic problem's. In two dimensions the
+tangential variation of the solution takes it out of that span, and the
+equilibrium is a real test.
 
 \subsection*{Contributions}
-\stub{\#45: the contributions, in the words LITERATURE.md section 6 allows
-(\#43)}
+% TRACE, item by item. Item 1: LITERATURE.md 6b's contributions sentence,
+% verbatim; stiff 3.2-3.4, 3.10, 3.11. Item 2: stiff 2.5 (1) (100 to 200
+% and 800 to 1000 times between h = 2 delta and delta/2, checked as
+% bounds; the construction on the c delta floor for h >~ 2 delta, 0.93-1.00
+% of it on the two-constant medium, a check E5.4 added), 2.5 (2)
+% (0.1-0.3 %, 1-1.5 %, 3-5 % off the delta = 0 line over 50-400 nodes; the
+% spatial error alone fourth order, E4.10's roundtable scratch, stiff 5.6).
+% Item 3: stiff 5.3 (4) (fits 4.23, 4.31, 4.23, 4.48; the spread 1.2-2.4;
+% 7.99e-9 against 8.36e-5 at 40,000 nodes and delta = 0.0025; the rule's
+% 20 delta, a parameter; "no deterioration ... not a proven constant", the
+% statement's own caveat), 5.3 (6) (least diagonal dominance never below the
+% jump-aware rows'; gmres counts below the construction's; no eigenvalue
+% in the right half-plane). Item 4: stiff 5.3 (8) (1.4-3.9 from 5000
+% nodes, RMS), 5.3 (9) (1.3-2.1e-15 at every s; fits 4.43-4.71 over
+% 1250-40,000). Item 5: LITERATURE.md 6b's required caveat, verbatim (801;
+% 1.75; 2.3 to 4.7 orders over 1250 to 40,000 nodes: stiff 2.5 (3), 5.3
+% (10)). Item 6: the repository (public, MIT; paper/ CC BY 4.0); the
+% version tag is #52's to pin.
+\begin{enumerate}
+\item The seeds for the diffusion operator on the unchanged scattered nodes
+  of the interface-aware RBF-FD stencils, which they reduce to as
+  $\delta \to 0$: the one-dimensional chain (Section~\ref{sec:seeds1d}), its
+  two-dimensional form for a straight edge in the normal coordinate, for a
+  curved or tangentially varying edge in the curve's own coordinates, and
+  for a resistive layer thinner than the stencil
+  (Section~\ref{sec:seeds2d}). To our knowledge no earlier scheme builds
+  the basis of stencils on an unchanged scattered node set through a smooth
+  material edge thinner than the node spacing by marching ordinary
+  differential equations; its ingredients (the exact face conductance, the
+  formal powers, bases from local solutions of the equation) are each
+  classical, and in one dimension so is the construction.
+\item In one dimension (Section~\ref{sec:results1d}): the knee of the
+  standard operator, a drop of 100 to 200 times between $h = 2\delta$ and
+  $h = \delta/2$ at a $9 : 1$ edge and of 800 to 1000 times at the
+  $10 : 1$ edges of the sinusoidal medium; the jump construction on its
+  floor, the distance of order $\delta$ between the jump's solution and the
+  smooth one, while $h \gtrsim 2\delta$ on the two-constant medium, and
+  growing once the grid resolves the edge; and the seeds, fourth order at every $\delta$ on one line: on the
+  ramp problem of the two-constant medium they lie within $0.1$ to $0.3\%$,
+  $1$ to $1.5\%$ and $3$ to $5\%$ of the jump's line at
+  $\delta = 0.0025$, $0.01$ and $0.04$.
+\item On scattered nodes through a flat band (Section~\ref{sec:results2d}):
+  the seeds are fourth order at every $\delta$ tested, elliptic and
+  parabolic, with elliptic fits of $4.23$ to $4.48$ over 1250 to 40,000
+  nodes; the elliptic errors at the five widths, the jump included, differ
+  by factors of $1.2$ to $2.4$ at each node count, and at 40,000 nodes and
+  $\delta = 0.0025$ the seeds' error is $\sci{7.99}{-9}$ against the
+  standard operator's $\sci{8.36}{-5}$. That is no deterioration as
+  $\delta \to 0$ on these node sets, not a proven $\delta$-uniform
+  constant. The rule is to seed every row whose stencil sees an edge
+  within $20\delta$, with no threshold in $\delta$. The seeded rows'
+  least diagonal dominance never falls below the jump-aware rows', the
+  seeded matrices' condition estimates and GMRES counts stay bounded as
+  $\delta \to 0$, and their spectra have no eigenvalue in the right
+  half-plane.
+\item Through the curved band of case 2 the tangential chain is fourth
+  order, within $1.4$ to $3.9$ times of the flat seeds' RMS error from 5000
+  nodes at every $\delta$ (Section~\ref{sec:curved2d}). On the insulating
+  ring thinned at a fixed resistance from $s = 10^3$ to $10^{11}$ the seeds
+  are exact on the matched radial profile to rounding ($\sci{1.3}{-15}$ to
+  $\sci{2.1}{-15}$) and converge at fourth order (fits $4.43$ to $4.71$) at
+  every $s$; through a smooth ring whose width and edges are both below $h$
+  they converge at fourth order on the nodes away from it
+  (Section~\ref{sec:ring2d}).
+\item The comparison with the coefficient treatments
+  (Sections~\ref{sec:treatments1d} and~\ref{sec:treatments2d}). The
+  comparison is against coefficient sampling on the same nodes and against
+  our implementation of the cell harmonic and arithmetic means, a widened
+  edge and, in one dimension, the conservative scheme with exact face
+  conductances, on one contrast and one test problem per dimension. Through
+  an edge the grid does not resolve none of them is better than second
+  order; the conservative scheme is exact at the one-dimensional
+  equilibrium and, on the sinusoidal medium at $\delta = 0$, ahead of the
+  seeds below 801 nodes, where the seeds' line is pre-asymptotic; on the
+  scattered nodes none improves on sampling by more than a factor of 1.75
+  in the RMS norm, and the seeds lie 2.3 to 4.7 orders below the best of
+  them over 1250 to 40,000 nodes.
+\item An open implementation in Python, written with the AI tools disclosed
+  at the end of the paper, with a test for every numerical routine, in
+  which every figure and table of this paper is drawn by a committed script
+  from committed results files
+  (\url{https://github.com/bradleypmartin/rbf-elliptic-parabolic-interfaces-2026}).
+\end{enumerate}
 
 \subsection{Relation to prior work}
 \label{sec:priorwork}
-\stub{\#43 supplies this paragraph (LITERATURE.md section 6a); \#45 places
-it}
+% Placed from LITERATURE.md 6a (#43), cut as 6a allows, in its order: (1) the
+% HODIE and fitted-operator sentence is dropped (Section 3 cites them);
+% (2) the jump methods are cut to the IIM and CutFEM keys (K8: LeVeque-Li,
+% Li-Ito; Hansbo-Hansbo, Burman et al.) and the two post-2016 ones; (3) the
+% resistive-layer sentence moves to Section 5.4 (sec:ring, where it waits
+% as a comment for #48), leaving one clause here. The first sentence, the
+% FLAME and LOD clauses and the last four sentences are verbatim: they carry
+% the obligations of LITERATURE.md 1a K2-K5, K10 and 1b O1, and it stays one
+% paragraph because O1 asks for K3-K6 in the claim's paragraph. About 480
+% words: 6a's 250-350 target is retired (its note, Brad, 2026-09-24). Any
+% change to the novelty language re-opens the ledger first.
+% TRACE: 1.75, stiff 5.3 (10), paper/data/heat2d_stiff_treatments*.json
+% (paper_numbers.py, where "abstract, §1; stiff §5.3 (10)").
+In one dimension the construction is classical in every part, and we claim
+nothing for it. The first seed, the constant-flux function
+$\alpha_e \int d\xi/\alpha$, is over one cell the exact face conductance of
+Tikhonov and Samarskii's homogeneous schemes
+\cite{TikhonovSamarskii1962,Samarskii2001} and, for a piecewise-constant
+coefficient, the harmonic-mean interface conductivity of finite-volume heat
+conduction \cite{Patankar1980}; the conservative scheme built on it, exact
+at the source-free equilibrium, is second order \cite{PanXuLi2026}. The
+whole chain is the representation of Sturm--Liouville solutions by
+recursive integrals, as power series in the spectral parameter
+\cite{Kravchenko2008,KravchenkoPorter2010}, taken from the anchor; for a
+constant coefficient its time-polynomial solutions are the heat polynomials
+\cite{RosenbloomWidder1959,Widder1975}. Three-point schemes of any order
+for $(k u')'$ with a piecewise-smooth $k$, whose coefficients come from
+Cauchy problems integrated across each cell, are the exact and truncated
+difference schemes \cite{SamarskiiMakarov1990,GavrilyukEtAl2011};
+three-point schemes of any order exist across a jump too
+\cite{Gartland1989}, one of them built by carrying Taylor data across the
+step \cite{Sujecki2010}. In two dimensions, local solutions of the equation that satisfy the
+interface conditions are the basis of the Trefftz difference schemes of
+FLAME, on irregular stencils too \cite{Tsukerman2006,Tsukerman2010}, and of
+the tailored finite point methods \cite{Huang2009,HanZhang2012}; Galerkin
+methods build their bases from local solves
+\cite{BabuskaCalozOsborn1994,HouWu1997,ChuGrahamHou2010,OwhadiZhang2007,MalqvistPeterseim2014}
+and reach high order through coefficients the mesh does not resolve
+\cite{Maier2021,HauckPeterseim2023}, and the quasi-Trefftz spaces, one of
+them for the heat equation, build polynomial local solutions by Taylor
+expansion \cite{ImbertGerardMoiolaPerinatiStocker2025,GomezPerinatiStocker2026},
+which cannot reach through an edge thinner than the stencil
+\cite{Martin2026seeds}. For a jump, the interface-aware RBF-FD stencils
+this work generalises \cite{Martin2016,MartinFornberg2017heat} stand beside
+the immersed interface method and unfitted finite elements
+\cite{LeVequeLi1994,LiIto2006,HansboHansbo2002,BurmanEtAl2015}, now of
+fourth and sixth order \cite{FengZhao2020,FengHanMinev2024}, all of which
+take the jump as given. A resistive layer thinner than the grid is an
+imperfect interface in the limit
+\cite{SanchezPalencia1974,PerrusselPoignard2013,Hashin2001}, which
+Section~\ref{sec:ring} takes up. The standing alternative changes the
+coefficient rather than the stencil: harmonic or arithmetic means over a
+cell \cite{Patankar1980,EwingIlievLazarov2001,GoodeAppel1992}, averaging for
+layering finer than the grid \cite{MoskowEtAl1999,DavydychevaDruskinHabashy2003},
+or a regularised coefficient \cite{TornbergEngquist2003,TornbergEngquist2006}.
+Those methods take the cell or the width from the grid; here the width is a
+property of the medium, below the node spacing, and the aim is the scheme's
+full order through it. We found no prior instance of stencils on an
+unchanged scattered node set whose basis is continued through a sub-grid
+smooth edge by ordinary differential equations, nor of such stencils
+reducing to a jump construction as $\delta \to 0$; the search is logged in
+the repository's \texttt{LITERATURE.md}. We ran the cell means, a widened
+edge and, in one dimension, the conservative scheme with exact face
+conductances, as our implementation of each on one problem per dimension:
+through an edge the grid does not resolve none is better than second order,
+and on the scattered nodes none improves on sampling the coefficient by
+more than a factor of $1.75$ in the root-mean-square error. We claim nothing
+beyond that measurement.
 
 \subsection*{Outline}
-\stub{\#45: one sentence per section}
+Section~\ref{sec:setting} fixes the problems, the discretisations and the
+interface-aware stencils of a jump that the seeds extend.
+Section~\ref{sec:seeds1d} constructs the seeds in one dimension and proves
+what can be proved about them. Section~\ref{sec:results1d} measures them
+against the standard operator, the jump construction and the coefficient
+treatments. Section~\ref{sec:seeds2d} builds the seeds on scattered nodes
+for straight, curved and doubly sub-grid features.
+Section~\ref{sec:results2d} measures them there, elliptic and parabolic,
+with the matrices they make. Section~\ref{sec:discussion} records the
+limitations and what we would do next.
 
 % ===========================================================================
 \section{Setting}
@@ -112,35 +441,365 @@ it}
 % TRACE: stiff 1.1 (1-D) and 3.1 (2-D); the dissertation ch. 4-5 and EABE
 % 2017 sections 2-3 for the port, quoted, not re-derived (page map in
 % docs/paper-index.md); docs/port-notes.md sections 1-2 for what the port
-% reproduces. Drafted by #45.
+% reproduces. Drafted by #45. Numbers are traced paragraph by paragraph.
+%
+% NOTATION fixed here for the later sections (#46-#50): n nodes and h the
+% spacing in both dimensions; delta the edge width; sigma the blend weight
+% (s is EABE's ring parameter); alpha^- and alpha^+ an edge's pieces; L the
+% operator; x_e the anchor and (x', y') the local frame; phi_k the 1-D
+% seeds; the two 1-D media by name ("two-constant", "sinusoidal") and the
+% ramp problem; the operators by name (naive, direct, jump-aware, the
+% delta = 0 construction, seeds). The complete notation list is #51's.
+
+\para{Notation}
+The symbols the sections share, fixed here:
+\begin{center}
+\small
+\begin{tabular}{@{}lp{0.64\textwidth}@{}}
+\toprule
+$n$, $h$ & node count and spacing: $h = 2 / (n - 1)$ in one dimension and
+  the row spacing $1 / \operatorname{round}(0.95 \sqrt{n})$ in two \\
+$\alpha$; $\alpha^-$, $\alpha^+$; $L$ & conductivity; the pieces on the two
+  sides of an edge; $L = \nabla \cdot (\alpha \nabla\, \cdot)$ \\
+$\delta$; $\sigma$ & width of a $\tanh$ edge, $\delta = 0$ the jump; the
+  blend weight $\sigma(z) = \tfrac12 (1 + \tanh z)$ \\
+$s$ & the thinness of the ring of \cite{MartinFornberg2017heat}, $1/s$ its
+  width \\
+$x_e$; $(x', y')$ & a stencil's evaluation point (anchor); its local frame,
+  $y'$ normal to the edge \\
+$\phi_k$ & the one-dimensional seeds \eqref{eq:chain} \\
+$D_x$, $D_y$; $A$ & first-derivative matrices; $\operatorname{diag}
+  \alpha$ at the nodes \\
+naive, direct & $D_x A D_x$ ($+ D_y A D_y$); $\alpha \nabla^2 u + \nabla
+  \alpha \cdot \nabla u$ on one stencil \\
+jump-aware & the interface-aware stencils of Section~\ref{sec:jump} \\
+the $\delta = 0$ construction & the same, applied at a smooth edge's
+  centre \\
+seeds & the operator whose rows that see an edge are rebuilt on seeds \\
+\bottomrule
+\end{tabular}
+\end{center}
+
 \subsection{The problem and its interface conditions}
 \label{sec:problem}
-\stub{\#45: the heat equation and its equilibrium; continuity of $u$ and of
-the flux $\alpha \partial_n u$ across a jump; the smooth sub-grid edge of
-width $\delta$ and the three regimes; the norms used}
+% TRACE: stiff 1.1 (eq. 51-55 of the dissertation, EABE eq. 1: continuity
+% of D^k u and alpha d_x D^k u; the tanh edge; the three regimes), 3.1
+% (the 2-D edge in the signed normal distance, composed edge by edge);
+% 2.1 (the tails: within two ulps of the pieces at 19 delta, the pieces
+% to the bit beyond 20 delta); c = (a - b) ln(a/b)/(2ab), stiff 1.7 and
+% 2.2; 8.79 for the 9 : 1 edge, stiff 2.5 (1), paper/data/heat1d_stiff.json
+% (paper_numbers.py, where "§2.1; stiff §2.5 (1)"); the norms and fits,
+% stiff 5.3's preamble and 5.5, port notes 2.10.
+On a domain $\Omega$ in one or two dimensions we solve \eqref{eq:heat} with
+Dirichlet data on $\partial \Omega$, and its equilibrium $L u = 0$, the
+elliptic problem. The conductivity $\alpha > 0$ is one smooth function on
+each side of every interface $\Gamma$. Across a jump the temperature and the
+heat flux are continuous at all times, hence so are all their time
+derivatives, and $\partial_t^k u = L^k u$ turns these into conditions on
+spatial derivatives,
+\begin{equation}
+  \label{eq:continuity}
+  [L^k u] = 0, \qquad [\alpha\, \partial_n L^k u] = 0 \qquad \text{on }
+  \Gamma, \quad k = 0, 1, 2, \ldots,
+\end{equation}
+where $[\cdot]$ is the difference of the two sides' limits, $n$ the normal
+to $\Gamma$, and each side's $L$ is taken with that side's $\alpha$
+\cite{Martin2016,MartinFornberg2017heat}.
+
+\para{A smooth edge}
+With an edge width $\delta > 0$ the jump at an interface is replaced by a
+$\tanh$ transition between the two pieces,
+\begin{equation}
+  \label{eq:edge}
+  \alpha = \bigl(1 - \sigma(d / \delta)\bigr)\, \alpha^- + \sigma(d / \delta)\,
+  \alpha^+, \qquad \sigma(z) = \tfrac12 (1 + \tanh z),
+\end{equation}
+where $d$ is the signed distance to the interface, $x - x_c$ in one
+dimension and the distance along the normal through the foot point on the
+curve in two, positive on the side of $\alpha^+$. The pieces keep their own
+variation, and $\delta = 0$ is the jump. A band between two interfaces is
+blended twice, from the outside piece into the inside one across the lower
+interface and back across the upper, so that a band wider than its edges
+has two independent transitions; Section~\ref{sec:ring} defines the smooth
+form of a layer thinner than its edges. Beyond $19\delta$ from its centre
+an edge is its pieces to within two units in the last place.
+
+\para{Three regimes}
+For $\delta \gg h$ a stencil sees a smooth coefficient. For $\delta = 0$ it
+sees a jump, and \eqref{eq:continuity} applies. For $0 < \delta \lesssim h$
+it sees what looks to it like a jump between two of its nodes, but no
+interface condition applies, since $\alpha$ is smooth, and the smooth
+problem and the jump problem have different solutions. They differ at
+first order in $\delta$: in one dimension the resistance $\int dx / \alpha$
+of a $\tanh$ edge between constant pieces $a$ and $b$ falls short of the
+jump's by
+\begin{equation}
+  \label{eq:deficit}
+  c\, \delta, \qquad c = \frac{(a - b) \ln (a / b)}{2 a b},
+\end{equation}
+which is $8.79\,\delta$ for the $9 : 1$ edge of Section~\ref{sec:setting1d}
+and is positive for either ordering of $a$ and $b$.
+
+\para{Norms and orders}
+In one dimension an error is the relative $\ell^2$ error at the nodes,
+$\|e\|_2 / \|u\|_2$, and a rate is $\log_2$ of the ratio of consecutive
+errors as the node count doubles. In two dimensions an error is the
+root-mean-square (RMS) error over all nodes, the Dirichlet nodes included,
+and an order is the least-squares slope of $\log e$ against $\log h$ over
+the node counts named. A maximum-norm error is named as such wherever one
+is quoted, and every caption says which norm it shows.
 
 \subsection{One dimension}
 \label{sec:setting1d}
-\stub{\#45: equispaced grids, the naive operator assembled as $D_x A D_x$
-(dissertation eq.~76), BD4 with $\Delta t \propto h$, the media and test
-problems}
+% TRACE: the grid, port notes 1.1 (h = 2/(n - 1), both ends on nodes;
+% eq. 75's edges on nodes when (n - 1) % 4 == 0); the media, stiff 1.1 and
+% 2.1 (the two-constant medium 1/9 | 1 of heatEq1DMatlab/FD4heat1DAC.m, the
+% edge mid-cell at even n; eq. 75's layer with both edges at 1 | 0.1); the
+% four widths, stiff 2.2 (STUDY_DELTAS); the ramp problem, port notes 1.4
+% and 1.6 (the C-infinity step over [0, 1], read at t = 2; the MATLAB's
+% logistic ramp incompatible at the corner), scripts/heat1d_stiff.py (RAMP,
+% T_END, BC); the naive operator, port notes 1.1 (nine-point rows, one-sided
+% FD4 at the ends); the direct stencil at 0.22 on eq. 75, port notes 1.3;
+% BD4, port notes 1.6 (RK4 start-up at half the infinity-norm limit,
+% STARTUP_FRACTION; Dirichlet values at every stage) and 2.5 (the 2-D
+% analytic history).
+The one-dimensional problem is \eqref{eq:heat} with $L = \px \alpha \px$ on
+$[-1, 1]$ with Dirichlet ends. A grid has $n$ equispaced nodes with both
+ends on nodes, so $h = 2 / (n - 1)$. Two media are used, each at
+$\delta = 0$, $0.04$, $0.01$ and $0.0025$:
+\begin{itemize}
+\item the \emph{two-constant medium}, $\alpha = 1/9$ for $x < 0$ and $1$ for
+  $x > 0$, the single interface of the time-dependent test in the code
+  behind \cite{Martin2016}, which the dissertation does not report; the
+  edge lies midway between two nodes when $n$ is even;
+\item the \emph{sinusoidal medium} of \cite[eq.~(75)]{Martin2016},
+  $\alpha = 0.1 + 0.4 \sin 2\pi x$ on the layer $[0, \tfrac12]$ and $1$
+  elsewhere, whose two edges both have the contrast $10 : 1$, since the
+  sinusoid vanishes at both; both edges fall on nodes when $n - 1$ is a
+  multiple of $4$.
+\end{itemize}
+Each medium carries two problems: the equilibrium with $u(-1) = 1$ and
+$u(1) = 0$, and the \emph{ramp problem}, which starts from $u = 0$, holds
+$u(1, t) = 0$, raises $u(-1, t)$ from $0$ to $1$ over $0 \le t \le 1$ by
+the $C^\infty$ step
+$e^{-1/t} / (e^{-1/t} + e^{-1/(1-t)})$, and is read at $t = 2$. (The
+original code ramps with a logistic function, whose value and derivatives at
+$t = 0$ are small but not zero; the mismatch with the zero start at the
+corner would cap a fourth-order study.) Section~\ref{sec:media1d} gives the
+reference solutions.
+
+The \emph{naive} operator is $D_x A D_x$ \cite[eq.~(76)]{Martin2016}, with
+$D_x$ the fourth-order first-derivative matrix of Fornberg's weights
+\cite{Fornberg1988}, one-sided at the ends, and $A = \operatorname{diag}
+\alpha(x_j)$, which gives nine-point rows in the interior. It is the form in
+which a standard stencil sees a jump at all: a direct discretisation of
+$\alpha u_{xx} + \alpha' u_x$ with the coefficients sampled at the nodes is
+blind to the jumps, and its error on the sinusoidal medium stays at $0.22$
+as the grid is refined. Time stepping is the fourth-order backward
+differentiation formula (BD4) with $\Delta t = h$, one sparse LU
+factorisation per operator and the Dirichlet values imposed at every step;
+its three starting values come from classical Runge--Kutta sub-steps at half
+the stability limit.
 
 \subsection{Two dimensions}
 \label{sec:setting2d}
-\stub{\#45: the $x$-periodic strip, scattered nodes with rows straddling
-each interface, Gaussian RBF-FD with polynomial augmentation (42 nodes and
-degree 5 in the bulk, 30 and degree 4 at interfaces and boundaries),
-Dirichlet rows, the direct and iterative solvers}
+% TRACE: the cases, port notes 2 (EABE eq. 32-40 via docs/paper-index.md;
+% case 2's curves from the MATLAB's curvedinterface1/2, the index's note)
+% and stiff 3.1; case 1's exact solutions, port notes 2.2 and 2.5
+% (heat2d.exact.case1_exact: v(0) = 0, v(1) = 1; e^t sin 2 pi x v(y) to
+% t = 0.1); the ring's resistance 1.5 at every s and contrast about
+% 1500 : 1, port notes 2.9 and stiff 3.1; the node sets, port notes 2.1
+% (m = round(0.95 sqrt n); rows at 0.5, 0.5 + sqrt 3/2, 0.5 + sqrt 3 row
+% spacings; 100 repulsion steps; the ring's midline layout); RBF-FD, port
+% notes 2.2 (epsilon = 0.4/d with d the nearest neighbour; 42 / 5 and
+% 30 / 4; the boundary zone 3/sqrt n; the interface group by the crossing
+% test, 2.3); the direct operator blind to the jump (3.6e-2 at every count
+% on case 1, not quoted), port notes 2.2; solvers, port notes 2.8 (the
+% reduced interior system; spilu; Appendix B's P); BD4 from the analytic
+% history, 3 to 19 steps to t = 0.1, port notes 2.5 and stiff 5.5.
+The two-dimensional problems are the three test cases of
+\cite{MartinFornberg2017heat}, \eqref{eq:heat} on the unit strip $0 \le y \le 1$, periodic in $x$ with
+period $1$, with Dirichlet data on $y = 0$ and $y = 1$. The conductivity is
+one smooth piece in a band between two interfaces and another outside it.
+\begin{itemize}
+\item \emph{Case 1}, a flat band $0.6 \le y \le 0.8$ with $\alpha = 0.2$ in
+  it and $1$ outside. With $u = \sin 2\pi x$ on $y = 1$ and $u = 0$ on
+  $y = 0$ the equilibrium is $\sin 2\pi x\, v(y)$ with $v$ piecewise
+  exponential, and the parabolic problem is marched to $t = 0.1$ against the
+  exact solution $e^t \sin 2\pi x\, w(y)$ of the same form
+  \cite{MartinFornberg2017heat}.
+\item \emph{Case 2}, both interfaces bent to $y = 0.6 + 0.02 \sin 2\pi x$
+  and $y = 0.8 + 0.02 \sin 2\pi x$,\footnote{The published texts do not
+  state the curves; these are the ones of the original code.} with
+  $\alpha = 0.2 + 0.1 \sin 2\pi x \sin 2\pi y$ in the band and the boundary
+  data of case 1.
+\item \emph{Case 3}, a ring $0.35 - 1/s \le r \le 0.35$ about
+  $(\tfrac12, \tfrac12)$ with $\alpha = 1/(1.5 s) + \sin 2\pi x \sin 2\pi y
+  / (3 s)$ in it and $1$ outside, around a cooling circle $r = 0.05$ whose
+  inside is removed, with $u = \sin 6\pi x$ on $y = 0$ and $y = 1$ and
+  $u = 0$ on the circle. At $s = 10^3$ this is the insulating ring of
+  \cite{MartinFornberg2017heat}, $0.001$ wide at a contrast of about
+  $1500 : 1$; the extremizing sweep of that paper runs $s$ up to $10^{11}$,
+  thinning the ring at a fixed resistance, its width over its conductivity,
+  of $1.5 / (1 + \tfrac12 \sin 2\pi x \sin 2\pi y)$.
+\end{itemize}
+With $\delta > 0$ each interface of cases 1 and 2 becomes an edge
+\eqref{eq:edge} in the signed normal distance to its curve; the ring's
+smooth form is Section~\ref{sec:ring}'s. On case 1 the medium is then the
+one-dimensional one in $y$, and the reference solutions stay separable
+(Section~\ref{sec:problems2d}).
+
+\para{Node sets}
+A set of $n$ nodes is built as in \cite{MartinFornberg2017heat}. Rows hold
+$m = \operatorname{round}(0.95 \sqrt n)$ nodes per unit length, so their
+spacing is $h = 1/m$. Six fixed rows straddle each interface, three on each
+side at normal distances $(\tfrac12 + j \tfrac{\sqrt 3}{2}) h$,
+$j = 0, 1, 2$, the middle row on each side staggered by half a spacing
+along the curve, so that the rows cross the interface in a hexagonal
+pattern; a fixed row
+lies on each Dirichlet curve; and the remaining nodes are placed by 100
+steps of a simulated repulsion from a random start, kept clear of the
+straddling rows. The ring is thinner than $h$ at every node count used, so
+one set of six rows straddles its midline, and both of its interfaces pass
+between the innermost pair. Unless a spread over node sets is quoted,
+each node count has one node set, from a fixed random seed.
+
+\para{RBF-FD}
+RBF-FD \cite{FornbergFlyer2015primer,FornbergFlyer2015acta} builds each row
+of a differentiation matrix from a stencil. For a stencil of nodes
+$x_1, \ldots, x_{N_s}$ about an evaluation node $x_c$, the weights $w$ of a
+linear operator $\mathcal{L}$ solve
+\begin{equation}
+  \label{eq:rbffd}
+  \begin{bmatrix} \Phi & P \\ P^{\mathsf T} & 0 \end{bmatrix}
+  \begin{bmatrix} w \\ w_* \end{bmatrix}
+  =
+  \begin{bmatrix}
+    \mathcal{L}\, \varphi(\|x - x_i\|) \big|_{x_c} \\
+    \mathcal{L}\, p_j(x) \big|_{x_c}
+  \end{bmatrix},
+\end{equation}
+with $\Phi_{il} = \varphi(\|x_i - x_l\|)$ for the Gaussian
+$\varphi(r) = e^{-(\varepsilon r)^2}$, $P_{ij} = p_j(x_i)$ over the
+bivariate monomials $p_j$ up to a degree $p$ in coordinates scaled by the
+stencil's radius, and $w_*$ discarded. The constraint rows make the weights
+exact on the polynomials, which take over from the Gaussians under
+refinement \cite{FlyerFornbergBayonaBarnett2016,BayonaFlyerFornbergBarnett2017};
+the shape parameter is $\varepsilon = 0.4 / d$, with $d$ the distance from
+$x_c$ to its nearest neighbour. Stencils have $42$ nodes and degree $5$ in
+the bulk, and $30$ nodes and degree $4$ within $3 / \sqrt n$ of a Dirichlet
+curve and wherever a $42$-node stencil would reach across an interface.
+Of the latter, the interface-aware construction rebuilds the rows whose
+$30$ nodes cross an interface (Section~\ref{sec:jump}); the seeds rebuild
+the rows whose stencils see an edge (Section~\ref{sec:assembly2d}).
+
+\para{Operators and solvers}
+The naive operator is $D_x A D_x + D_y A D_y$, the two-dimensional form of
+\cite[eq.~(76)]{Martin2016}, with every node's rows of $D_x$ and $D_y$ built
+on its own stencil, so that it reaches the neighbours of the neighbours.
+The direct operator applies $\alpha \nabla^2 u + \nabla \alpha \cdot \nabla
+u$ at each node through one stencil; it is blind to a jump and serves as
+the control where the grid resolves the edge. Dirichlet rows are the
+identity. The elliptic systems are solved directly with SuperLU; the
+iterative study applies GMRES and BiCGSTAB to the interior system, with and
+without an incomplete LU factorisation and the diagonal-dominance
+preconditioner of \cite[App.~B]{Martin2016}. The parabolic problem of
+case 1 is marched by BD4 with $\Delta t = h$ from the exact solution's
+history, $3$ to $19$ steps to $t = 0.1$.
 
 \subsection{Interface-aware stencils for a jump}
 \label{sec:jump}
-\stub{\#45: the 2016--2017 construction as background: the translated
-polynomial basis, the continuity matrices with curvature, the warped RBFs}
+% TRACE: port notes 1.1 (the 1-D translated basis: degree 4, EABE eq. 24,
+% three or four rebuilt rows per interface; two interfaces translate
+% twice, 1.6), 2.3 (the 2-D continuity rows: the first p + 1 - 2k
+% coefficients of D^k u and p - 2k of the flux, 15 for p = 4; the
+% curvature entering twice, EABE eq. 29-30 / dissertation eq. 82-83; the
+% frame at the nearest point, in stencil-radius units), 2.4 (the warp:
+% slope ratio alpha^- / alpha^+, value and alpha d_n continuous, first
+% order in the RBF part; EABE 2.2.4); stiff 1.2 (the even and odd seeds as
+% the five conditions), 1.4 and 5.3 (4) (the jump limit); stiff 1.1 and 3.1
+% (the delta = 0 construction as named).
+The seeds extend the interface-aware stencils of
+\cite{Martin2016,MartinFornberg2017heat}, whose wave-equation form is in
+\cite{MartinFornbergStCyr2015,MartinFornberg2017}. We summarise them in
+the form the later sections use; the derivations are in those references.
+
+\para{One dimension}
+Expand $u$ on each side of an interface $x_c$ in a polynomial of degree
+four about $x_c$, with the Taylor coefficients of that side's $\alpha$
+entering through multiplication matrices on the coefficient vectors, and
+impose \eqref{eq:continuity} on $L^k u$ for $k = 0, 1, 2$ and on the flux
+for $k = 0, 1$. These five conditions give a square \emph{continuity
+matrix} per side, $C^- a^- = C^+ a^+$ on the coefficient vectors $a^\pm$.
+Keeping the monomials on the evaluation node's side and carrying them
+across with $(C^+)^{-1} C^-$ gives the \emph{translated basis}: piecewise
+polynomials, one per monomial, that satisfy the five conditions. The weights
+of a five-node stencil that straddles $x_c$ reproduce $L$ at the evaluation
+node on this basis, a $5 \times 5$ solve per stencil, and a stencil that
+straddles both edges of a thin layer translates twice.
+
+\para{Two dimensions}
+A stencil whose $30$ nodes lie in more than one region is given a local
+frame at the point of each interface nearest its centre, $x'$ along the
+tangent and $y'$ along the normal, in units of the stencil's radius, and
+the interface is expanded there as $y' = f(x')$. The continuity conditions
+equate, along the interface, the first $5 - 2k$ coefficients in $x'$ of
+$L^k u$ and the first $4 - 2k$ of the normal flux
+$\alpha (\partial_{y'} - f' \partial_{x'}) L^k u$, fifteen conditions for
+degree four, one per bivariate monomial; the curvature enters through $f$,
+in the curve along which the coefficients are read and in the normal
+derivative. The translated basis replaces the monomials $p_j$ in
+\eqref{eq:rbffd}. The Gaussians are \emph{warped}: in the frame of the
+evaluation node's side, the normal coordinate of every node is replaced by
+a piecewise-linear one whose slope changes by the factor $\alpha^- /
+\alpha^+$ across each interface, so that a Gaussian's value and its
+$\alpha\, \partial_n$ are both continuous there and the RBF part of the
+stencil satisfies the flux condition to first order.
+
+This construction, with warped Gaussians, is what we call
+\emph{jump-aware}. Applied with the centre of a smooth edge as the
+interface and the pieces' Taylor data as if $\delta$ were $0$, it is the
+\emph{$\delta = 0$ construction} of Sections~\ref{sec:construction1d}
+and~\ref{sec:naive2d}. It is also the $\delta \to 0$ limit of the seeds,
+which reproduce it at $\delta = 0$ (Sections~\ref{sec:jumplimit}
+and~\ref{sec:assembly2d}).
 
 \subsection{Scope of the implementation}
 \label{sec:scope}
-\stub{\#45: the Python port and the published figures it reproduces
-(port notes); what it leaves out (the cornered interface), stated as scope}
+% TRACE: port notes 2.10 (the reproduction table: every 2016 line at its
+% 2016 rate or better; the six discrepancies, of which 4 and 5 are quoted:
+% bicgstab converges on case 3 at every count, and every s of eq. 40 is
+% fourth order to its reference's floor where Fig. 19 floors at 7.4e-4 for
+% s = 1e11; the 2016 2-D code not preserved), 1.2-1.5 and 2.1-2.9 (the
+% figures reproduced); E2.10 (#24) closed won't-do (the corner, dissertation
+% 5.4.5, second order by circular segments); stiff 5.5 (what is not
+% covered: corners, three dimensions, edges meeting a Dirichlet boundary,
+% time-dependent media; one tanh profile; one contrast per case; 30 / 4
+% seeded rows in a 42 / 5 bulk); contrasts: 9 : 1 and 10 : 1 (stiff 1.1),
+% 5 : 1 (stiff 3.1), about 1500 : 1 on the ring (stiff 3.1).
+The experiments run on a reimplementation of the 2016--2017 methods in
+Python (NumPy and SciPy, with a test for every numerical routine), written
+for this study. Every published figure of the one- and two-dimensional
+heat problems of \cite{Martin2016,MartinFornberg2017heat} but the cornered
+interface's has a counterpart in it, and every published convergence line
+is reproduced at its published rate or better. Where the numbers part
+company the repository's port notes say so. Two differences
+bear on this paper: the iterative solvers do not break down on the ring
+here (BiCGSTAB converges at every node count), and the extremizing sweep
+does not lose convergence at $s = 10^{11}$ (every $s$ is fourth order down
+to its reference's own error). The 2016 two-dimensional code is not
+preserved, so neither difference could be traced to it.
+
+The implementation leaves out the cornered interface of
+\cite[Sec.~5.4.5]{Martin2016}, which is approximated there by circular
+segments at second order. Its two-dimensional media are a band between two
+curves, periodic in $x$, so no edge meets the domain's boundary. The bulk
+stencils are degree five and the stencils that see an edge degree four,
+seeded or interface-aware. Each case has one contrast: $9 : 1$ and
+$10 : 1$ in one dimension, $5 : 1$ on cases 1 and 2, and on the ring about
+$1500 : 1$ at $s = 10^3$, growing with $s$ at a fixed resistance. Every
+smooth edge is a $\tanh$.
+Section~\ref{sec:discussion} returns to these restrictions.
 
 % ===========================================================================
 \section{Seeds for the diffusion operator in one dimension}
@@ -229,6 +888,16 @@ varies along the edge; the tangential chain in the curve's own coordinates}
 
 \subsection{A thin resistive layer}
 \label{sec:ring}
+% For #48, moved here by #45 from LITERATURE.md 6a (its third cut; section 1
+% keeps one clause, "A resistive layer thinner than the grid is an imperfect
+% interface in the limit [...], which Section 5.4 takes up"). Place it where
+% the flux seeds are introduced, with 6b's required flux-seed sentence:
+%   A resistive layer thinner than the grid is an imperfect interface in the
+%   limit \cite{SanchezPalencia1974,PerrusselPoignard2013,Hashin2001}, and
+%   strong-form schemes across such a contact need its jump conditions one
+%   derivative higher in two dimensions \cite{LombardPiraux2003,LombardPiraux2006};
+%   the flux seeds of Section~\ref{sec:ring} are that observation for the
+%   diffusion operator.
 \stub{\#48: the double edge of a ring: its exact width, series composition,
 the flux seeds, the warp on rows anchored inside the layer}
 

@@ -2,6 +2,7 @@
 
 import json
 import math
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -78,11 +79,33 @@ def test_the_committed_data_hold_every_number(capsys):
     assert len(out) == 1 and out[0].endswith("numbers hold")
     checked, total = (int(w) for w in out[0].split()[:3:2])
     assert checked == total > 300
-    # Every statement the directive names has checks.
-    wheres = {c.where for c in paper_numbers.build(DATA)}
+    # Every statement the directive names has checks, whether or not the
+    # manuscript quotes them yet.
+    wheres = {c.where.split("; ")[-1] for c in paper_numbers.build(DATA)}
     assert {f"stiff §2.5 ({k})" for k in range(1, 5)} <= wheres
     assert {f"stiff §5.3 ({k})" for k in range(1, 12)} <= wheres
     assert "stiff §5.1 snapshot" in wheres
+
+
+SECTION = r"(?:abstract|§\d+(?:\.\d+)*)"
+WHERE = re.compile(
+    rf"^(?:{SECTION}(?:, {SECTION})*; )?stiff §\d+\.\d+ (?:\(\d+\)|snapshot)$"
+)
+
+
+def test_every_where_is_the_notes_statement_after_any_quoting_sections():
+    assert paper_numbers.cited("stiff §5.3 (4)", "abstract", "§1") == (
+        "abstract, §1; stiff §5.3 (4)"
+    )
+    checks = paper_numbers.build(DATA)
+    assert all(WHERE.match(c.where) for c in checks), [
+        c.where for c in checks if not WHERE.match(c.where)
+    ]
+    # The drafts so far (E5.4, #45) quote from the abstract, §1 and §2.
+    quoting = {
+        s for c in checks if "; " in c.where for s in c.where.split("; ")[0].split(", ")
+    }
+    assert {"abstract", "§1", "§1.1", "§2.1"} <= quoting
 
 
 def test_a_failed_check_fails_the_run(capsys, monkeypatch):

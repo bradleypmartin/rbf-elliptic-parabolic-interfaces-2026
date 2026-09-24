@@ -1491,9 +1491,13 @@ their numbers and where they were measured:
    2.2e-7 (δ = 0.0025), a 100–200× drop across the knee, and on eq. 75
    5.7e-3 to 7.4e-6 (δ = 0.01), 1.0e-3 to 1.0e-6 (δ = 0.0025), 800–1000×.
    The δ = 0 construction (E1.2's rows at the edge centre) sits on the
-   resistance-deficit floor `‖u₀ − u_δ‖/‖u_δ‖ = c δ`, `c = (a − b)
+   resistance-deficit floor `‖u₀ − u_δ‖/‖u_δ‖`, first order in δ because
+   the edge's resistance falls short of the jump's by `c δ`, `c = (a − b)
    ln(a/b)/(2ab) = 8.79` on the MATLAB medium, reproduced to six digits
-   from the two quadratures, for `h ≳ 2δ` only (P3, corrected in §2.2):
+   from the two quadratures (*E5.4's correction: this had read
+   `‖u₀ − u_δ‖/‖u_δ‖ = c δ`; the floor is 0.73–0.75 δ there, §2.2's table,
+   the flux moving by `c δ / F₀(1) = 0.88 δ`*), for `h ≳ 2δ` only (P3,
+   corrected in §2.2; 0.93–1.00 of the floor there on both problems):
    once the grid resolves the edge its rebuilt rows enforce a kink the
    solution lacks and its error grows to O(1) (at 1600 nodes and δ = 0.01,
    0.11 at equilibrium and 0.04 on the ramp problem), so it needs δ to be
