@@ -3963,10 +3963,12 @@ established (Section~\ref{sec:ring}).
 % TRACE: timings, notes only. Stiff 4.5 and 5.5: a flat seeded row 1.3-4.4
 % ms, which sec:assembly2d quotes as "a few milliseconds"; the 40,000-node
 % operator at delta = 0.04, every row seeded, 167 s of marches against 2.6 s,
-% which sec:flat2d quotes as about 170 and under three. Stiff 4.7: a
-% tangential row 14.5-24.5 ms on a quiet machine (its table; 15-25 ms in
-% 5.5). Stiff 4.8: a ring row with the flux seeds 40-233 ms at delta > 0
-% under up to 16 concurrent runs. The seeded share settling to the strip
+% which sec:flat2d quotes as about 170 and under three. Quoted here from
+% the notes, since sections 5-6 give only ratios for them (sec:curved's 2.5
+% to 3.8 times a frozen-profile row): stiff 4.7, a tangential row 14.5-24.5
+% ms on a quiet machine (its table; 15-25 ms in 5.5); stiff 4.8, a ring row
+% with the flux seeds 40-233 ms at delta > 0 under up to 16 concurrent
+% runs. The seeded share settling to the strip
 % within 20 delta of a curve, sec:flat2d (stiff 5.5: O(N) marches). The 3-D
 % counts are arithmetic: monomials of degree at most four, 15 in two
 % variables and 35 in three; the ansatz, sec:straight and stiff 3.2.
@@ -4038,7 +4040,8 @@ and not in results files, and no script checks them.
 % 1 and 2 at 20,000; reach and contrast sweeps; a shifted-row layout; the
 % ring's iterative solves; a ring max norm) and 5.5; which need no code:
 % heat2d_ring.py --plain-fine, --fine-n, --counts; heat2d_stiff.py --counts,
-% --seed (the reach is heat1d.domain.TANH_REACH, not a flag). 2: stiff 5.3
+% --seed, --seed-reach (never run, stiff 5.5; /spar on #50 caught this
+% listed as needing a change). No driver has a contrast flag. 2: stiff 5.3
 % (10) (control volumes with face conductances, T1-FV in 2-D, not built);
 % LITERATURE.md 1a K1 (Pan-Xu-Li: first order at a general interface in 2-D
 % and 3-D except where it is parallel to an axis) and #43's breadcrumb on
@@ -4055,11 +4058,12 @@ In the order we would do them.
   second fine run of the smooth ring at each of the five $(s, \delta)$ read
   against a single one, and the rule at $80{,}000$ and $320{,}000$ nodes at
   $s = 10^{11}$ and $\delta = 0.001$; the seeds at $\delta = 0.04$ to
-  $160{,}000$ nodes, where the bulk's degree should pass them; and the seeds'
-  sweeps on the other two node sets to $20{,}000$ nodes. These need changes
-  to the drivers: the reach and the contrast swept, rows shifted against
-  the edges, the ring's iterative solves and global conditioning, and the
-  ring's error near the ring and in the maximum norm. Each sharpens a
+  $160{,}000$ nodes, where the bulk's degree should pass them; the seeds'
+  sweeps on the other two node sets to $20{,}000$ nodes; and the reach
+  swept. These need changes to the drivers: the contrast swept, rows
+  shifted against the edges, the ring's iterative solves and global
+  conditioning, and the ring's error near the ring and in the maximum
+  norm. Each sharpens a
   statement of Section~\ref{sec:results2d}; none changes the construction.
 \item \emph{A conservative scheme on the scattered nodes.} Control volumes
   about the nodes with the exact face conductances, the scattered-node

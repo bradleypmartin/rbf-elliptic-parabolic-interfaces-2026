@@ -103,7 +103,9 @@ def test_the_manuscript_avoids_the_wording_the_ledger_rules_out():
         "first high-order",
         "outperform",
         "beats harmonic",
+        "beats finite volume",
         "arbitrary contrast",
         "kapitza",
+        "flux must be one degree higher",
     ]
     assert [w for w in ruled_out if w in prose] == []
