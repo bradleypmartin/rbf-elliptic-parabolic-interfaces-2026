@@ -135,6 +135,16 @@ def key(delta: float) -> str:
     return f"{delta:g}"
 
 
+def cited(where: str, *sections: str) -> str:
+    """``where`` with the manuscript's sections that quote the figure in front.
+
+    ``cited("stiff §5.3 (4)", "abstract", "§1")`` is ``"abstract, §1; stiff
+    §5.3 (4)"``: the drafting tickets (E5.4–E5.9) tag each check whose figure
+    the text quotes, so a failure names the sentence to revisit.
+    """
+    return f"{', '.join(sections)}; {where}"
+
+
 def column(rows: Sequence[dict], name: str, counts: Iterable[int] | None = None):
     """``{n: row[name]}`` over ``counts`` (every row when None)."""
     wanted = None if counts is None else set(counts)
@@ -248,29 +258,52 @@ def one_d(f: Files, b: Book) -> None:
         b.eq(w, f"{what}, h = δ/2", naive[at_half], quoted[1])
         drops.append((medium, naive[at_2] / naive[at_half]))
     b.within(
-        w,
+        cited(w, "§1"),
         "the drop across the knee, MATLAB",
         [d for m, d in drops if m == "matlab"],
         "100",
         "200",
     )
     b.within(
-        w,
+        cited(w, "§1"),
         "the drop across the knee, eq. 75",
         [d for m, d in drops if m == "eq75"],
         "800",
         "1000",
     )
     for row in f(ONE_D, "floor_constants/matlab"):
-        b.eq(w, f"c, closed form, δ = {row['delta']:g}", row["closed"], "8.79")
+        b.eq(
+            cited(w, "§2.1"),
+            f"c, closed form, δ = {row['delta']:g}",
+            row["closed"],
+            "8.79",
+        )
         b.eq(
             w,
             f"c measured ÷ closed − 1 (six digits), δ = {row['delta']:g}",
             abs(row["measured"] / row["closed"] - 1),
             "0.000000",
         )
-    b.eq(
+        b.eq(
+            w,
+            f"the flux's shift c δ / F₀(1) over δ, δ = {row['delta']:g}",
+            row["closed"] / row["f0"],
+            "0.88",
+        )
+    # E5.4's correction: the floor is not c δ itself but first order in δ,
+    # 0.73–0.75 δ at the finest count of §2.2's equilibrium table.
+    b.span(
         w,
+        "the floor over δ at 1600, MATLAB equilibrium",
+        [
+            at(knee_1d(f, "equilibrium", "matlab", d), 1600)["floor"] / d
+            for d in (0.04, 0.01, 0.0025)
+        ],
+        "0.73",
+        "0.75",
+    )
+    b.eq(
+        cited(w, "§1"),
         "construction at 1600, δ = 0.01, equilibrium",
         at(knee_1d(f, "equilibrium", "matlab", 0.01), 1600)[CONSTRUCTION_1D],
         "0.11",
@@ -280,6 +313,22 @@ def one_d(f: Files, b: Book) -> None:
         "construction at 1600, δ = 0.01, ramp",
         at(knee_1d(f, "ramp", "matlab", 0.01), 1600)[CONSTRUCTION_1D],
         "0.04",
+    )
+    # "On its floor while h ≳ 2δ" (P3 as corrected in §2.2), the two-constant
+    # medium, both problems; eq. 75's coarse rows carry the sinusoid's own
+    # error on top (1.05–2.3× the floor there), so the text names the medium.
+    b.within(
+        cited(w, "§1"),
+        "construction ÷ floor while h ≥ 2δ, MATLAB, both problems",
+        [
+            r[CONSTRUCTION_1D] / r["floor"]
+            for problem in ("equilibrium", "ramp")
+            for d in (0.04, 0.01, 0.0025)
+            for r in knee_1d(f, problem, "matlab", d)
+            if r["h"] >= 2 * d * (1 - 1e-9)
+        ],
+        "0.93",
+        "1.00",
     )
 
     # (2) The seeds' rates (§2.3). Skipped: the spatial error at dt → h/8
@@ -316,7 +365,7 @@ def one_d(f: Files, b: Book) -> None:
         (0.04, "3", "5"),
     ):
         b.span(
-            w,
+            cited(w, "§1"),
             f"seeds off the δ = 0 line, %, δ = {delta:g}, 50–400",
             [100 * abs(lines[delta][n] / lines[0.0][n] - 1) for n in MATLAB_COUNTS[:4]],
             low,
@@ -387,10 +436,14 @@ def one_d(f: Files, b: Book) -> None:
     b.eq(w, "T1-FV at 50, MATLAB ramp, δ = 0", fv[50], "1.31e-4")
     b.eq(w, "T1-FV at 1600, MATLAB ramp, δ = 0", fv[1600], "1.26e-7")
     b.eq(w, "T1-FV's order 50 → 1600, δ = 0", math.log2(fv[50] / fv[1600]) / 5, "2.00")
-    for delta, quoted in ((0.0, "801"), (0.0025, "201")):
+    # δ = 0's is LITERATURE.md §6b's caveat, which the abstract and §1 quote.
+    for delta, quoted, where in (
+        (0.0, "801", cited(w, "abstract", "§1")),
+        (0.0025, "201", w),
+    ):
         rows = comparators_1d(f, "ramp", "eq75", delta)
         b.eq(
-            w,
+            where,
             f"eq. 75: the first count where the seeds lead T1-FV, δ = {delta:g}",
             min(r["n"] for r in rows if r["seeds"] < r["T1-FV"]),
             quoted,
@@ -615,12 +668,12 @@ def naive_knee(f: Files, b: Book) -> None:
     ell = {d: knee_2d(f, "elliptic", d) for d in (0.0, *WIDTHS)}
     par = {d: knee_2d(f, "parabolic", d) for d in (0.0, *WIDTHS)}
     b.eq(w, "the jump's fit, 1250–160,000", fit(ell[0.0], "naive/rms"), "1.23")
-    for problem, lines, low, high in (
-        ("elliptic", ell, "0.86", "0.94"),
-        ("parabolic", par, "0.78", "0.97"),
+    for problem, lines, low, high, where in (
+        ("elliptic", ell, "0.86", "0.94", cited(w, "§1")),
+        ("parabolic", par, "0.78", "0.97", w),
     ):
         b.span(
-            w,
+            where,
             f"naive ÷ jump while h ≳ 6δ, {problem}",
             [
                 r["naive/vs_jump"]
@@ -632,7 +685,7 @@ def naive_knee(f: Files, b: Book) -> None:
             high,
         )
     b.span(
-        w,
+        cited(w, "§1"),
         "naive ÷ jump at h ≈ δ, elliptic",
         [r["naive/vs_jump"] for d in WIDTHS for r in near(ell[d], 1.05)],
         "0.081",
@@ -657,7 +710,10 @@ def naive_knee(f: Files, b: Book) -> None:
         "0.0026",
     )
     b.eq(
-        w, "naive's fit at δ = 0.04, 1250–160,000", fit(ell[0.04], "naive/rms"), "5.31"
+        cited(w, "§1"),
+        "naive's fit at δ = 0.04, 1250–160,000 (§1: 'the fifth order')",
+        fit(ell[0.04], "naive/rms"),
+        "5.31",
     )
     for delta, first, last, quoted in (
         (0.01, 2500, 40000, "38"),
@@ -781,13 +837,13 @@ def construction_floor(f: Files, b: Book) -> None:
         "0",
     )
     b.eq(
-        w,
+        cited(w, "§1"),
         "its best lead over naive",
         max(r["naive/rms"] / r["construction/rms"] for d in WIDTHS for r in ell[d]),
         "6",
     )
     b.eq(
-        w,
+        cited(w, "§1"),
         "the least h/δ at which it beats naive",
         min(
             r["h_over_delta"]
@@ -823,12 +879,12 @@ def seeds_flat(f: Files, b: Book) -> None:
         fit(jump, "seeds/rms", COUNTS_40K),
         "4.77",
     )
-    for problem, quoted in (
-        ("elliptic", ("4.23", "4.31", "4.23", "4.48")),
-        ("parabolic", ("4.22", "4.28", "4.18", "4.44")),
+    for problem, quoted, where in (
+        ("elliptic", ("4.23", "4.31", "4.23", "4.48"), cited(w, "§1")),
+        ("parabolic", ("4.22", "4.28", "4.18", "4.44"), w),
     ):
         b.each(
-            w,
+            where,
             f"the seeds' fits at δ = 0.04 … 0.0025, {problem}",
             [fit(sweep(f, SEEDS, problem, d), "seeds/rms") for d in WIDTHS],
             list(quoted),
@@ -862,7 +918,7 @@ def seeds_flat(f: Files, b: Book) -> None:
             n: max(c[n] for c in lines) / min(c[n] for c in lines) for n in COUNTS_40K
         }
     b.span(
-        w,
+        cited(w, "§1"),
         "the five widths' spread at every count, elliptic",
         spreads["elliptic"].values(),
         "1.2",
@@ -874,8 +930,8 @@ def seeds_flat(f: Files, b: Book) -> None:
         w, "the spread, parabolic, largest", max(spreads["parabolic"].values()), "2.53"
     )
     row = at(sweep(f, SEEDS, "elliptic", 0.0025), 40000)
-    b.eq(w, "seeds at 40,000, δ = 0.0025", row["seeds/rms"], "7.99e-9")
-    b.eq(w, "naive at 40,000, δ = 0.0025", row["naive/rms"], "8.36e-5")
+    b.eq(cited(w, "§1"), "seeds at 40,000, δ = 0.0025", row["seeds/rms"], "7.99e-9")
+    b.eq(cited(w, "§1"), "naive at 40,000, δ = 0.0025", row["naive/rms"], "8.36e-5")
     b.eq(w, "construction at 40,000, δ = 0.0025", row["construction/rms"], "6.18e-4")
     # "Where the grid resolves the edge": δ = 0.04, resolved at every count.
     wide = sweep(f, SEEDS, "elliptic", 0.04)
@@ -1191,7 +1247,7 @@ def curved_feature(f: Files, b: Book) -> None:
         if r["n"] >= 5000 and r["problem"] == "elliptic"
     ]
     b.span(
-        w,
+        cited(w, "§1"),
         "the chain over the flat seeds from 5000, RMS",
         flat_ratio(chain, "tangential"),
         "1.4",
@@ -1293,7 +1349,7 @@ def ring(f: Files, b: Book) -> None:
     w = "stiff §5.3 (9)"
     zero = [r for r in f(RING, "conditioning") if r["delta"] == 0.0]
     b.span(
-        w,
+        cited(w, "§1"),
         "the seeds' worst residual on the matched profile, every s",
         [r["seeds-worst"] for r in zero],
         "1.3e-15",
@@ -1334,12 +1390,12 @@ def ring(f: Files, b: Book) -> None:
         "0.52",
         "0.97",
     )
-    for label, low, high in (
-        ("seeds", "4.43", "4.71"),
-        ("construction", "4.08", "4.13"),
+    for label, low, high, where in (
+        ("seeds", "4.43", "4.71", cited(w, "§1")),
+        ("construction", "4.08", "4.13", w),
     ):
         b.span(
-            w,
+            where,
             f"{label}' fits over 1250–40,000",
             [
                 fit([r[label] for r in rows], "full", COUNTS_40K)
@@ -1512,7 +1568,12 @@ def treatments(f: Files, b: Book) -> None:
                 if case == "case 1" and problem == "parabolic" and r["n"] == 1250:
                     continue
                 gains.extend(1 / r[label] for label in TREATMENT_LABELS)
-    b.le(w, "the most a treatment beats sampling by, RMS, anywhere", max(gains), "1.75")
+    b.le(
+        cited(w, "abstract", "§1", "§1.1"),
+        "the most a treatment beats sampling by, RMS, anywhere",
+        max(gains),
+        "1.75",
+    )
 
     def max_gain(name: str, keep: Callable[[str, int], bool]) -> float:
         out = []
@@ -1610,12 +1671,12 @@ def treatments(f: Files, b: Book) -> None:
         if r["delta"] == 0.0
     }
     b.eq(
-        w,
+        cited(w, "abstract", "§1"),
         "the seeds' lead over the best treatment at 1250, orders",
         orders[1250],
         "2.3",
     )
-    b.eq(w, "… at 40,000", orders[40000], "4.7")
+    b.eq(cited(w, "abstract", "§1"), "… at 40,000", orders[40000], "4.7")
 
 
 STATEMENTS = (
