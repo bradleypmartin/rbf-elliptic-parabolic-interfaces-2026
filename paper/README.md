@@ -75,8 +75,11 @@ this order:
 
 1. **a draft**: a `\stub`, `\todo` or `\nocite{*}` outside a comment in
    `main.tex` (the scaffold's `\stub` macro definition counts, so it goes with
-   the last stub), or a bibliography entry without a dated `VERIFIED` note, or
-   one still saying `TODO(verify`. These gates run whatever the flags;
+   the last stub), or a bibliography entry without a dated `VERIFIED` note in
+   the comment lines directly above it, or one still saying `TODO(verify`.
+   Every line opening with `@` counts as an entry (`@comment`, `@string`,
+   `@preamble` aside), and a header the gate cannot read is refused, not
+   skipped. These gates run whatever the flags;
 2. **failed repository checks**: `scripts/paper_numbers.py --quiet` and
    `scripts/paper_figures.py --check` (E5.3), run from the root;
 3. **a lossy transform**: it stages `main.tex` and `references.bib` with their

@@ -63,7 +63,10 @@ INCLUDEGRAPHICS = re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}")
 INPUT = re.compile(r"\\input\{([^}]+)\}")
 BIBLABEL = re.compile(r"\\bibitem\[([^\]]*)\]")
 DATE = re.compile(r"^\\date\{([^}]*)\}", re.MULTILINE)
-BIB_ENTRY = re.compile(r"^\s*@(\w+)\s*\{\s*([^,\s]+)\s*,")
+# A BibTeX entry starts at an "@" opening a line; its header may span lines.
+BIB_START = re.compile(r"^\s*@")
+BIB_TYPE = re.compile(r"@\s*(\w+)")
+BIB_HEADER = re.compile(r"@\s*(\w+)\s*[{(]\s*([^,\s{}()]+)\s*,")
 VERIFIED = re.compile(r"\bVERIFIED \d{4}-\d{2}-\d{2}\b")
 UNVERIFIED = "TODO(verify"
 # BibTeX entry types that are not references.
@@ -120,20 +123,33 @@ def unverified_entries(bib: str) -> list[str]:
 
     The block is the run of whole-line comments directly above the entry (no
     blank line between). An entry fails if the block has no
-    ``VERIFIED YYYY-MM-DD`` or still says ``TODO(verify``.
+    ``VERIFIED YYYY-MM-DD`` or still says ``TODO(verify``. The gate fails
+    closed: every line opening with ``@`` is an entry (``@comment``,
+    ``@string`` and ``@preamble`` aside), and one whose header this cannot
+    read, wherever its key sits, is reported as ``"line N: unreadable"``
+    rather than skipped (E5.1, the /spar review).
     """
+    lines = bib.splitlines(keepends=True)
     bad = []
-    block: list[str] = []
-    for line in bib.splitlines():
-        if COMMENT_LINE.match(line):
-            block.append(line)
+    offset = 0
+    for i, line in enumerate(lines):
+        start, offset = offset, offset + len(line)
+        if not BIB_START.match(line):
             continue
-        m = BIB_ENTRY.match(line)
-        if m and m.group(1).lower() not in NOT_ENTRIES:
-            note = "\n".join(block)
-            if not VERIFIED.search(note) or UNVERIFIED in note:
-                bad.append(m.group(2))
-        block = []
+        at = start + line.index("@")
+        kind = BIB_TYPE.match(bib, at)
+        if kind and kind.group(1).lower() in NOT_ENTRIES:
+            continue
+        header = BIB_HEADER.match(bib, at)
+        if header is None:
+            bad.append(f"line {i + 1}: unreadable")
+            continue
+        j = i
+        while j > 0 and COMMENT_LINE.match(lines[j - 1]):
+            j -= 1
+        note = "".join(lines[j:i])
+        if not VERIFIED.search(note) or UNVERIFIED in note:
+            bad.append(header.group(2))
     return bad
 
 
@@ -233,8 +249,8 @@ def refuse_drafts(paper: Path) -> None:
         if keys:
             raise SystemExit(
                 f"references.bib: {_count(len(keys), 'entry', 'entries')} without"
-                " a dated VERIFIED note (no unverified citation ships; E5.2, #43): "
-                + ", ".join(keys)
+                " a dated VERIFIED note, or unreadable (no unverified citation"
+                " ships; E5.2, #43): " + ", ".join(keys)
             )
 
 

@@ -121,10 +121,11 @@ uv run python scripts/<driver>.py         # figures into outputs/ (defaults run 
 
 ## Hard constraints
 
-- **This repo is PUBLIC (MIT; `paper/` CC BY 4.0).** Never commit PDFs
-  (`paper/main.pdf`, the built manuscript, aside), credentials, or anything
-  from FullContact / Ziff Davis systems. Content is Brad's own academic work
-  plus public papers.
+- **This repo is PUBLIC (MIT; `paper/` CC BY 4.0).** Never commit
+  PDFs, credentials, or anything from FullContact / Ziff Davis systems. The
+  one exception is `paper/main.pdf`, the built manuscript, which *is*
+  committed with every change under `paper/`. Content is Brad's own academic
+  work plus public papers.
 - `papers/*.pdf` and `outputs/` are gitignored on purpose; don't un-ignore.
 - Cite, don't claim: no statement of novelty outside what `LITERATURE.md`
   §6 allows once E5.2 exists; no unverified citation ships.

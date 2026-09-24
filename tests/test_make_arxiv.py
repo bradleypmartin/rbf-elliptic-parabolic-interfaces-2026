@@ -112,6 +112,62 @@ def test_unverified_entries():
     ]
 
 
+def test_unverified_entries_read_headers_across_lines():
+    """The /spar finding: a key off the ``@type{`` line was skipped, not checked."""
+    bib = """\
+% TODO(verify, #43): never checked.
+@article{
+  NextLine2020,
+  title = {x},
+}
+
+% TODO(verify, #43)
+@article
+{Split2020,
+  title = {x},
+}
+
+% TODO(verify, #43)
+  @Article( Paren2020 ,
+  title = {x},
+)
+
+% VERIFIED 2026-09-25 against the Crossref record.
+@article{
+  VerifiedNextLine2020,
+  title = {x},
+}
+
+@Comment{ignored}
+@STRING{jcp = {J. Comput. Phys.}}
+"""
+    assert make_arxiv.unverified_entries(bib) == [
+        "NextLine2020",
+        "Split2020",
+        "Paren2020",
+    ]
+
+
+def test_unverified_entries_fail_closed_on_unreadable_headers():
+    bib = """\
+% VERIFIED 2026-09-25 against the PDF.
+@article{NoFields2020}
+
+% VERIFIED 2026-09-25 against the PDF.
+@article{, title = {no key}}
+
+% VERIFIED 2026-09-25 against the PDF.
+@{Typeless2020,
+  title = {x},
+}
+"""
+    assert make_arxiv.unverified_entries(bib) == [
+        "line 2: unreadable",
+        "line 5: unreadable",
+        "line 8: unreadable",
+    ]
+
+
 def test_package_refuses_stubs_first(tmp_path):
     """A draft is refused before anything else is asked for (no main.bbl here)."""
     paper = _paper(tmp_path, "\\begin{document}\n\\stub{\\#45}\n\\end{document}\n")
