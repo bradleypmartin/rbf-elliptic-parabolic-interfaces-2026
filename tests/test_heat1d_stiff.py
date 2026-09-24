@@ -17,6 +17,7 @@ from heat1d_stiff import (  # noqa: E402
     COMPARATORS,
     KNEE_CACHE,
     KNEE_CACHE_META,
+    KNEE_SOURCES,
     MAX_WIDTH,
     N_CHEB,
     OPERATORS,
@@ -41,7 +42,7 @@ from heat1d_stiff import (  # noqa: E402
     weights_vs_jump,
     widened_floors,
 )
-from heat_interfaces.results_cache import read_results  # noqa: E402
+from heat_interfaces.results_cache import read_results, source_hash  # noqa: E402
 
 
 def test_main_builds_checks_and_then_reuses_the_references(tmp_path, capsys):
@@ -85,6 +86,20 @@ def test_main_builds_checks_and_then_reuses_the_references(tmp_path, capsys):
         0.0,
         *SEED_RATIOS,
     ]
+    # E5.3: the command line, and the arrays the manuscript's figures draw.
+    assert results["argv"] == argv
+    curves = results["tables"]["seed_functions/curves"]
+    assert set(curves["seeds"]) == {"0", *(f"{r:g}" for r in SEED_RATIOS)}
+    assert len(curves["seeds"]["0.1"]) == len(curves["jump"]) == 5
+    assert len(curves["seeds"]["0.1"][1]) == len(curves["xi"])
+    picture = results["tables"]["snapshot/curves"]
+    assert set(picture["solutions"]) == set(SNAPSHOT_OPERATORS)
+    assert len(picture["x"]) == len(picture["u"]) == 100
+    assert len(picture["x_fine"]) == len(picture["u_fine"]) == 2001
+    seeds = {r["label"]: r for r in results["tables"]["snapshot"]["rows"]}["seeds"]
+    assert max(abs(e) for e in picture["errors"]["seeds"]) == pytest.approx(
+        seeds["max"], rel=1e-5
+    )
     assert len(results["tables"]["references"]) == 2
     for delta in (0.0, 0.0025):
         for n, w in ((N_CHEB, MAX_WIDTH), (CHECK_N_CHEB, CHECK_MAX_WIDTH)):
@@ -122,6 +137,14 @@ def test_knee_cache_round_trips_and_rejects_another_problems_file(tmp_path):
     (tmp_path / KNEE_CACHE).write_text(json.dumps(data))
     assert load_knee_cache(tmp_path) == {}
     assert load_knee_cache(tmp_path / "missing") == {}
+    # E5.3: errors from other code (another hash of KNEE_SOURCES) are dropped.
+    save_knee_cache(tmp_path, {"a": 1.0})
+    data = json.loads((tmp_path / KNEE_CACHE).read_text())
+    assert data["meta"]["source"] == source_hash(KNEE_SOURCES)
+    assert {p.name for p in KNEE_SOURCES} >= {"march.py", "stiff.py", "fd_weights.py"}
+    data["meta"]["source"] = "0" * 64
+    (tmp_path / KNEE_CACHE).write_text(json.dumps(data))
+    assert load_knee_cache(tmp_path) == {}
 
 
 def test_rows_carry_the_run_and_both_checks(tmp_path):

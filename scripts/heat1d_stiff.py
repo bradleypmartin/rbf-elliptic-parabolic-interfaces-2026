@@ -59,15 +59,16 @@ grid with the edge unresolved (``--snapshot-n``, ``--snapshot-delta``; 100
 nodes and δ = 0.0025, h = 8δ), the reference against naive, the δ = 0
 construction, T1-FV and the seeds, with the pointwise errors and where they
 sit. Every table the driver prints goes to ``outputs/heat1d_stiff.json``
-(``results_cache.ResultsCache``: args, date, git SHA, timings, tables) and,
-with ``--data-dir``, to that directory too, for the manuscript's number
-check (E5.3, #44).
+(``results_cache.ResultsCache``: command line, args, date, git SHA, timings,
+tables), with the two figures' arrays to six figures (``seed_functions/curves``,
+``snapshot/curves``), and, with ``--data-dir``, to that directory too, for the
+manuscript's figures and number check (E5.3, #44).
 
     uv run python scripts/heat1d_stiff.py     # 2 min cold, 6 s with everything cached
     uv run python scripts/heat1d_stiff.py --counts 50 100 200 400 800 1600 3200 6400
                                               # the two extra counts: + 3 min, once
     uv run python scripts/heat1d_stiff.py --deltas 0 0.0025 --media matlab
-    uv run python scripts/heat1d_stiff.py --data-dir paper/data
+    uv run python scripts/heat1d_stiff.py --data-dir paper/data   # the documented run
 """
 
 from __future__ import annotations
@@ -85,6 +86,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
+import heat_interfaces  # noqa: E402
 from heat_interfaces.heat1d import (  # noqa: E402
     RADAU_ATOL,
     RADAU_RTOL,
@@ -125,7 +127,11 @@ from heat_interfaces.heat1d import (  # noqa: E402
 from heat_interfaces.heat1d.domain import X_MAX, X_MIN  # noqa: E402
 from heat_interfaces.heat1d.interface import region_index  # noqa: E402
 from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
-from heat_interfaces.results_cache import ResultsCache  # noqa: E402
+from heat_interfaces.results_cache import (  # noqa: E402
+    ResultsCache,
+    rounded,
+    source_hash,
+)
 
 STUDY_DELTAS = (0.0, 0.04, 0.01, 0.0025)
 """The edge widths of the study (E3.3, #28): the jump, and three sub-grid ones."""
@@ -263,11 +269,21 @@ KNEE_CACHE = "heat1d_stiff_knee.json"
 """Where the parabolic knee errors are kept between runs.
 
 ``{"meta": KNEE_CACHE_META, "errors": {knee_key: error}}``. The header names
-the problem (its label, ``T_END``, ``BC``, Radau's tolerances) and a file
-whose header differs is ignored and overwritten, as ``ParabolicReference``
-does for the references. A change to the BD4 marcher or to an operator's
-construction is not detectable this way: delete the file after one.
+the problem (its label, ``T_END``, ``BC``, Radau's tolerances) and the code
+the errors come from (``KNEE_SOURCES``' hash, E5.3), and a file whose header
+differs is ignored and overwritten, as ``ParabolicReference`` does for the
+references. The hash is of the bytes, so a docstring edit in those files
+also empties the cache: a two-minute cold run, the price of not trusting a
+label to notice a change to the marcher or to an operator (§2.2's caveat).
 """
+
+KNEE_SOURCES = (
+    *sorted((Path(heat_interfaces.__file__).parent / "heat1d").glob("*.py")),
+    Path(heat_interfaces.__file__).parent / "fd_weights.py",
+    Path(__file__).resolve(),
+)
+"""What the knee errors depend on: the 1-D package, the FD weights and this driver
+(its operator tables, ``COMPARATORS`` and ``SNAPSHOT_OPERATORS``)."""
 
 KNEE_CACHE_META = {
     "problem": PROBLEM,
@@ -275,6 +291,7 @@ KNEE_CACHE_META = {
     "bc": list(BC),
     "rtol": RADAU_RTOL,
     "atol": RADAU_ATOL,
+    "source": source_hash(KNEE_SOURCES),
 }
 
 MARKERS = ("o", "s", "^", "D", "v")
@@ -1080,6 +1097,23 @@ def seed_functions(
     }
 
 
+def seed_curves(data: dict) -> dict:
+    """``seed_functions``' arrays to six figures: what the manuscript's figure draws.
+
+    ``seeds`` and ``alpha`` are keyed by δ/h (0 the δ = 0 medium), each seed
+    array ``[k][point]`` on ``xi`` as ``monomials`` and ``jump`` are (E5.3).
+    """
+    return {
+        "xi": rounded(data["xi"]),
+        "xi_nodes": rounded(data["xi_nodes"]),
+        "xi_edges": rounded(data["xi_edges"]),
+        "monomials": rounded(data["monomials"]),
+        "jump": rounded(data["jump"]),
+        "seeds": {r: rounded(phi) for r, phi in data["seeds"].items()},
+        "alpha": {r: rounded(a) for r, a in data["alpha"].items()},
+    }
+
+
 def print_seed_functions(data: dict) -> None:
     print(
         f"\nseed functions on P4's window, {data['medium']}, {data['n']} nodes"
@@ -1217,6 +1251,24 @@ def snapshot(
     }
 
 
+def snapshot_curves(data: dict) -> dict:
+    """``snapshot``'s arrays to six figures: the manuscript's figure's (E5.3).
+
+    The nodal errors are stored as well as the solutions: the seeds' 3e-8 is
+    below six figures of ``u``, so their difference would be rounding.
+    """
+    return {
+        "x": rounded(data["x"]),
+        "u": rounded(data["u"]),
+        "x_fine": rounded(data["x_fine"]),
+        "u_fine": rounded(data["u_fine"]),
+        "alpha_fine": rounded(data["alpha_fine"]),
+        "centres": rounded(data["centres"]),
+        "solutions": {k: rounded(u) for k, u in data["solutions"].items()},
+        "errors": {k: rounded(u - data["u"]) for k, u in data["solutions"].items()},
+    }
+
+
 def print_snapshot(data: dict) -> None:
     print(
         f"\nsnapshot: ramp problem at t = {T_END:g}, {data['medium']}, δ ="
@@ -1333,7 +1385,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
     args.outputs.mkdir(parents=True, exist_ok=True)
-    results = ResultsCache("heat1d_stiff", vars(args))
+    results = ResultsCache("heat1d_stiff", vars(args), argv)
 
     t0 = time.perf_counter()
     resolution = (args.n_cheb, args.max_width)
@@ -1446,6 +1498,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "seed_functions",
         {k: functions[k] for k in ("medium", "n", "h", "h_s", "rows")},
     )
+    results.add("seed_functions/curves", seed_curves(functions))
     picture = snapshot(
         name, args.snapshot_delta, args.snapshot_n, args.outputs, resolution
     )
@@ -1454,6 +1507,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     results.add(
         "snapshot", {k: picture[k] for k in ("medium", "delta", "n", "h", "rows")}
     )
+    results.add("snapshot/curves", snapshot_curves(picture))
     results.time("figures", time.perf_counter() - t3)
     results.time("total", time.perf_counter() - t0)
     paths = [args.outputs / RESULTS]

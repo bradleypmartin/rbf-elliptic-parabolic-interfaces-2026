@@ -86,7 +86,7 @@ def test_the_reference_table_at_the_study_deltas(tmp_path, capsys):
     name = "heat2d_stiff_references.json"
     written = read_results(tmp_path / name)
     assert (tmp_path / "data" / name).read_text() == (tmp_path / name).read_text()
-    assert written["driver"] == "heat2d_stiff"
+    assert written["driver"] == "heat2d_stiff" and written["argv"] == argv
     assert written["args"]["geometry"] == "case 1"
     assert written["args"]["mode"] == "references"
     assert set(written["timings"]) == {"references", "total"}
@@ -855,6 +855,14 @@ def test_the_snapshot_is_the_sweeps_grid(tmp_path, capsys):
     assert rows["construction"]["near_share"] > 0.5 > rows["seeds"]["near_share"]
     written = read_results(tmp_path / "heat2d_stiff_snapshot.json")
     assert [r["operator"] for r in written["tables"]["snapshot"]] == list(rows)
+    # E5.3: the field the manuscript's figure draws, the table's to six figures.
+    field = written["tables"]["snapshot/field"]
+    assert (field["n"], field["delta"]) == SNAPSHOT
+    assert set(field["errors"]) == set(rows)
+    for label, e in field["errors"].items():
+        e = np.asarray(e)
+        assert e.size == len(field["x"]) == len(field["y"])
+        assert np.abs(e).max() == pytest.approx(rows[label]["max"], rel=1e-5)
 
 
 def test_a_nan_in_the_chain_residual_propagates():

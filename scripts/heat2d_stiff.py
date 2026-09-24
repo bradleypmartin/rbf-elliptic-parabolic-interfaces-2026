@@ -288,7 +288,11 @@ from heat_interfaces.heat2d import (  # noqa: E402
     widened_edge,
 )
 from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
-from heat_interfaces.results_cache import ResultsCache, finite  # noqa: E402
+from heat_interfaces.results_cache import (  # noqa: E402
+    ResultsCache,
+    finite,
+    rounded,
+)
 
 STUDY_DELTAS = (0.0, 0.04, 0.01, 0.005, 0.0025)
 """The jump and E4.3's four edge widths (#34)."""
@@ -3553,14 +3557,26 @@ def plot_snapshot(
 
 
 def run_snapshot(args) -> dict:
-    """§5's snapshot: the table, the figure ``heat2d_stiff_snapshot.png``."""
+    """§5's snapshot: the table, the figure ``heat2d_stiff_snapshot.png``.
+
+    ``snapshot/field`` holds what the manuscript's figure draws (E5.3): the nodes
+    and each operator's signed error at them, to six figures.
+    """
     t0 = time.perf_counter()
     n, delta = SNAPSHOT
     rows, nodes, errors = snapshot(n, delta, args.seed, args.iterations, args.t_end)
     print_snapshot(rows, n, delta, nodes.h)
     plot_snapshot(rows, nodes, errors, args.outputs / "heat2d_stiff_snapshot.png")
     print(f"\nsnapshot {time.perf_counter() - t0:.1f} s")
-    return {"snapshot": rows}
+    field = {
+        "n": n,
+        "delta": delta,
+        "h": nodes.h,
+        "x": rounded(nodes.x),
+        "y": rounded(nodes.y),
+        "errors": {label: rounded(e) for label, e in errors.items()},
+    }
+    return {"snapshot": rows, "snapshot/field": field}
 
 
 # --- E4.10: the results file -----------------------------------------------------
@@ -3700,7 +3716,9 @@ def main(argv: Sequence[str] | None = None) -> dict:
     if args.mode == "seeds" and "seeds" not in args.operators:
         parser.error("the seed sweep needs the seeds line")
     args.outputs.mkdir(parents=True, exist_ok=True)
-    results = ResultsCache(RESULTS, {**vars(args), "geometry": args.geometry.name})
+    results = ResultsCache(
+        RESULTS, {**vars(args), "geometry": args.geometry.name}, argv
+    )
     start = time.perf_counter()
     tables: dict = {}
 

@@ -99,7 +99,11 @@ from heat_interfaces.heat2d import (  # noqa: E402
     solve_iterative,
 )
 from heat_interfaces.plotting import AWARE, CONSTRUCTION, NAIVE, REFERENCE  # noqa: E402
-from heat_interfaces.results_cache import ResultsCache, finite  # noqa: E402
+from heat_interfaces.results_cache import (  # noqa: E402
+    ResultsCache,
+    finite,
+    rounded,
+)
 
 RATIOS = (8.0, 1.0, 0.125, 1.0 / 64.0, 0.0)
 """δ/h of H5's table: two resolved widths, a marginal one, and two unresolved."""
@@ -458,6 +462,20 @@ def spectra(n: int, delta: float, args: argparse.Namespace) -> dict[str, np.ndar
     return out
 
 
+def spectra_figure(spec: dict[str, np.ndarray], args: argparse.Namespace) -> dict:
+    """The eigenvalues ``figure_spectra`` draws, to six figures (E5.3): per label,
+    the real and imaginary parts at ``--figure-delta``, and ``h``."""
+    return {
+        "n": args.spectrum_n,
+        "delta": args.figure_delta,
+        "h": float(spec["h"]),
+        "eigenvalues": {
+            label: {"re": rounded(spec[label].real), "im": rounded(spec[label].imag)}
+            for label in args.labels
+        },
+    }
+
+
 def spectrum_rows(
     spec: dict[str, np.ndarray], delta: float, labels: Sequence[str]
 ) -> list[dict]:
@@ -656,7 +674,7 @@ def main(argv: Sequence[str] | None = None) -> dict:
     if args.figure_delta not in args.deltas:
         args.deltas = [*args.deltas, args.figure_delta]
     args.outputs.mkdir(parents=True, exist_ok=True)
-    results = ResultsCache(RESULTS, vars(args))
+    results = ResultsCache(RESULTS, vars(args), argv)
     start = time.perf_counter()
     tables: dict = {}
     if args.mode in ("all", "rows"):
@@ -666,6 +684,9 @@ def main(argv: Sequence[str] | None = None) -> dict:
     if args.mode in ("all", "spectra"):
         t0 = time.perf_counter()
         tables["spectra"] = run_spectra(args)
+        tables["spectra/figure"] = spectra_figure(
+            spectra(args.spectrum_n, args.figure_delta, args), args
+        )
         results.time("spectra", time.perf_counter() - t0)
     for name, table in tables.items():
         results.add(name, finite(table, NOT_APPLICABLE, name))
