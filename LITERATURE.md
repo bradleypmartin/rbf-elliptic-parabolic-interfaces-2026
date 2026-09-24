@@ -1080,6 +1080,10 @@ resolved variation.
 - **The companion is unsubmitted.** `Martin2026seeds` says "Manuscript"
   until its arXiv identifier exists; #52 fills it before this manuscript
   is packaged.
+- **Re-runs send only placeholders.** The bibliographic APIs ask for a
+  contact in a `mailto` parameter or the User-Agent ("polite pool"). Every
+  re-run of these queries puts a placeholder there, never a personal
+  address, and each search brief says so.
 - **Bibliography labels.** UTF-8 accents in single-author surnames
   within amsalpha's label prefix (Pólya, Mühlbach) give non-ASCII labels. `make_arxiv.py` checks that they render; #51 decides the
   style, as in the companion.
