@@ -101,15 +101,18 @@ def test_every_where_is_the_notes_statement_after_any_quoting_sections():
     assert all(WHERE.match(c.where) for c in checks), [
         c.where for c in checks if not WHERE.match(c.where)
     ]
-    # The drafts so far (E5.4, #45; E5.5, #46) quote from the abstract and §1–3;
-    # §3 quotes the construction's own tables, keyed by stiff §2.3's predictions.
+    # The drafts so far (E5.4, #45; E5.5, #46; E5.6, #47) quote from the abstract
+    # and §1–4; §3 and §4 quote the 1-D study's own tables too, keyed by the
+    # prediction of stiff §1.9 each answers, and §4.6 the snapshot.
     quoting = {
         s for c in checks if "; " in c.where for s in c.where.split("; ")[0].split(", ")
     }
     assert {"abstract", "§1", "§1.1", "§2.1", "§3.1", "§3.2"} <= quoting
-    assert {f"stiff §2.3 P{k}" for k in (4, 5, 6, 7)} <= {
-        c.where.split("; ")[-1] for c in checks
-    }
+    assert {f"§4.{k}" for k in range(1, 7)} <= quoting
+    notes = {c.where.split("; ")[-1] for c in checks}
+    assert {f"stiff §2.3 P{k}" for k in (4, 5, 6, 7, 9)} <= notes
+    assert {"stiff §2.2 P2", "stiff §2.2 P3", "stiff §2.4 P10"} <= notes
+    assert "stiff §2.5 snapshot" in notes
 
 
 def test_a_failed_check_fails_the_run(capsys, monkeypatch):

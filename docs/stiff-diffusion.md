@@ -763,13 +763,20 @@ grid-dependent positions, as §1.7 said, and on the MATLAB medium the
 error drops by two to three orders between `h = 2δ` and `h = δ/2` (MATLAB
 δ = 0.0025: 8.70e-5 → 3.90e-7, a factor 220; eq. 75: 1.06e-3 → 1.04e-6, a
 factor 1000; the companion saw 200 between `h = 2δ` and `h = δ`), the
-single doubling `h = δ → δ/2` carrying most of it (rates 5.9–6.8 there).
+single doubling `h = δ → δ/2` carrying most of it (rates 5.9–6.8 there;
+*E5.6's number check: that is the MATLAB medium, whose edge lies mid-cell;
+on eq. 75, whose edges lie on nodes, the doubling `h = 2δ → δ` carries it,
+rates 5.2–5.4, both problems*).
 Below `h ≈ δ/2` every line is fourth order (3.9–4.4) down to the direct
 solve's round-off at 6400 nodes (1–5e-11, where the δ = 0.04 rates
-collapse). The ramp problem repeats the equilibrium's numbers and rates
-to two digits at every count: at t = 2 the ramp solution is close to
-equilibrium, and the knee is a property of the operator, not of the
-problem. On eq. 75 the knee sits at the same `h/δ`, one to two orders
+collapse; *3.95–4.23 over the results file's counts, to 1600*). The ramp
+problem shows the same knee at the same counts: at t = 2 the ramp solution
+is close to equilibrium, and the knee is a property of the operator, not
+of the problem (*E5.6's number check: this had read "repeats the
+equilibrium's numbers and rates to two digits at every count"; the naive
+errors of the two problems agree to 10 % on eq. 75, equilibrium ÷ ramp
+1.00–1.10, while on the MATLAB medium the equilibrium's are 1.5–2.5× the
+ramp's*). On eq. 75 the knee sits at the same `h/δ`, one to two orders
 higher in error, since the sinusoid piece is not resolved to rounding by
 any of these grids.
 
@@ -840,7 +847,11 @@ Two regimes, and the prediction covered only the first:
   regimes the error dips slightly *below* the floor at `h ≈ 2δ` (MATLAB
   δ = 0.0025: 1.743e-3 against 1.871e-3; the partly resolved plain rows
   pull the solution part of the way to the truth) and is 7–10× the floor
-  at `h = δ`. On constant pieces the error is nearly a function of `h/δ`
+  at `h = δ` (*E5.6's number check: that holds at δ = 0.0025 only; at
+  `h ≈ δ` the elliptic error is 1.2–1.7e-2 for all three δ, 0.58, 1.65 and
+  7.6× the floor at δ = 0.04, 0.01, 0.0025, which is the next sentence's
+  point: the error follows `h/δ`, the floor δ*). On constant pieces the
+  error is nearly a function of `h/δ`
   alone: 6.85e-2, 6.86e-2, 6.87e-2 at `h/δ ≈ ½` for the three δ, 0.105,
   0.100, 0.099 at ¼. So "treat the edge as a jump" is the right baseline
   exactly where the grid cannot see the edge, and the worst of all the
@@ -1155,7 +1166,9 @@ Real to the bit (no complex pair anywhere, the one-sided end rows
 included), negative, the extreme FD4's `−16/3 h⁻²` in the α = 1 material
 to 0.6 % at 50 nodes and 0.01 % at 400, BD4-damped at dt = h; the
 least-damped eigenvalue moves by 0.4 % (MATLAB) and 1.5 % (eq. 75) between
-the jump and the sub-grid edge. And the seed operator is stable on eq. 75 at
+the jump and the sub-grid edge (*E5.6's number check: 0.3 % and 0.8–1.0 %
+from the unrounded values; the table's rounding made 0.4 and 1.5*). And the
+seed operator is stable on eq. 75 at
 49 and 53 nodes (largest real part −2.05), where the δ = 0 construction
 has eigenvalues at +248 and +8.8 (§2.2, `MIN_COUNT`): E1.2's under-resolved
 translated basis, `h α′/α ≈ 1` at the layer's edges, is what crossed the
@@ -1349,7 +1362,17 @@ included), on both media and both problems: *seeds < T1-FV < T1 (two
 cells) < naive ≳ T1 (one cell) ≈ T2 < T0 (m = 1) < T0 (m = 2)*, the middle
 three within a factor two of each other; at 200 nodes and δ = 0.0025 on
 the ramp problem, 1.6e-9, 8.0e-6, 8.9e-5, 7.9e-4 / 4.0e-4 / 4.6e-4, 2.2e-3,
-5.0e-3. Across the knee (h from 2δ to δ/2) the naive line and T0 (m = 1)
+5.0e-3. *E5.6's number check: the whole chain, with the middle three
+within a factor 2.0, holds on the MATLAB ramp problem at every δ and every
+count with h ≥ 4δ, and not "on both media and both problems". At
+equilibrium the seeds and T1-FV are both exact (§1.8) and their order is
+rounding; the rest of the chain holds on the MATLAB medium, the middle
+three within 2.25. On eq. 75, whose edges lie on nodes, the one-cell
+windows straddle them and the middle spreads: T1 (one cell) is 9–35×
+below naive at δ = 0 (ramp), T2 20–40 % below it, and at δ = 0 and 101
+nodes T0 (m = 1) comes in below naive; its ends are the ranking's except
+where T1-FV leads the seeds (below).* Across the knee (h from 2δ to δ/2)
+the naive line and T0 (m = 1)
 drop through the cell-mean lines, and in §2.2's dip at h ≈ 2δ naive can
 come in below T1 (two cells) by a quarter (δ = 0.01 at 100 nodes; not at
 δ = 0.0025 and 400). Resolved
@@ -1522,7 +1545,9 @@ their numbers and where they were measured:
    order below, elliptic and parabolic, on both media: on the MATLAB ramp
    problem 1.8e-4 at h = 2δ to 1.5e-6 at h = δ/2 (δ = 0.01), 4.4e-5 to
    2.2e-7 (δ = 0.0025), a 100–200× drop across the knee, and on eq. 75
-   5.7e-3 to 7.4e-6 (δ = 0.01), 1.0e-3 to 1.0e-6 (δ = 0.0025), 800–1000×.
+   5.7e-3 to 7.4e-6 (δ = 0.01), 1.0e-3 to 1.0e-6 (δ = 0.0025), 770–980×
+   (*E5.6: this had read 800–1000×, a round range the ratios 771 and 977
+   miss at the low end*).
    The δ = 0 construction (E1.2's rows at the edge centre) sits on the
    resistance-deficit floor `‖u₀ − u_δ‖/‖u_δ‖`, first order in δ because
    the edge's resistance falls short of the jump's by `c δ`, `c = (a − b)
@@ -1539,7 +1564,8 @@ their numbers and where they were measured:
 2. **The seeds' rates (§2.3, P4–P9 ✓).** The seed operator is fourth
    order at every δ with a δ-independent constant: on the MATLAB ramp
    problem one line for every δ, rates 6.4, 4.2, 4.05 and 4.0–4.1 from 50
-   to 800 nodes (2.5e-6 → 6e-12, then the reference's 2e-12 floor; 2e-11 at
+   to 800 nodes (2.5e-6 → 6e-12, then the reference's 5e-12 floor, *E5.6:
+   2e-12 here before, the correction below*; 2e-11 at
    δ = 0.04), with δ =
    0.0025 on the δ = 0 jump-aware line to 0.1–0.3 %, δ = 0.01 to 1–1.5 %
    and δ = 0.04 to 3–5 % where δ ≈ h and the solutions genuinely differ
@@ -1564,7 +1590,9 @@ their numbers and where they were measured:
    number check's correction: the 2e-12 quoted here before was δ = 0.0025's*) and the DOP853
    march's at δ ≲ h/40 (row residual 1e-12, solution 4e-11, §2.3).
 3. **The comparator ranking (§2.4, P10 corrected).** With the edge
-   unresolved (h ≥ 4δ, δ = 0 included), on both media and both problems,
+   unresolved (h ≥ 4δ, δ = 0 included), on the MATLAB ramp problem at every
+   δ (*E5.6: "on both media and both problems" before; §2.4 says where the
+   chain holds and how eq. 75's middle differs*),
    in ‖e‖₂/‖u‖₂: *seeds < T1-FV < T1 (two cells) < naive ≳ T1 (one cell)
    ≈ T2 < T0 (m = 1) < T0 (m = 2)*; at 200 nodes and δ = 0.0025 on the
    MATLAB ramp problem 1.6e-9, 8.0e-6, 8.9e-5, 7.9e-4 / 4.0e-4 / 4.6e-4,
@@ -1627,8 +1655,11 @@ normalisation, stated in its caption; the snapshot's grid chosen at
 `h = 8δ` because it is the row of the sweep at which the four lines are
 ordered and do not overlap, the naive operator and the δ = 0 construction
 2.9× apart (near the knee those two are never more than about 5× apart,
-which is what a knee is), T1-FV a further 22× below and the seeds 1000×
-below that (at h = 2δ the naive operator is in §2.2's dip); and the knee
+which is what a knee is; *E5.6's number check: that holds while h ≥ 4δ,
+at most 5.5×; across the knee the naive line falls through the
+construction's, 16× below it at h = 2δ and δ = 0.0025*), T1-FV a further
+22× below and the seeds 1100× below that (*1000× before; the ratio is
+1084*) (at h = 2δ the naive operator is in §2.2's dip); and the knee
 cache's blindness to operator changes.
 
 Tests: `tests/test_results_cache.py` (`jsonable` on numpy, paths and float

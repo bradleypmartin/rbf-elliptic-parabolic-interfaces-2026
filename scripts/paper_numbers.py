@@ -266,36 +266,45 @@ def one_d(f: Files, b: Book) -> None:
         "100",
         "200",
     )
-    b.within(
+    # E5.6 (#47): §1 had "800 to 1000 times", a round range the ratios miss at
+    # its low end; §1 and §4.2 now quote the measured ones.
+    b.span(
         cited(w, "§1"),
         "the drop across the knee, eq. 75",
         [d for m, d in drops if m == "eq75"],
-        "800",
-        "1000",
+        "770",
+        "980",
+    )
+    b.each(
+        cited(w, "§4.2"),
+        "the drop across the knee, MATLAB 0.01, 0.0025, eq. 75 0.01, 0.0025",
+        [d for _, d in drops],
+        ["117", "199", "771", "977"],
     )
     for row in f(ONE_D, "floor_constants/matlab"):
         b.eq(
-            cited(w, "§2.1"),
+            cited(w, "§2.1", "§4.3"),
             f"c, closed form, δ = {row['delta']:g}",
             row["closed"],
             "8.79",
         )
         b.eq(
-            w,
+            cited(w, "§4.3"),
             f"c measured ÷ closed − 1 (six digits), δ = {row['delta']:g}",
             abs(row["measured"] / row["closed"] - 1),
             "0.000000",
         )
         b.eq(
-            w,
+            cited(w, "§4.3"),
             f"the flux's shift c δ / F₀(1) over δ, δ = {row['delta']:g}",
             row["closed"] / row["f0"],
             "0.88",
         )
+        b.eq(cited(w, "§4.3"), "F₀(1), the jump's resistance", row["f0"], "10")
     # E5.4's correction: the floor is not c δ itself but first order in δ,
     # 0.73–0.75 δ at the finest count of §2.2's equilibrium table.
     b.span(
-        w,
+        cited(w, "§4.3"),
         "the floor over δ at 1600, MATLAB equilibrium",
         [
             at(knee_1d(f, "equilibrium", "matlab", d), 1600)["floor"] / d
@@ -305,7 +314,7 @@ def one_d(f: Files, b: Book) -> None:
         "0.75",
     )
     b.eq(
-        cited(w, "§1"),
+        cited(w, "§1", "§4.3"),
         "construction at 1600, δ = 0.01, equilibrium",
         at(knee_1d(f, "equilibrium", "matlab", 0.01), 1600)[CONSTRUCTION_1D],
         "0.11",
@@ -320,7 +329,7 @@ def one_d(f: Files, b: Book) -> None:
     # medium, both problems; eq. 75's coarse rows carry the sinusoid's own
     # error on top (1.05–2.3× the floor there), so the text names the medium.
     b.within(
-        cited(w, "§1"),
+        cited(w, "§1", "§4.3"),
         "construction ÷ floor while h ≥ 2δ, MATLAB, both problems",
         [
             r[CONSTRUCTION_1D] / r["floor"]
@@ -346,20 +355,20 @@ def one_d(f: Files, b: Book) -> None:
     }
     zero = [lines[0.0][n] for n in MATLAB_COUNTS]
     b.each(
-        w,
+        cited(w, "§4.4"),
         "seeds' rates, MATLAB ramp, δ = 0, 50 → 400",
         rates_per_doubling(zero[:4]),
         ["6.4", "4.2", "4.05"],
     )
     b.span(
-        w,
+        cited(w, "§4.4"),
         "seeds' rate 400 → 800 at every δ, MATLAB ramp",
         [math.log2(lines[d][400] / lines[d][800]) for d in lines],
         "4.0",
         "4.1",
     )
-    b.eq(w, "seeds at 50, δ = 0", lines[0.0][50], "2.5e-6")
-    b.eq(w, "seeds at 800, δ = 0", lines[0.0][800], "6e-12")
+    b.eq(cited(w, "§4.4"), "seeds at 50, δ = 0", lines[0.0][50], "2.5e-6")
+    b.eq(cited(w, "§4.4"), "seeds at 800, δ = 0", lines[0.0][800], "6e-12")
     b.eq(w, "seeds at 1600, δ = 0.04", lines[0.04][1600], "2e-11")
     for delta, low, high in (
         (0.0025, "0.1", "0.3"),
@@ -367,7 +376,7 @@ def one_d(f: Files, b: Book) -> None:
         (0.04, "3", "5"),
     ):
         b.span(
-            cited(w, "§1"),
+            cited(w, "§1", "§4.4"),
             f"seeds off the δ = 0 line, %, δ = {delta:g}, 50–400",
             [100 * abs(lines[delta][n] / lines[0.0][n] - 1) for n in MATLAB_COUNTS[:4]],
             low,
@@ -401,19 +410,19 @@ def one_d(f: Files, b: Book) -> None:
     )
     eq75 = column(knee_1d(f, "ramp", "eq75", 0.0), "seeds")
     eq75_rates = rates_per_doubling([eq75[n] for n in EQ75_COUNTS])
-    b.eq(w, "eq. 75 seeds' first rate, δ = 0", eq75_rates[0], "2.7")
-    b.eq(w, "eq. 75 seeds' last rate, δ = 0", eq75_rates[-1], "3.75")
-    b.eq(w, "eq. 75 seeds at 101, δ = 0", eq75[101], "1.3e-4")
-    b.eq(w, "eq. 75 seeds at 1601, δ = 0", eq75[1601], "1.4e-8")
+    b.eq(cited(w, "§4.4"), "eq. 75 seeds' first rate, δ = 0", eq75_rates[0], "2.7")
+    b.eq(cited(w, "§4.4"), "eq. 75 seeds' last rate, δ = 0", eq75_rates[-1], "3.75")
+    b.eq(cited(w, "§4.4"), "eq. 75 seeds at 101, δ = 0", eq75[101], "1.3e-4")
+    b.eq(cited(w, "§4.4"), "eq. 75 seeds at 1601, δ = 0", eq75[1601], "1.4e-8")
     wide = column(knee_1d(f, "ramp", "eq75", 0.04), "seeds")
     b.each(
-        w,
+        cited(w, "§4.4"),
         "eq. 75 seeds, δ = 0.04, 101–801",
         [wide[n] for n in EQ75_COUNTS[:4]],
         ["2.6e-8", "1.5e-9", "1.1e-10", "2e-11"],
     )
     b.each(
-        w,
+        cited(w, "§4.4"),
         "eq. 75 seeds' rates, δ = 0.04, 101–401",
         rates_per_doubling([wide[n] for n in EQ75_COUNTS[:3]]),
         ["4.1", "3.8"],
@@ -423,7 +432,7 @@ def one_d(f: Files, b: Book) -> None:
     # 0.01's 4.8e-12, §2.1's own 5e-12. Round-off, quoted to one figure.
     for medium, quoted in (("matlab", "5e-12"), ("eq75", "6e-11")):
         b.eq(
-            w,
+            cited(w, "§4.1"),
             f"the references' own error, {medium} (worst agreement)",
             max(r["agreement"] for r in references if r["medium"] == medium),
             quoted,
@@ -443,15 +452,27 @@ def one_d(f: Files, b: Book) -> None:
         ("T0 widened m=1", "2.2e-3"),
         ("T0 widened m=2", "5.0e-3"),
     ):
-        b.eq(w, f"{label} at 200, δ = 0.0025, MATLAB ramp", row[label], quoted)
+        # §4.4 quotes the seeds and the naive operator at h = 4δ too.
+        quoting = ("§4.4", "§4.5") if label in ("seeds", "naive") else ("§4.5",)
+        b.eq(
+            cited(w, *quoting),
+            f"{label} at 200, δ = 0.0025, MATLAB ramp",
+            row[label],
+            quoted,
+        )
     fv = column(comparators_1d(f, "ramp", "matlab", 0.0), "T1-FV")
-    b.eq(w, "T1-FV at 50, MATLAB ramp, δ = 0", fv[50], "1.31e-4")
-    b.eq(w, "T1-FV at 1600, MATLAB ramp, δ = 0", fv[1600], "1.26e-7")
-    b.eq(w, "T1-FV's order 50 → 1600, δ = 0", math.log2(fv[50] / fv[1600]) / 5, "2.00")
+    b.eq(cited(w, "§4.5"), "T1-FV at 50, MATLAB ramp, δ = 0", fv[50], "1.31e-4")
+    b.eq(cited(w, "§4.5"), "T1-FV at 1600, MATLAB ramp, δ = 0", fv[1600], "1.26e-7")
+    b.eq(
+        cited(w, "§4.5"),
+        "T1-FV's order 50 → 1600, δ = 0",
+        math.log2(fv[50] / fv[1600]) / 5,
+        "2.00",
+    )
     # δ = 0's is LITERATURE.md §6b's caveat, which the abstract and §1 quote.
     for delta, quoted, where in (
-        (0.0, "801", cited(w, "abstract", "§1")),
-        (0.0025, "201", w),
+        (0.0, "801", cited(w, "abstract", "§1", "§4.5")),
+        (0.0025, "201", cited(w, "§4.5")),
     ):
         rows = comparators_1d(f, "ramp", "eq75", delta)
         b.eq(
@@ -462,14 +483,15 @@ def one_d(f: Files, b: Book) -> None:
         )
     two_cells = column(comparators_1d(f, "ramp", "matlab", 0.0), "T1 harmonic 2c")
     b.eq(
-        w,
+        cited(w, "§4.5"),
         "T1 (two cells)' last rate, MATLAB ramp, δ = 0",
         rates_per_doubling([two_cells[n] for n in MATLAB_COUNTS])[-1],
         "1.5",
     )
 
-    # (4) The elliptic remark (§1.8, §2.2, §2.4).
-    w = "stiff §2.5 (4)"
+    # (4) The elliptic remark (§1.8, §2.2, §2.4). The manuscript's remark in §4.5
+    # quotes every figure of it.
+    w = cited("stiff §2.5 (4)", "§4.5")
     seeds = column(knee_1d(f, "equilibrium", "matlab", 0.01), "seeds")
     b.eq(w, "seeds at equilibrium, 50 nodes, δ = 0.01", seeds[50], "1.9e-14")
     b.eq(w, "seeds at equilibrium, 1600 nodes, δ = 0.01", seeds[1600], "1.7e-11")
@@ -575,18 +597,386 @@ def seeds_1d(f: Files, b: Book) -> None:
     )
     # P6–P7 on eq. 75 at δ = 0: E1.2's operator (the construction's column at δ =
     # 0) over the seed operator, 101–1601 nodes.
-    for problem, high, where in (
-        ("equilibrium", "44", "stiff §2.3 P6"),
-        ("ramp", "38", "stiff §2.3 P7"),
+    for problem, high, where, quoting in (
+        ("equilibrium", "44", "stiff §2.3 P6", ("§3.2",)),
+        ("ramp", "38", "stiff §2.3 P7", ("§3.2", "§4.4")),
     ):
         line = knee_1d(f, problem, "eq75", 0.0)
         b.span(
-            cited(where, "§3.2"),
+            cited(where, *quoting),
             f"eq. 75 E1.2 over seeds at δ = 0, {problem}",
             [r[CONSTRUCTION_1D] / r["seeds"] for r in line],
             "6",
             high,
         )
+
+
+PROBLEMS_1D = ("equilibrium", "ramp")
+MIDDLE_1D = ("naive", "T1 harmonic 1c", "T2 arithmetic 1c")
+NODAL_1D = ("T1 harmonic 1c", "T1 harmonic 2c", "T2 arithmetic 1c")
+
+
+def results_1d(f: Files, b: Book) -> None:
+    """The 1-D study's own tables that §4 of the manuscript quotes.
+
+    Keyed by the prediction of the notes' §1.9 that each table answers: P2, the
+    knee, and P3, the construction (stiff §2.2); P7 and P9, the seeds (§2.3);
+    P10, the treatments (§2.4); and the snapshot (§2.5). E5.6 (#47) added them.
+    Skipped, and traced to the notes: the construction's eigenvalues at +248 and
+    +8.8 on 49 and 53 nodes (not in the results file), the spatial error at
+    dt → h/8 and the snapshot seeds' 1.47e-8 (E4.10's roundtable scratch, §5.6),
+    the two-cell mean's max-norm error (§2.4's scratch), the rows seeded with
+    the reach widened (P6–P7 scratch), the quadrature against the closed form
+    (tests), and the medium's α′/α = 25 (arithmetic).
+    """
+    # P2: the naive operator's knee (§4.2).
+    w = cited("stiff §2.2 P2", "§4.2")
+    for medium, low, high, skip in (
+        ("matlab", "0.98", "1.02", 0),
+        ("eq75", "1.00", "1.01", 1),
+    ):
+        b.span(
+            w,
+            f"naive's rates at δ = 0, {medium}, both problems",
+            [
+                q
+                for p in PROBLEMS_1D
+                for q in rates_per_doubling(
+                    [r["naive"] for r in knee_1d(f, p, medium, 0.0)]
+                )[skip:]
+            ],
+            low,
+            high,
+        )
+    ratios, rates = [], []
+    for medium in ("matlab", "eq75"):
+        for p in PROBLEMS_1D:
+            jump = column(knee_1d(f, p, medium, 0.0), "naive")
+            for d in (0.04, 0.01, 0.0025):
+                rows = [
+                    r for r in knee_1d(f, p, medium, d) if r["h"] >= 4 * d * (1 - 1e-9)
+                ]
+                ratios += [r["naive"] / jump[r["n"]] for r in rows]
+                rates += rates_per_doubling([r["naive"] for r in rows])
+    b.span(w, "naive ÷ the jump's while h ≥ 4δ", ratios, "0.43", "1.05")
+    b.span(w, "naive's rates while h ≥ 4δ", rates, "0.9", "1.6")
+    # The doubling that carries the knee: h = δ → δ/2 with the edge mid-cell,
+    # h = 2δ → δ with the edges on nodes.
+    for medium, pairs, low, high in (
+        ("matlab", {0.01: (200, 400), 0.0025: (800, 1600)}, "5.9", "6.8"),
+        ("eq75", {0.01: (101, 201), 0.0025: (401, 801)}, "5.2", "5.4"),
+    ):
+        steep = []
+        for p in PROBLEMS_1D:
+            for d, (n1, n2) in pairs.items():
+                naive = column(knee_1d(f, p, medium, d), "naive")
+                steep.append(math.log2(naive[n1] / naive[n2]))
+        b.span(w, f"naive's steepest doubling, {medium}", steep, low, high)
+    below = [
+        q
+        for medium in ("matlab", "eq75")
+        for p in PROBLEMS_1D
+        for d in (0.04, 0.01, 0.0025)
+        for q in rates_per_doubling(
+            [r["naive"] for r in knee_1d(f, p, medium, d) if r["h"] <= 0.51 * d]
+        )
+    ]
+    b.span(w, "naive's rates from h = δ/2", below, "3.95", "4.23")
+
+    # P3: the δ = 0 construction (§4.3).
+    w = cited("stiff §2.2 P3", "§4.3")
+    rows = knee_1d(f, "equilibrium", "matlab", 0.0025)
+    b.le(
+        w,
+        "construction ÷ floor − 1, MATLAB equilibrium, δ = 0.0025, 50–200",
+        max(abs(r[CONSTRUCTION_1D] / r["floor"] - 1) for r in rows if r["n"] <= 200),
+        "0.0005",
+    )
+    b.eq(
+        w,
+        "the dip at h = 2δ: construction ÷ floor, 400, δ = 0.0025",
+        at(rows, 400)[CONSTRUCTION_1D] / at(rows, 400)["floor"],
+        "0.93",
+    )
+    widths = (0.04, 0.01, 0.0025)
+    b.span(
+        w,
+        "the ramp floor over δ at 1600, MATLAB",
+        [at(knee_1d(f, "ramp", "matlab", d), 1600)["floor"] / d for d in widths],
+        "0.29",
+        "0.29",
+    )
+    b.each(
+        w,
+        "eq. 75's equilibrium floor over δ at 1601",
+        [at(knee_1d(f, "equilibrium", "eq75", d), 1601)["floor"] / d for d in widths],
+        ["0.76", "1.20", "1.44"],
+    )
+    constants = {r["delta"]: r for r in f(ONE_D, "floor_constants/eq75")}
+    b.each(
+        w,
+        "eq. 75's measured deficit ÷ its limit",
+        [constants[d]["measured"] / constants[d]["closed"] for d in widths],
+        ["0.44", "0.74", "0.91"],
+    )
+    b.eq(w, "eq. 75's limit, the two edges' c", constants[0.04]["closed"], "20.7")
+    b.span(
+        w,
+        "eq. 75 construction ÷ floor while h ≥ 2δ, both problems",
+        [
+            r[CONSTRUCTION_1D] / r["floor"]
+            for p in PROBLEMS_1D
+            for d in widths
+            for r in knee_1d(f, p, "eq75", d)
+            if r["h"] >= 2 * d * (1 - 1e-9)
+        ],
+        "1.05",
+        "2.3",
+    )
+    # Resolved: the error follows h/δ, not δ (the counts at h ≈ δ/2).
+    half = [
+        at(knee_1d(f, "equilibrium", "matlab", d), n)
+        for d, n in ((0.04, 100), (0.01, 400), (0.0025, 1600))
+    ]
+    b.span(
+        w,
+        "construction at h ≈ δ/2, MATLAB equilibrium, every δ",
+        [r[CONSTRUCTION_1D] for r in half],
+        "0.0685",
+        "0.0687",
+    )
+    b.each(
+        w,
+        "… over its floor, δ = 0.04, 0.01, 0.0025",
+        [r[CONSTRUCTION_1D] / r["floor"] for r in half],
+        ["2.4", "9.2", "37"],
+    )
+    for medium, n, quoted in (
+        ("matlab", 1600, ("0.125", "0.048")),
+        ("eq75", 1601, ("0.22", "0.22")),
+    ):
+        for p, q in zip(PROBLEMS_1D, quoted, strict=True):
+            b.eq(
+                w,
+                f"construction at {n}, δ = 0.04, {medium} {p}",
+                at(knee_1d(f, p, medium, 0.04), n)[CONSTRUCTION_1D],
+                q,
+            )
+    b.span(
+        w,
+        "the construction's rates at δ = 0 on eq. 75 (E1.2's operator)",
+        [
+            q
+            for p in PROBLEMS_1D
+            for q in rates_per_doubling(
+                [r[CONSTRUCTION_1D] for r in knee_1d(f, p, "eq75", 0.0)]
+            )
+        ],
+        "3.88",
+        "4.12",
+    )
+
+    # P7: the seeds on the ramp problem (§4.4).
+    w = cited("stiff §2.3 P7", "§4.4")
+    ramp = knee_1d(f, "ramp", "matlab", 0.0025)
+    b.eq(w, "h/δ at 50, δ = 0.0025", at(ramp, 50)["h"] / 0.0025, "16")
+    wide = knee_1d(f, "ramp", "matlab", 0.04)
+    b.eq(w, "h/δ at 400, δ = 0.04", at(wide, 400)["h"] / 0.04, "0.125")
+    b.eq(
+        w,
+        "construction at 200, δ = 0.0025, MATLAB ramp",
+        at(ramp, 200)[CONSTRUCTION_1D],
+        "7.2e-4",
+    )
+    b.eq(
+        w,
+        "eq. 75 seeds at 201, δ = 0.01 (the plain rows)",
+        at(knee_1d(f, "ramp", "eq75", 0.01), 201)["seeds"],
+        "1.4e-8",
+    )
+    thin = rates_per_doubling([r["seeds"] for r in knee_1d(f, "ramp", "eq75", 0.0025)])
+    b.eq(w, "eq. 75 seeds' first rate, δ = 0.0025", thin[0], "2.7")
+    b.eq(w, "eq. 75 seeds' last rate, δ = 0.0025", thin[-1], "4.0")
+
+    # P9: the seed operator's interior spectrum (§4.4).
+    w = cited("stiff §2.3 P9", "§4.4")
+    spectra = [r for m in ("matlab", "eq75") for r in f(ONE_D, f"seed_spectra/{m}")]
+    b.eq(w, "largest |Im λ|, every grid", max(r["imag"] for r in spectra), "0")
+    b.le(w, "largest Re λ, every grid", max(r["max_real"] for r in spectra), "0")
+    b.eq(
+        w,
+        "min Re λ h² off FD4's −16/3, %, MATLAB 50",
+        max(
+            100 * abs(r["extreme"] / (-16 / 3) - 1)
+            for r in f(ONE_D, "seed_spectra/matlab")
+            if r["n"] == 50
+        ),
+        "0.6",
+    )
+    b.span(
+        w,
+        "largest Re λ, eq. 75 at 49 and 53, δ = 0",
+        [
+            r["max_real"]
+            for r in f(ONE_D, "seed_spectra/eq75")
+            if r["n"] in (49, 53) and r["delta"] == 0.0
+        ],
+        "-2.05",
+        "-2.05",
+    )
+
+    # P10: the treatments (§4.5).
+    w = cited("stiff §2.4 P10", "§4.5")
+    disorder, spread = 0, []
+    for d in (0.0,) + widths:
+        for r in comparators_1d(f, "ramp", "matlab", d):
+            if r["h"] < 4 * d * (1 - 1e-9):
+                continue
+            middle = [r[k] for k in MIDDLE_1D]
+            ranked = (
+                r["seeds"] < r["T1-FV"] < r["T1 harmonic 2c"] < min(middle)
+                and max(middle) < r["T0 widened m=1"] < r["T0 widened m=2"]
+            )
+            disorder += not ranked
+            spread.append(max(middle) / min(middle))
+    b.eq(w, "MATLAB ramp rows out of the ranking, h ≥ 4δ", disorder, "0")
+    b.le(w, "… the middle three's spread", max(spread), "2.0")
+    lead = {
+        r["n"]: r["T1-FV"] / r["seeds"]
+        for r in comparators_1d(f, "ramp", "matlab", 0.0)
+    }
+    b.eq(w, "T1-FV ÷ seeds at 50, MATLAB ramp, δ = 0", lead[50], "53")
+    b.eq(w, "T1-FV ÷ seeds at 400, MATLAB ramp, δ = 0", lead[400], "2.1e4")
+    eq75 = comparators_1d(f, "ramp", "eq75", 0.0)
+    b.span(
+        w,
+        "eq. 75 naive ÷ T1 (one cell), ramp, δ = 0",
+        [r["naive"] / r["T1 harmonic 1c"] for r in eq75],
+        "9",
+        "35",
+    )
+    r = at(comparators_1d(f, "ramp", "eq75", 0.01), 101)
+    b.eq(w, "eq. 75 T1-FV ÷ seeds at 101, δ = 0.01", r["T1-FV"] / r["seeds"], "440")
+    fv = {
+        d: column(comparators_1d(f, "ramp", "matlab", d), "T1-FV")
+        for d in (0.0,) + widths
+    }
+    b.eq(
+        w,
+        "T1-FV at δ = 0.01, 0.0025 off δ = 0's, %, largest",
+        max(
+            100 * abs(fv[d][n] / fv[0.0][n] - 1) for d in (0.01, 0.0025) for n in fv[d]
+        ),
+        "1.2",
+    )
+    b.span(
+        w,
+        "T1-FV at δ = 0.04 above δ = 0's, %",
+        [100 * (fv[0.04][n] / fv[0.0][n] - 1) for n in fv[0.04]],
+        "7",
+        "7",
+    )
+    capped = []
+    for d in widths:
+        rows = [r for r in comparators_1d(f, "ramp", "matlab", d) if r["h"] <= 0.26 * d]
+        for k in NODAL_1D:
+            capped += rates_per_doubling([r[k] for r in rows])
+    b.span(
+        w, "nodal treatments' rates for h ≤ δ/4, MATLAB ramp", capped, "1.95", "2.00"
+    )
+    r = at(comparators_1d(f, "ramp", "matlab", 0.04), 1600)
+    for label, quoted in (
+        ("naive", "2.05e-10"),
+        ("T1 harmonic 1c", "1.62e-7"),
+        ("T2 arithmetic 1c", "5.76e-7"),
+        ("T1 harmonic 2c", "6.50e-7"),
+        ("T1-FV", "1.35e-7"),
+    ):
+        b.eq(w, f"{label} at 1600, δ = 0.04, MATLAB ramp", r[label], quoted)
+    b.span(
+        w,
+        "… the nodal treatments over T1-FV",
+        [r[k] / r["T1-FV"] for k in NODAL_1D],
+        "1.2",
+        "4.8",
+    )
+    # T0 (m = 2) on its own floor, the widened medium's exact equilibrium.
+    off = []
+    for medium in ("matlab", "eq75"):
+        for d in widths:
+            built = {r["n"]: r for r in comparators_1d(f, "equilibrium", medium, d)}
+            off += [
+                abs(built[r["n"]]["T0 widened m=2"] / r["2"] - 1)
+                for r in f(ONE_D, f"widened_floors/{medium}/{key(d)}")
+                if r["h"] >= d * (1 - 1e-9)
+            ]
+    b.le(w, "T0 (m = 2) ÷ its floor − 1 wherever h ≥ δ", max(off), "0.001")
+    jump = comparators_1d(f, "ramp", "matlab", 0.0)
+    for label, low, high in (
+        ("T0 widened m=1", "2.9", "2.9"),
+        ("T0 widened m=2", "5.7", "5.8"),
+    ):
+        b.span(
+            w,
+            f"{label} ÷ naive, MATLAB ramp, δ = 0",
+            [r[label] / r["naive"] for r in jump],
+            low,
+            high,
+        )
+    # The one-cell window ends on the jump, so the treated A is the naive one; the
+    # errors differ by the solves' rounding, 1e-13 on errors of 1e-4 at most.
+    b.le(
+        w,
+        "T1 (one cell) and T2 off naive at δ = 0 mid-cell, both problems",
+        max(
+            abs(r[k] / r["naive"] - 1)
+            for p in PROBLEMS_1D
+            for r in comparators_1d(f, p, "matlab", 0.0)
+            for k in ("T1 harmonic 1c", "T2 arithmetic 1c")
+        ),
+        "1e-9",
+    )
+    b.span(
+        w,
+        "T1 (two cells)' rates, MATLAB ramp, δ = 0",
+        rates_per_doubling([r["T1 harmonic 2c"] for r in jump]),
+        "1.44",
+        "1.50",
+    )
+
+    # The snapshot (§4.6): the ramp problem at h = 8δ.
+    w = cited("stiff §2.5 snapshot", "§4.6")
+    snap = f(ONE_D, "snapshot")
+    rows = {r["label"]: r for r in snap["rows"]}
+    b.eq(w, "h/δ", snap["h"] / snap["delta"], "8.08")
+    order = ("naive", CONSTRUCTION_1D, "T1-FV", "seeds")
+    for label, quoted in zip(
+        order, ("2.04e-3", "7.12e-4", "3.20e-5", "2.95e-8"), strict=True
+    ):
+        b.eq(w, f"{label}'s error", rows[label]["error"], quoted)
+    b.each(
+        w,
+        "each over the next",
+        [
+            rows[a]["error"] / rows[c]["error"]
+            for a, c in zip(order, order[1:], strict=False)
+        ],
+        ["2.9", "22", "1100"],
+    )
+    b.eq(
+        w,
+        "naive's largest error, in h from the edge",
+        rows["naive"]["at"] / snap["h"],
+        "-1.5",
+    )
+    b.eq(w, "naive's ‖e‖² beyond 2h, %", 100 * (1 - rows["naive"]["local"]), "84")
+    b.eq(
+        w,
+        "the construction's largest error, in h from the edge",
+        rows[CONSTRUCTION_1D]["at"] / snap["h"],
+        "-0.5",
+    )
+    b.eq(w, "T1-FV's largest error at x", rows["T1-FV"]["at"], "-0.62")
 
 
 # --- stiff note §5.1 and §5.3: what the 2-D study states ---------------------------
@@ -1774,6 +2164,7 @@ def treatments(f: Files, b: Book) -> None:
 STATEMENTS = (
     one_d,
     seeds_1d,
+    results_1d,
     snapshot_2d,
     references_2d,
     naive_knee,
