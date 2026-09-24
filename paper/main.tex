@@ -73,19 +73,17 @@ RBF-FD through material edges too steep for the grid}
 \begin{document}
 
 % ---------------------------------------------------------------------------
-% ABSTRACT. First draft by #45 from the statements the notes make; the final
-% wording is #51's. Novelty only in LITERATURE.md section 6's words (#43):
-% the fourth and fifth sentences are 6b's abstract-safe sentence verbatim, and
-% the last two are 6b's required caveat verbatim, since the comparison with
-% the coefficient treatments is a headline here.
+% ABSTRACT. First draft by #45 from the statements the notes make; #51 cut
+% the treatments comparison from it (the full-draft review: it had become
+% 40 % of the abstract), so the ledger's required caveat, which goes wherever
+% that comparison is a headline, now stands in section 1 and section 7.3
+% only. Novelty only in LITERATURE.md section 6's words (#43): the fourth
+% and fifth sentences are 6b's abstract-safe sentence verbatim.
 % TRACE: the knee, stiff 2.5 (1) and 5.3 (2); the construction's floor of
 % order delta and its growth once the edge is resolved, stiff 2.5 (1) and
-% 5.3 (3); the seeds, stiff 2.5 (2) and 5.3 (4); the caveat's numbers:
-%   801 nodes          stiff 2.5 (3), paper/data/heat1d_stiff.json
-%   1.75               stiff 5.3 (10), paper/data/heat2d_stiff_treatments*.json
-%   2.3 to 4.7 orders over 1250 to 40,000 nodes
-%                      stiff 5.3 (10), paper/data/heat2d_stiff_treatments.json
-% (scripts/paper_numbers.py: where "abstract, §1; stiff ...").
+% 5.3 (3); the seeds, stiff 2.5 (2) and 5.3 (4); what they need, the
+% construction paragraph of section 7.1 (stiff 5.5); the tests, sections 4
+% and 6.
 % ---------------------------------------------------------------------------
 \begin{abstract}
 A diffusion coefficient can vary smoothly on the scale of the grid, jump
@@ -103,20 +101,9 @@ dimension they are the classical formal powers of the Sturm--Liouville
 operator, and as $\delta \to 0$ they reduce to the interface-aware stencils
 of a jump. On scattered nodes the resulting RBF-FD stencils are fourth order
 at every $\delta$ tested, elliptic and parabolic, with no switch between
-regimes. We compare them with the coefficient treatments of diffusion
-practice. The comparison is against coefficient sampling on the same nodes
-and against our implementation of the cell harmonic and arithmetic means, a
-widened edge and, in one dimension, the conservative scheme with exact face
-conductances, on two media or test cases per dimension, with no sweep in
-contrast. Through an edge the grid does not resolve none of them is better
-than second order; the conservative scheme is exact at the one-dimensional
-equilibrium and, on the sinusoidal medium, ahead of the seeds below 801
-nodes at $\delta = 0$ and at 101 nodes at $\delta = 0.0025$, where the
-seeds' line is pre-asymptotic; on the scattered nodes none improves on
-sampling by more than a factor of 1.75 in the RMS norm outside one coarse
-parabolic run with a growing mode, and while the grid does not resolve the
-edge the seeds lie 1.6 to 4.9 orders below the best of them over 1250 to
-40,000 nodes.
+regimes. They need a continuous description of the coefficient and, where
+the edge curves, its geometry; we test them in one dimension and on flat and
+curved bands and a thin resistive ring in two.
 \end{abstract}
 
 \maketitle
@@ -167,7 +154,7 @@ sides, sees a jump, and treats the coefficient as smooth between its nodes,
 which is the first-order failure of the jump case. It recovers once the grid
 resolves the edge. In the one-dimensional ramp problem of
 Section~\ref{sec:knee1d}, the error of the standard fourth-order operator
-through a $9 : 1$ edge of width $\delta = 0.01$ or $0.0025$ falls by 100 to
+$D_x A D_x$, which we call \emph{naive} below, through a $9 : 1$ edge of width $\delta = 0.01$ or $0.0025$ falls by 100 to
 200 times between $h = 2\delta$ and $h = \delta/2$, where a first-order line
 falls by four. On scattered nodes in two dimensions
 (Section~\ref{sec:naive2d}) its elliptic error stays at $0.86$ to $0.94$ of
@@ -182,8 +169,9 @@ $h \approx \delta$ the knee.
 % "only while h >~ 3 delta, by at most a factor of 6", stiff 5.3 (3).
 The interface-aware stencils do not reach this regime either. Applied with
 the centre of the edge as the interface and the two sides' coefficients as
-if $\delta$ were $0$, they converge to the jump problem's solution, which is
-not the smooth problem's: the resistance $\int dx / \alpha$ of a $\tanh$ edge
+if $\delta$ were $0$, in an operator whose other rows read the smooth
+$\alpha$, they approach the jump problem's solution while the grid does not
+resolve the edge, and that is not the smooth problem's: the resistance $\int dx / \alpha$ of a $\tanh$ edge
 between conductivities $a$ and $b$ falls short of the jump's by $c\,\delta$,
 $c = (a - b) \ln(a/b) / (2ab)$, so their error sits on a floor of order
 $\delta$ while the grid does not resolve the edge. Once it does, the rebuilt
@@ -191,7 +179,7 @@ rows keep enforcing a kink that the solution lacks, and their error grows:
 through a $9 : 1$ edge with $\delta = 0.01$ it reaches $0.11$ at 1600
 nodes in the one-dimensional equilibrium of
 Section~\ref{sec:construction1d}. On scattered nodes they
-beat the standard stencils only while $h \gtrsim 3\delta$, and by at most a
+beat the naive operator only while $h \gtrsim 3\delta$, and by at most a
 factor of $6$. Using them means knowing $\delta$ and switching them off.
 
 % TRACE: the chain, stiff 1.2 (eq. 1.2's definition; the heat polynomials,
@@ -220,7 +208,8 @@ $\phi_2$ is the profile of a solution whose rate of change $u_t$ is
 constant; in general the even seeds carry
 $\partial_t^k u = \text{const}$ and the odd ones
 $\alpha\, \px \partial_t^k u = \text{const}$, which are the interface
-conditions of a jump. Read across a jump, the chain is the translated
+conditions of a jump. Read across a jump between constant pieces, the
+chain is the translated
 polynomial basis of the interface-aware stencils
 (Section~\ref{sec:jumplimit}), so one construction covers the jump, the
 sub-grid edge and the resolved edge. In one dimension it is classical
@@ -246,8 +235,8 @@ along it, a profile frozen along the normal is inconsistent at $O(1)$
 through an unresolved edge, and the chain is marched in the curve's own
 coordinates instead (Section~\ref{sec:curved}). A resistive layer thinner
 than the stencil, the insulating ring of \cite{MartinFornberg2017heat},
-needs its exact width, its own series and seeds of one degree higher that
-carry the flux (Section~\ref{sec:ring}). An imperfect contact costs
+needs its exact width, its own series and five extra seeds
+(Section~\ref{sec:ring}). An imperfect contact costs
 strong-form schemes a derivative in the jump conditions, as Lombard and
 Piraux observed for elastic waves \cite{LombardPiraux2003,LombardPiraux2006};
 the flux seeds add the functions of one degree higher that carry the flux,
@@ -258,8 +247,10 @@ and nothing else.
 % stiff 1.8 and 2.5 (4); the 2-D elliptic problem as a real test, stiff
 % 5.3 (5).
 We measure the seeds in one and two dimensions, on elliptic and parabolic
-problems, against three baselines: the standard stencils with $\alpha$
-sampled at the nodes; the interface-aware stencils of the jump applied at
+problems, against three baselines: the naive operator, with $\alpha$
+sampled at the nodes (and, in two dimensions, the direct operator
+$\alpha \nabla^2 u + \nabla \alpha \cdot \nabla u$ as the control where the
+grid resolves the edge); the interface-aware stencils of the jump applied at
 the edge's centre; and the coefficient treatments of diffusion practice,
 which change the coefficient and keep the scheme: harmonic and arithmetic
 means of $\alpha$ over a cell (over a disc on scattered nodes), the edge
@@ -273,26 +264,23 @@ tangential variation of the solution takes it out of that span, and the
 equilibrium is a real test.
 
 \subsection*{Contributions}
-% TRACE, item by item. Item 1: LITERATURE.md 6b's contributions sentence,
-% verbatim; stiff 3.2-3.4, 3.10, 3.11. Item 2: stiff 2.5 (1) (100 to 200
-% times between h = 2 delta and delta/2, checked as bounds, and 770 to 980,
-% checked as a range: E5.6 replaced the "800 to 1000" the ratios 771 and 977
-% miss at the low end; the construction on its floor, of order delta, for
-% h >~ 2 delta, 0.93-1.00 of it on the two-constant medium, a check E5.4
-% added), 2.5 (2)
-% (0.1-0.3 %, 1-1.5 %, 3-5 % off the delta = 0 line over 50-400 nodes; the
-% spatial error alone fourth order, E4.10's roundtable scratch, stiff 5.6).
-% Item 3: stiff 5.3 (4) (fits 4.23, 4.31, 4.23, 4.48; the spread 1.2-2.4;
-% 7.99e-9 against 8.36e-5 at 40,000 nodes and delta = 0.0025; the rule's
-% 20 delta, a parameter; "no deterioration ... not a proven constant", the
-% statement's own caveat), 5.3 (6) (least diagonal dominance never below the
-% jump-aware rows'; gmres counts below the construction's; no eigenvalue
-% in the right half-plane). Item 4: stiff 5.3 (8) (1.4-3.9 from 5000
-% nodes, RMS), 5.3 (9) (1.3-2.1e-15 at every s; fits 4.43-4.71 over
-% 1250-40,000). Item 5: LITERATURE.md 6b's required caveat, verbatim (801;
-% 1.75; 2.3 to 4.7 orders over 1250 to 40,000 nodes: stiff 2.5 (3), 5.3
-% (10)). Item 6: the repository (public, MIT; paper/ CC BY 4.0); the
-% version tag is #52's to pin.
+% TRACE, item by item; #51 cut items 2-4 to one claim and one number each
+% (the full-draft review), the ranges staying in sections 4 and 6. Item 1:
+% LITERATURE.md 6b's contributions sentence, verbatim; stiff 3.2-3.4, 3.10,
+% 3.11. Item 2: stiff 2.5 (1) (100 to 200 times between h = 2 delta and
+% delta/2, checked as bounds; the construction on its floor, of order delta,
+% for h >~ 2 delta), 2.5 (2) (within 5 %: the 3-5 % at delta = 0.04 is the
+% largest of the three widths' offsets, checked). Item 3: stiff 5.3 (4)
+% (fits 4.23-4.48; "no deterioration ... on these node sets", the
+% statement's scope; the reach rule's 20 delta), 5.3 (6) (least diagonal
+% dominance never below the jump-aware rows'; gmres counts no more than the
+% construction's; no eigenvalue in the right half-plane). Item 4: stiff 5.3
+% (8) (1.4-3.9 from 5000 nodes, RMS), 5.3 (9) (fits 4.43-4.71 over
+% 1250-40,000; the smooth ring against a 160,000-node seed run, statement
+% 9's reference). Item 5: LITERATURE.md 6b's required caveat, verbatim (801
+% and 101; 1.75 outside case 1's parabolic 1250-node set; 1.6 to 4.9
+% orders: stiff 2.5 (3), 2.4, 5.3 (10)). Item 6: the repository (public,
+% MIT; paper/ CC BY 4.0); the version tag is #52's to pin.
 \begin{enumerate}
 \item The seeds for the diffusion operator on the unchanged scattered nodes
   of the interface-aware RBF-FD stencils, which they reduce to as
@@ -306,39 +294,29 @@ equilibrium is a real test.
   differential equations; its ingredients (the exact face conductance, the
   formal powers, bases from local solutions of the equation) are each
   classical, and in one dimension so is the construction.
-\item In one dimension (Section~\ref{sec:results1d}): the knee of the
-  standard operator, a drop of 100 to 200 times between $h = 2\delta$ and
-  $h = \delta/2$ at a $9 : 1$ edge and of 770 to 980 times at the
-  $10 : 1$ edges of the sinusoidal medium; the jump construction on its
-  floor, the distance of order $\delta$ between the jump's solution and the
-  smooth one, while $h \gtrsim 2\delta$ on the two-constant medium, and
-  growing once the grid resolves the edge; and the seeds, fourth order at every $\delta$ on one line: on the
-  ramp problem of the two-constant medium they lie within $0.1$ to $0.3\%$,
-  $1$ to $1.5\%$ and $3$ to $5\%$ of the jump's line at
-  $\delta = 0.0025$, $0.01$ and $0.04$.
-\item On scattered nodes through a flat band (Section~\ref{sec:results2d}):
+\item In one dimension (Section~\ref{sec:results1d}): the naive operator
+  has a knee at $h \approx \delta$, a drop of 100 to 200 times between
+  $h = 2\delta$ and $h = \delta/2$ at a $9 : 1$ edge; the $\delta = 0$
+  construction sits on a floor of order $\delta$ while $h \gtrsim 2\delta$
+  and grows once the grid resolves the edge; and the seeds are fourth order
+  on one line at every $\delta$, within $5\%$ of the jump's line on the ramp
+  problem of the two-constant medium.
+\item On scattered nodes through a flat band (Section~\ref{sec:flat2d}):
   the seeds are fourth order at every $\delta$ tested, elliptic and
   parabolic, with elliptic fits of $4.23$ to $4.48$ over 1250 to 40,000
-  nodes; the elliptic errors at the five widths, the jump included, differ
-  by factors of $1.2$ to $2.4$ at each node count, and at 40,000 nodes and
-  $\delta = 0.0025$ the seeds' error is $\sci{7.99}{-9}$ against the
-  standard operator's $\sci{8.36}{-5}$. That is no deterioration as
-  $\delta \to 0$ on these node sets, not a proven $\delta$-uniform
-  constant. The rule is to seed every row whose stencil sees an edge
-  within $20\delta$, with no threshold in $\delta$. The seeded rows'
-  least diagonal dominance never falls below the jump-aware rows', the
-  seeded matrices' condition estimates and GMRES counts stay bounded as
-  $\delta \to 0$, and their spectra have no eigenvalue in the right
-  half-plane.
+  nodes and no deterioration as $\delta \to 0$ on these node sets. The
+  reach rule seeds every row whose stencil sees an edge within $20\delta$,
+  with no threshold in $\delta$, and the seeded matrices stay as solvable
+  as the jump-aware operator's as $\delta \to 0$
+  (Section~\ref{sec:spectra2d}).
 \item Through the curved band of case 2 the tangential chain is fourth
   order, within $1.4$ to $3.9$ times of the flat seeds' RMS error from 5000
-  nodes at every $\delta$ (Section~\ref{sec:curved2d}). On the insulating
-  ring thinned at a fixed resistance from $s = 10^3$ to $10^{11}$ the seeds
-  are exact on the matched radial profile to rounding ($\sci{1.3}{-15}$ to
-  $\sci{2.1}{-15}$) and converge at fourth order (fits $4.43$ to $4.71$) at
-  every $s$; through a smooth ring whose width and edges are both below $h$
-  they converge at fourth order on the nodes away from it
-  (Section~\ref{sec:ring2d}).
+  nodes (Section~\ref{sec:curved2d}). On the insulating ring thinned at a
+  fixed resistance from $s = 10^3$ to $10^{11}$ the seeds converge at
+  fourth order at every $s$ (fits $4.43$ to $4.71$), and through a smooth
+  ring whose width and edges are both below $h$ they converge at fourth
+  order on the nodes away from it, measured against a fine run of the
+  seeds (Section~\ref{sec:ring2d}).
 \item The comparison with the coefficient treatments
   (Sections~\ref{sec:treatments1d} and~\ref{sec:treatments2d}). The
   comparison is against coefficient sampling on the same nodes and against
@@ -393,8 +371,9 @@ $(k u')'$ with a piecewise-smooth $k$, whose coefficients come from Cauchy
 problems integrated across each cell, are the exact and truncated difference
 schemes \cite{SamarskiiMakarov1990,GavrilyukEtAl2011}; three-point schemes
 of any order exist across a jump too \cite{Gartland1989}, one of them built
-by carrying Taylor data across the step \cite{Sujecki2010}. In two
-dimensions, local solutions of the equation that satisfy the interface
+by carrying Taylor data across the step \cite{Sujecki2010}.
+
+In two dimensions, local solutions of the equation that satisfy the interface
 conditions are the basis of the Trefftz difference schemes of FLAME, on
 irregular stencils too \cite{Tsukerman2006,Tsukerman2010}, and of the
 tailored finite point methods \cite{Huang2009,HanZhang2012}; Galerkin
@@ -487,8 +466,9 @@ naive, direct & $D_x A D_x$ ($+ D_y A D_y$); $\alpha \nabla^2 u + \nabla
   \alpha \cdot \nabla u$ on one stencil \\
 jump-aware & the interface-aware stencils of Section~\ref{sec:jump} \\
 the $\delta = 0$ construction & the same, applied at a smooth edge's
-  centre \\
-seeds & the operator whose rows that see an edge are rebuilt on seeds \\
+  centre; its other rows direct \\
+seeds & the operator whose rows that see an edge are rebuilt on seeds, its
+  other rows direct \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -699,8 +679,8 @@ bivariate monomials $p_j$ up to a degree $p$ in coordinates scaled by the
 stencil's radius, and $w_*$ discarded. The constraint rows make the weights
 exact on the polynomials, which take over from the Gaussians under
 refinement \cite{FlyerFornbergBayonaBarnett2016,BayonaFlyerFornbergBarnett2017};
-the shape parameter is $\varepsilon = 0.4 / d$, with $d$ the distance from
-$x_e$ to its nearest neighbour. Stencils have $42$ nodes and degree $5$ in
+the shape parameter is $\varepsilon = 0.4 / r_1$, with $r_1$ the distance
+from $x_e$ to its nearest neighbour. Stencils have $42$ nodes and degree $5$ in
 the bulk, and $30$ nodes and degree $4$ within $3 / \sqrt N$ of a Dirichlet
 curve and wherever a $42$-node stencil would reach across an interface.
 Of the latter, the interface-aware construction rebuilds the rows whose
@@ -771,11 +751,16 @@ $\alpha\, \partial_n$ are both continuous there and the RBF part of the
 stencil satisfies the flux condition to first order.
 
 This construction, with warped Gaussians, is what we call
-\emph{jump-aware}. Applied with the centre of a smooth edge as the
-interface and the pieces' Taylor data as if $\delta$ were $0$, it is the
-\emph{$\delta = 0$ construction} of Sections~\ref{sec:construction1d}
+\emph{jump-aware}; the one-dimensional form, which has no Gaussians, keeps
+the name interface-aware. Its other rows are the direct operator's, which
+read $\alpha$ and $\nabla \alpha$ of the piece that owns each node. Applied
+with the centre of a smooth edge as the interface and the pieces' Taylor
+data as if $\delta$ were $0$, while those other rows read the smooth
+$\alpha$, it is the \emph{$\delta = 0$ construction} of Sections~\ref{sec:construction1d}
 and~\ref{sec:naive2d}. It is also the $\delta \to 0$ limit of the seeds,
-which reproduce it at $\delta = 0$ (Sections~\ref{sec:jumplimit}
+which reproduce it at $\delta = 0$ on constant pieces across a flat
+interface; where the pieces vary or the interface curves, the two bases
+differ at relative order $h$ within a stencil (Sections~\ref{sec:jumplimit}
 and~\ref{sec:assembly2d}).
 
 \subsection{Scope of the implementation}
@@ -797,7 +782,7 @@ and~\ref{sec:assembly2d}).
 % ring (stiff 3.1).
 The experiments run on a reimplementation of the 2016--2017 methods in
 Python (NumPy and SciPy, with a test for every numerical routine), written
-for this study. Every published figure of the one- and two-dimensional
+for this study, which we call the port below. Every published figure of the one- and two-dimensional
 heat problems of \cite{Martin2016,MartinFornberg2017heat} but the cornered
 interface's has a counterpart in it, and every published convergence line
 is reproduced at its published rate or better but one, the ring's
@@ -855,9 +840,9 @@ the construction is that of our companion paper for the wave equation
 Look for solutions of $u_t = L u$, $L = \px \alpha \px$, that are
 polynomial in time, $u = \sum_{j = 0}^{J} t^j g_j(x)$. Matching powers of
 $t$ gives $(j + 1)\, g_{j+1} = L g_j$ and $L g_J = 0$, so the profile at
-$t = 0$ satisfies $L^{J+1} g_0 = 0$. The heat equation spends one power of
-$L$ on each power of $t$ where the wave equation spends two, but the
-profiles fill the same nested kernels of $L$. With a constant $\alpha$
+$t = 0$ satisfies $L^{J+1} g_0 = 0$. One application of $L$ accounts for
+one power of $t$ in the heat equation and for two in the wave equation, but
+the profiles fill the same nested kernels of $L$. With a constant $\alpha$
 they are the polynomials: the time-polynomial solutions of
 $u_t = \alpha u_{xx}$ are the heat polynomials
 \begin{equation*}
@@ -1070,13 +1055,16 @@ $10^{-15}$, with segment boundaries at each edge centre and at $10 \delta$
 on either side of it, so that the step never has to find the edge inside a
 long step over flat material. A row is seeded when the span of its stencil
 meets $(x_c - 20 \delta, x_c + 20 \delta)$ for an edge centre $x_c$,
-beyond which the edge is its pieces to the last bit; every other row is the
-standard one. At $\delta = 0$ the seeded rows are exactly those that
+one width beyond the $19\delta$ at which the edge is its pieces to two
+units in the last place (Section~\ref{sec:problem}); every other row is the
+direct operator's, $\alpha u_{xx} + \alpha' u_x$ on the same five nodes with
+$\alpha$ and $\alpha'$ of the piece that owns the node. At $\delta = 0$ the seeded rows are exactly those that
 straddle the jump; at $\delta = 0.0025$ and $0.04$ on $100$ nodes they
 number $8$ and $84$; once $20 \delta$ covers the domain, every row is
 seeded. No threshold in $\delta$ switches the seeds on or off: a resolved
-edge costs them nothing (Section~\ref{sec:seedrates1d}), and at
-$\delta = 0$ they are the jump's weights (Section~\ref{sec:jumplimit}).
+edge costs them no order (Section~\ref{sec:seedrates1d}), and at
+$\delta = 0$ on constant pieces they are the jump's weights
+(Section~\ref{sec:jumplimit}).
 Rows whose nodes sit at the same offsets from $x_e$ march as one system,
 so an operator costs some sixteen calls of the integrator whatever the
 number of seeded rows: $0.11$\,s for the $1284$ seeded rows of
@@ -1272,10 +1260,13 @@ coordinate) for a $9 : 1$ jump half a cell and one and a half cells from
 the evaluation node and at the node itself, and zero to rounding for equal
 pieces.
 
-The global order is still four. A local error of order $h^3$ on a fixed
-number of rows costs one order less in the solution than the same error on
-every row, since the inverse of the discrete operator has entries of
-order $h$, so the solution error is $O(h^4)$. This is what the
+The global order is nonetheless four in every measurement here, and the
+usual argument says why: a local error of order $h^3$ on a fixed number of
+rows costs one order less in the solution than the same error on every row
+when the inverse of the discrete operator has entries of order $h$, which
+makes the solution error $O(h^4)$. We do not prove that bound for these
+operators, nor one uniform in $\delta$, and at fixed $\delta > 0$ the number
+of seeded rows grows once $h$ falls below $\delta$. Order four is what the
 interface-aware stencils reach at a jump (rates $3.85$ to $4.19$,
 elliptic and parabolic, in our port of \cite{Martin2016}), and it is the
 phenomenon Beale and Layton prove for interface corrections, where an
@@ -1313,10 +1304,10 @@ unresolved edge miss a fixed fraction of the jump in slope, an error of
 order $1/h$ in $L u$. The bound does not make the constant in
 \eqref{eq:truncation} independent of $\delta / h$, since the remainder
 involves $1/\alpha$ across the stencil. Measured on a separable solution
-$e^{ct} v(x)$ of the two-constant medium from $100$ to $400$ nodes, the
+$e^{\omega t} v(x)$ of the two-constant medium from $100$ to $400$ nodes, the
 seeded rows' residual is third order (rates $3.06$ to $3.78$), its
 constants at $\delta = 0.01$ and $0.0025$ within a factor of two of each
-other, and the standard rows' residual is fourth order ($3.94$ to
+other, and the direct rows' residual is fourth order ($3.94$ to
 $4.01$).
 
 Diffusion smooths, so for $t > 0$ every $\pt^k u$ is itself a solution and
@@ -1348,7 +1339,7 @@ $u = u(-1) + B \int_{-1}^{x} d\xi / \alpha$, and two constructions are
 exact on it at every $h$ and every $\delta$ when the pieces are constant.
 
 The first is the seed operator. Its seeded rows are exact by the first
-reading of Section~\ref{sec:truncation}, and its standard rows see a
+reading of Section~\ref{sec:truncation}, and its direct rows see a
 linear function on a constant piece. At $\delta = 0$ it is the
 interface-aware operator of the jump.
 
@@ -1385,7 +1376,7 @@ and so is the conservative scheme's second order; we observe them and claim
 none of them. Where the pieces vary, as in the sinusoidal medium, the
 equilibrium does rank the two, for a reason that has nothing to do with
 the edge: the conservative scheme stays exact, while the seed operator's
-standard rows inside the layer keep the error of a smooth coefficient, and
+direct rows inside the layer keep the error of a smooth coefficient, and
 it is exact only where the seeded rows cover the layer
 (Section~\ref{sec:seedrates1d}).
 
@@ -1517,7 +1508,7 @@ reaches (Section~\ref{sec:construction1d}).
 \end{table}
 
 Figure~\ref{fig:knee1d} gives the three operators at every width, and
-Table~\ref{tab:knee1d} the naive operator's and the construction's errors on
+Table~\ref{tab:knee1d} the naive operator's and the $\delta = 0$ construction's errors on
 the ramp problem. At $\delta = 0$ the naive operator is first order, with
 rates of $0.98$ to $1.02$ on the two-constant medium and $1.00$ to $1.01$
 on the sinusoidal one from $201$ nodes. While $h \ge 4\delta$ its lines at
@@ -1562,7 +1553,7 @@ two problems. It has two
 regimes (Figure~\ref{fig:knee1d}, purple, and Table~\ref{tab:knee1d}).
 
 \para{Unresolved}
-While the grid does not resolve the edge, the construction sits on the
+While the grid does not resolve the edge, the $\delta = 0$ construction sits on the
 floor. At $\delta = 0.0025$ on the two-constant medium its equilibrium error
 at $50$, $100$ and $200$ nodes is the floor to three digits, and wherever
 $h \ge 2\delta$ on that medium it lies at $0.93$ to $1.00$ times the floor,
@@ -1584,8 +1575,8 @@ assumes. There the coarse rows also carry the sinusoid's own error, and the
 construction lies at $1.05$ to $2.3$ times the floor where $h \ge 2\delta$.
 
 \para{Resolved}
-Once the grid resolves the edge the construction leaves the floor and its
-error grows. Its plain rows are then fourth-order rows on a smooth
+Once the grid resolves the edge the $\delta = 0$ construction leaves the floor and its
+error grows. Its direct rows are then fourth-order rows on a smooth
 coefficient, but its three or four rebuilt rows still impose the translated
 basis, a kink of slope ratio $\alpha^+ / \alpha^-$ at the edge's centre, on
 a solution whose slope hardly changes across the centre cell, and the
@@ -1597,13 +1588,12 @@ floor at $\delta = 0.04$, $0.01$ and $0.0025$. At $1600$ nodes it reaches
 $0.11$ at equilibrium for $\delta = 0.01$, and for $\delta = 0.04$ it is
 $0.125$ at equilibrium and $0.048$ on the ramp problem ($0.22$ for both on
 the sinusoidal medium). Between the two regimes, at $h \approx 2\delta$, the
-partly resolved plain rows pull the solution toward the smooth one, and the
+partly resolved direct rows pull the solution toward the smooth one, and the
 error dips just below the floor, to $0.93$ of it at $\delta = 0.0025$.
 
 So treating the edge as a jump is the right baseline exactly where the grid
-cannot see the edge, and the worst of the three operators where it can.
-Using it means knowing $\delta$, switching it off near $h = 2\delta$, and
-accepting a floor that falls only as $\delta$. At $\delta = 0$ it is the
+cannot see the edge, and the worst of the three operators where it can,
+with a floor that falls only as $\delta$. At $\delta = 0$ it is the
 interface-aware operator of \cite{Martin2016}, exact at equilibrium on the
 two-constant medium and fourth order on the sinusoidal one (rates $3.88$ to
 $4.12$).
@@ -1664,43 +1654,42 @@ line are the space discretisation's. The time error is about half the total
 at $100$ nodes and a quarter from $200$, and it is where the first rate of
 $6.4$ comes from.
 
-\para{A resolved edge costs nothing}
+\para{A resolved edge costs no order}
 Across the knee, where the naive operator changes order and the
-construction leaves its floor, the seeds' line does not move: it is the same
+$\delta = 0$ construction leaves its floor, the seeds' line does not move: it is the same
 fourth-order line at every $h / \delta$ from $16$ down to $1/8$, below
 which the references' floor takes over, with no threshold in $\delta$
 (Section~\ref{sec:chain}). At $200$ nodes and $\delta = 0.0025$, where
 $h = 4\delta$, the seeds' error on the ramp problem is $\sci{1.6}{-9}$,
-against the naive operator's $\sci{7.9}{-4}$ and the construction's
-$\sci{7.2}{-4}$. The construction's floor falls as $\delta$, so the seeds'
+against the naive operator's $\sci{7.9}{-4}$ and the $\delta = 0$ construction's
+$\sci{7.2}{-4}$. The $\delta = 0$ construction's floor falls as $\delta$, so the seeds'
 margin over it is set by $\delta$ and closes at $\delta = 0$, where on
 constant pieces the two are one operator.
 
 \para{The sinusoidal medium}
-At equilibrium the seeded rows are exact on the sinusoidal medium too, and
-the seed operator is exact only where the seeded rows cover the layer. On
-both problems the rows whose stencils lie farther than $20\delta$ from both
-edges are standard rows on the sinusoid, and their error is the line. At
+On the sinusoidal medium the seeds' line is mostly not the edges' error.
+The reach of $20\delta$ seeds only the rows near the two edges, and the
+direct rows inside the layer carry the sinusoid's own error, which is still
+pre-asymptotic at these counts: the rows beside the edges see
+$h \alpha' / \alpha = 0.5$ at $101$ nodes. At equilibrium the seeded rows
+are exact here too, so the seed operator is exact only where they cover the
+layer. At $\delta = 0.0025$ and at the jump the interior of the layer is
+direct at every count, and the ramp problem's error at $\delta = 0$ falls
+from $\sci{1.3}{-4}$ to $\sci{1.4}{-8}$ over $101$ to $1601$ nodes at rates
+rising from $2.7$ to $3.75$; at $\delta = 0.0025$ its rates rise from $2.7$
+to $4.0$. At $\delta = 0$ that line is still $6$ to $38$ times below the
+$\delta = 0$ construction's (Section~\ref{sec:jumplimit}). At
 $\delta = 0.04$ the reach covers the layer, every row within $0.8$ of an
 edge is seeded (the rest lie where $\alpha = 1$), and the ramp problem's
-error is $\sci{2.6}{-8}$, $\sci{1.5}{-9}$ and
-$\sci{1.1}{-10}$ at $101$, $201$ and $401$ nodes (rates $4.1$ and $3.8$),
-and then the references' floor. At $\delta = 0.01$ the reach covers the
-layer at $101$ nodes only; from $201$ on it leaves the rows near
-$x = 0.25$ standard, which carry $\sci{1.4}{-8}$ at $201$ nodes, and the
-line is fourth order past them. With every row seeded instead, the
-$\delta = 0.01$ errors at $201$ nodes are $\sci{1.3}{-13}$ at equilibrium
-and $\sci{1.7}{-9}$ on the ramp problem; the reach is the operator's one
-parameter, and we left it at $20\delta$. At $\delta = 0.0025$ and at the
-jump the interior of the layer is standard at every count, and the line is
-the sinusoid's own error under the standard fourth-order rows, which is
-still pre-asymptotic, the rows beside the edges seeing
-$h \alpha' / \alpha = 0.5$ at $101$ nodes. At $\delta = 0$ the ramp problem's
-error falls from
-$\sci{1.3}{-4}$ to $\sci{1.4}{-8}$ over $101$ to $1601$ nodes at rates
-rising from $2.7$ to $3.75$, and at $\delta = 0.0025$ its rates rise from
-$2.7$ to $4.0$. At $\delta = 0$ that line is still $6$ to $38$ times below
-the construction's (Section~\ref{sec:jumplimit}).
+error is $\sci{2.6}{-8}$, $\sci{1.5}{-9}$ and $\sci{1.1}{-10}$ at $101$,
+$201$ and $401$ nodes (rates $4.1$ and $3.8$), and then the references'
+floor. At $\delta = 0.01$ the reach covers the layer at $101$ nodes only;
+from $201$ on it leaves the rows near $x = 0.25$ direct, which carry
+$\sci{1.4}{-8}$ at $201$ nodes, and the line is fourth order past them.
+With every row seeded instead, the $\delta = 0.01$ errors at $201$ nodes
+are $\sci{1.3}{-13}$ at equilibrium and $\sci{1.7}{-9}$ on the ramp
+problem; the reach is the operator's one parameter, and we left it at
+$20\delta$.
 
 \para{Stability}
 The seed operator's interior spectrum, with the Dirichlet rows removed as
@@ -1744,20 +1733,16 @@ on the grids and problems above, against the same references:
 \end{description}
 T1-FV is Pan, Xu and Li's harmonic average method \cite{PanXuLi2026}, exact
 at the one-dimensional equilibrium (Section~\ref{sec:elliptic1d}). T1 is the
-like-for-like changed medium: a harmonic cell mean, which as a face
-conductance makes the conservative scheme exact at equilibrium, sampled at
-the nodes of the fourth-order operator, where it does not; we found no
-source that uses it there. The harmonic mean is the exact conductance
+like-for-like changed medium: the same harmonic cell mean that, used as a
+face conductance, makes the conservative scheme exact at equilibrium, but
+sampled here at the nodes of the fourth-order operator, where it is not
+exact; we found no source that uses it so. The harmonic mean is the exact conductance
 between blocks of uniform conductivity, and may be inferior to other means
 where the conductivity varies smoothly between nodes \cite{GoodeAppel1992},
 as it does here once $\delta > 0$. A fifth candidate, the band-limited
 coefficient of the seismic literature
 \cite{Mittet2017,KoeneWittstenRobertsson2022}, was not found in use for
-diffusion and is left out. The comparison is against coefficient sampling on
-the same nodes and against our implementation of the cell harmonic and
-arithmetic means, a widened edge and, in one dimension, the conservative
-scheme with exact face conductances, on two media or test cases per
-dimension, with no sweep in contrast.
+diffusion and is left out.
 
 \begin{figure}
   \centering
@@ -1851,9 +1836,7 @@ solves the perturbed problem faithfully. For the wave equation with
 regularised discontinuities, Tornberg and Engquist report the same split: a
 second-order error component from the discontinuities under a higher-order
 discretisation \cite{TornbergEngquist2006}. So the nodal treatments share the
-construction's property: they help only while $h \gtrsim \delta$, and using
-them means knowing $\delta$ and switching them off, which the seeds need
-not.
+$\delta = 0$ construction's property: they help only while $h \gtrsim \delta$.
 
 \para{The widened edge and the local defect}
 % TRACE: stiff 2.4 (P10, T0: its own floor c (m h - delta), 0.1 % for m = 2,
@@ -1912,12 +1895,12 @@ direct solve's conditioning, as the interface-aware operator's own line at
 $\delta = 0$ does; T1-FV is exact too, $10^{-14}$ to $\sci{6.5}{-12}$. The
 naive operator shows the knee of the ramp problem, from $\sci{7.6}{-3}$ at
 $h = 4\delta$ to $\sci{9.3}{-9}$ at $h = \delta/8$ for $\delta = 0.01$, and
-the construction the same floor. On the sinusoidal medium the equilibrium
+the $\delta = 0$ construction the same floor. On the sinusoidal medium the equilibrium
 does rank the two, for a reason that has nothing to do with the edge.
 T1-FV stays exact, $\sci{3}{-14}$ to $\sci{1.4}{-11}$ at $\delta = 0$,
 while the seed operator is exact only where its seeded rows cover the
 layer, at $\delta = 0.04$ and, at $101$ nodes, $\delta = 0.01$; elsewhere
-its error is that of the standard rows inside the layer, $\sci{9.7}{-5}$
+its error is that of the direct rows inside the layer, $\sci{9.7}{-5}$
 to $\sci{1.2}{-8}$ at $\delta = 0$ over $101$ to $1601$ nodes and
 $\sci{5.0}{-6}$ to $\sci{3.6}{-10}$ at $\delta = 0.0025$.
 \end{remark}
@@ -1959,13 +1942,13 @@ Figure~\ref{fig:snapshot1d} and Table~\ref{tab:snapshot1d} put the four
 operators on one grid: the ramp problem at $t = 2$ on $100$ nodes of the
 two-constant medium with $\delta = 0.0025$, so that $h = 8.08\,\delta$. It
 is the row of the sweep at which the four lines are ordered and apart: the
-naive operator at $\sci{2.04}{-3}$, the construction $2.9$ times below it,
+naive operator at $\sci{2.04}{-3}$, the $\delta = 0$ construction $2.9$ times below it,
 T1-FV $22$ times below that, and the seeds $1100$ times below that, at
 $\sci{2.95}{-8}$. The naive operator's error is largest beside the edge,
 $1.5h$ to its left, and carries a node-to-node oscillation, the
 checkerboard mode of $D_x A D_x$ excited by the sampled edge; but $84\%$ of
 $\|e\|_2^2$ lies more than $2h$ from the edge, on the side where
-$\alpha = 1/9$ and the profile is steep. The construction's error is smooth
+$\alpha = 1/9$ and the profile is steep. The $\delta = 0$ construction's error is smooth
 and global, the profile shifted by the resistance deficit, and largest at
 the node half a cell from the edge. T1-FV's is largest far from the edge,
 at $x = -0.62$: the face conductances take the edge exactly, and what
@@ -1990,14 +1973,17 @@ nodes and degree four, and the jump-aware construction replaces its fifteen
 monomials by the translated basis. Here they are replaced by seeds, the
 profiles at $t = 0$ of solutions polynomial in time, anchored at the
 evaluation node as in Section~\ref{sec:seeds1d} and now functions of two
-variables. The node sets, the stencil sizes, the Gaussians and the
-saddle-point solve are kept. So is the rest of the operator: the bulk rows,
-the Dirichlet rows and the time stepping. The construction for a straight
-edge is the companion paper's for the wave equation \cite{Martin2026seeds},
-specialised to one field (Sections~\ref{sec:straight}
-and~\ref{sec:assembly2d}); a curved or tangentially varying edge and a
-resistive layer thinner than the stencil each add to it
-(Sections~\ref{sec:curved} and~\ref{sec:ring}).
+variables. The node sets, the stencil sizes and the saddle-point solve are
+kept, and the Gaussians' warp is continued through the smooth edge; the
+rest of the operator is kept too: the direct bulk rows, the Dirichlet rows
+and the time stepping. The construction for a straight edge is the companion
+paper's for the wave equation \cite{Martin2026seeds}, specialised to one
+field, and its seeds satisfy the chain exactly (Sections~\ref{sec:straight}
+and~\ref{sec:assembly2d}). A curved or tangentially varying edge realises
+the chain through a tangential expansion truncated at degree four, exact on
+the anchor's normal line, and a resistive layer thinner than the stencil
+adds five seeds and a rule for the Gaussians (Sections~\ref{sec:curved}
+and~\ref{sec:ring}).
 
 \subsection{A straight feature}
 \label{sec:straight}
@@ -2295,8 +2281,9 @@ reference.
 A row is seeded when the signed distances of its $30$ nodes to an edge's
 centre curve span a range that meets $[-20\delta, 20\delta]$, beyond which
 the edge is its pieces to rounding (Section~\ref{sec:problem}), or when
-its nodes straddle the curve; at $\delta = 0$ the rule is the jump-aware
-construction's crossing test. The stencil groups follow the same rule one
+its nodes straddle the curve; at $\delta = 0$ this reach rule is the
+jump-aware construction's crossing test. The stencil groups follow the same
+rule one
 size up: a node whose $42$-node stencil sees an edge joins the interface
 group and gets a $30$-node stencil of degree four, so that no bulk stencil
 sees an unresolved edge, and of the group the members whose own $30$ nodes
@@ -2304,7 +2291,8 @@ see it are seeded. A stencil of the boundary zone that sees an edge is
 seeded on its own one-sided nodes, since the chain is anchored at the node
 and marched only where nodes are. Once $20\delta$ covers the strip every
 row is seeded. No threshold in $\delta$ switches the seeds off: a resolved
-edge costs them nothing but the marches (Section~\ref{sec:flat2d}).
+edge costs them no order, the marches aside, though the bulk's higher degree
+and the warp cost factors of up to $1.15$ and $2.6$ (Section~\ref{sec:flat2d}).
 
 % TRACE: stiff 3.4 (30 / 4, the companion's 19 / 3 warning a
 % hyperviscosity-footprint issue with no twin in diffusion; the spectrum of
@@ -2408,7 +2396,9 @@ $\alpha / \hat\mu = \sum_k A_k(\eta)\, \xi^k$,
 $\alpha \hat\mu = \sum_k B_k(\eta)\, \xi^k$ and
 $\hat\mu = \sum_k M_k(\eta)\, \xi^k$, $k \le 4$. The chain
 \eqref{eq:chain2d} is kept as it stands, multiplied through by $\hat\mu$.
-With $S \phi_{ab}$ its right-hand side and $\psi_i = \sum_k B_k\, g_{i-k}'$
+With $S \phi_{ab} = a (a - 1)\, \phi_{a-2, b} + b (b - 1)\, \phi_{a, b-2}$,
+so that the right-hand side of \eqref{eq:chain2d} is $\alpha_e S \phi_{ab}$,
+and $\psi_i = \sum_k B_k\, g_{i-k}'$
 the coefficient of $\xi^i$ in the normal flux, collecting $\xi^i$ gives
 \begin{equation}
   \label{eq:coupled}
@@ -2501,9 +2491,9 @@ The ring of case 3 is $1/s$ wide and thinner than the node spacing at every
 count (Section~\ref{sec:setting2d}). No node lies inside it, and a stencil
 across its midline reaches both sides; its march crosses both circles in
 one pass along the radial normal, with both edges as segment boundaries.
-What the ring needs beyond the band is switched on only for a band whose
-two circles carry their gap, so that cases 1 and 2 are unchanged to the last
-bit.
+What the ring needs beyond the band is switched on only for a band that
+stores its width apart from its two radii, as the ring does below, so that
+cases 1 and 2 are unchanged to the last bit.
 
 % TRACE: stiff 3.6 (widths not radii: Circle(0.35 - 1/s) stores the width to
 % 8e-8 at s >= 1e10, port notes 2.9) and its E4.8 note, 3.11 ("the width":
@@ -2537,8 +2527,10 @@ that the integrator's stages see a smooth function.
 % the jump's w (1/alpha_in - 1/alpha_out) at every (s, delta); as s -> inf at
 % fixed delta a layer of peak resistivity 0.75/delta (R/(2 delta), R = 1.5,
 % the share's peak slope 1/2 times w/delta). Section 2.1 and 2.3 promise this
-% definition. The sentence that follows is LITERATURE.md 6a's resistive-layer
-% sentence, verbatim, moved here by #45's third cut (with its K9 citations).
+% definition. #45's third cut had moved LITERATURE.md 6a's resistive-layer
+% sentence here; #51 dropped it (Fable's full-draft review: it cited its own
+% section and doubled the flux-seed sentence below; section 1.1 keeps the
+% imperfect-interface citations).
 \para{The smooth ring}
 The band's composition \eqref{eq:edge} loses the ring's contact resistance
 as $\delta$ approaches the width: it keeps only $0.41$ of it at
@@ -2558,13 +2550,7 @@ that its excess resistance $\int (1/\alpha - 1/\alpha_{\mathrm{out}})\, dn$
 is the jump's, $w (1/\alpha_{\mathrm{in}} - 1/\alpha_{\mathrm{out}})$, at
 every $(s, \delta)$. As $s \to \infty$ at fixed $\delta$ it tends to a
 layer of peak resistivity $R / (2\delta)$, with $R$ the contact resistance,
-as the jump ring tends to the resistance itself. A resistive layer thinner
-than the grid is an imperfect interface in the limit
-\cite{SanchezPalencia1974,PerrusselPoignard2013,Hashin2001}, and
-strong-form schemes across such a contact need its jump conditions one
-derivative higher in two dimensions \cite{LombardPiraux2003,LombardPiraux2006};
-the flux seeds of Section~\ref{sec:ring} are that observation for the
-diffusion operator.
+as the jump ring tends to the resistance itself.
 
 % TRACE: stiff 3.11 ("the flux seeds": the rows beside the ring stall with
 % the 15 seeds (4.8, the flux-seedless line, which section 6.6 quotes); a
@@ -2658,7 +2644,8 @@ with $\alpha_{\mathrm{piece}}$ the jump's value there, is solved with both
 Gaussian blocks on its one march and keeps the weights with the larger
 diagonal share, the diagonal dominance of \cite[App.~B]{Martin2016} with
 its sign; a row on its piece keeps the warp, and at $\delta = 0$ every
-anchor is on its piece. Off the ring the rule helps on the flat band where
+anchor is on its piece. Off the ring the diagonal rule helps on the flat
+band where
 it fires and is mixed on case 2, where the row-by-row choice at near-ties
 can do worse than either uniform choice, so it stays the ring's safeguard.
 
@@ -2681,10 +2668,12 @@ can do worse than either uniform choice, so it stays the ring's safeguard.
 This section measures the operators of Section~\ref{sec:setting2d} and the
 seeds of Section~\ref{sec:seeds2d} on the three cases, in the order of the
 one-dimensional study: the references, the naive operator and the
-$\delta = 0$ construction, the matrices the seeds make, the seeds on the
-flat band of case 1, on the curved band of case 2 and on the ring of case 3,
-the coefficient treatments, and a snapshot. Node counts double from $1250$
-to $40{,}000$; on case 1 the naive operator and the construction, and the
+$\delta = 0$ construction, the seeds on the flat band of case 1, the
+matrices they make, the seeds on the curved band of case 2 and on the ring
+of case 3, the coefficient treatments, and a snapshot. The tables that only
+hold numbers the text quotes are collected in
+Appendix~\ref{sec:tables2d}. Node counts double from $1250$
+to $40{,}000$; on case 1 the naive operator and the $\delta = 0$ construction, and the
 seeds at the jump, run to $160{,}000$. Case 1 has the widths
 $\delta = 0.04$, $0.01$, $0.005$ and $0.0025$ beside the jump, with
 $h = \delta$ near $11{,}000$, $44{,}000$ and $177{,}000$ nodes for the last
@@ -2722,11 +2711,11 @@ a band that is not the jump's, and its lines, like every width's, are read
 against its own reference.
 
 The references of case 1 are separable. With $\alpha$ a function of $y$
-alone, $u = e^{ct} \sin 2\pi x\, v(y)$, where
+alone, $u = e^{\omega t} \sin 2\pi x\, v(y)$, where
 \begin{equation*}
-  (\alpha v')' - (4\pi^2 \alpha + c)\, v = 0, \qquad v(0) = 0, \quad v(1) = 1,
+  (\alpha v')' - (4\pi^2 \alpha + \omega)\, v = 0, \qquad v(0) = 0, \quad v(1) = 1,
 \end{equation*}
-with $c = 0$ at equilibrium and $c = 1$ for the parabolic mode. The profile
+with $\omega = 0$ at equilibrium and $\omega = 1$ for the parabolic mode. The profile
 $v$ is the Chebyshev collocation of Section~\ref{sec:media1d} on the same
 elements, with the term in $4\pi^2 \alpha$ added, and the parabolic reference
 is exact in $t$: BD4 starts from its history, and no time integrator enters
@@ -2737,7 +2726,11 @@ the profile is the analytic one to $\sci{3.8}{-13}$. The smooth problem's
 distance from the jump's is first order in $\delta$: $\sup |v_\delta - v_0|
 / \delta$ rises towards about $1.6$ as $\delta$ falls.
 
-Case 2 does not separate. Its reference is a product grid on the shear
+Case 2 does not separate in $y$, but its time dependence is case 1's:
+$u = e^{\omega t} w(x, y)$ with $\nabla \cdot (\alpha \nabla w) - \omega w = 0$
+and case 1's boundary data, $\omega = 0$ at equilibrium and $1$ for the
+parabolic problem, so that each problem needs one steady solve for $w$. Its
+reference is a product grid on the shear
 $y = \eta + 0.02 \sin (2\pi x)\, \beta(\eta)$, with $\beta$ the cubic that
 vanishes at $\eta = 0$ and $1$ and equals $1$ at $\eta = 0.6$ and $0.8$, so
 that both curves and both Dirichlet rows are coordinate lines. The equation
@@ -2761,8 +2754,8 @@ seeds at the same $s$ and $\delta$, on the nodes away from the ring
 \begin{table}
   \centering
   \caption{The references' own accuracy: the largest difference from a finer
-  reference, on case 1 in $y$ at $4001$ points for both problems ($c = 0$ and
-  $c = 1$), on case 2 in $x$ and in $\eta$ at $4000$ points of the strip (the
+  reference, on case 1 in $y$ at $4001$ points for both problems ($\omega = 0$ and
+  $\omega = 1$), on case 2 in $x$ and in $\eta$ at $4000$ points of the strip (the
   larger over the two problems). The fourth column is the distance
   $\sup |v_\delta - v_0|$ of case 1's profile from the jump's, and at
   $\delta = 0$ from the analytic solution. Last line: the RMS difference, at
@@ -2845,7 +2838,7 @@ $4\delta \gtrsim h \gtrsim 0.75\,\delta$.
 \para{The flux at the edge}
 Readings on the fixed rows beside each curve say what is wrong. The fixed
 rows are equispaced in $x$, so a row's $\sin 2\pi x$ coefficient is
-$e^{ct} v$ at that row for the separable mode; on each side of a curve the
+$e^{\omega t} v$ at that row for the separable mode; on each side of a curve the
 flux $\alpha\, \partial_y u$ at the innermost row is read from the quadratic
 through that side's three rows, without crossing the curve, and the
 reference's same reading is subtracted. On the first rows off the edge the
@@ -2870,30 +2863,6 @@ $\delta \le 0.01$. The mode sits on the free nodes in the middle of the band,
 and none of the naive operators has it at $2500$ nodes; every parabolic
 naive number at $1250$ nodes carries it.
 
-\begin{table}
-  \centering
-  \caption{The naive operator on case 1: RMS error at equilibrium; that error
-  over the jump's on the same nodes, at equilibrium and for the parabolic
-  problem; the parabolic RMS error over the equilibrium one; and the
-  relative flux error on the first rows off the edge, at equilibrium. Fits
-  over every count. The jump and the wider edges;
-  Table~\ref{tab:knee2dthin} has the thinner.}
-  \label{tab:knee2d}
-  \footnotesize
-  % figures/tab_2d_knee.tex: scripts/paper_tables.py; never hand-edited.
-  \input{figures/tab_2d_knee.tex}
-\end{table}
-
-\begin{table}
-  \centering
-  \caption{Table~\ref{tab:knee2d} continued: the naive operator on case 1
-  through the thinner edges.}
-  \label{tab:knee2dthin}
-  \footnotesize
-  % figures/tab_2d_knee_thin.tex: scripts/paper_tables.py; never hand-edited.
-  \input{figures/tab_2d_knee_thin.tex}
-\end{table}
-
 \para{The $\delta = 0$ construction}
 The jump-aware operator applied at the edge's centre, with the pieces' data as
 if $\delta$ were $0$, converges to the jump problem's solution. Its
@@ -2910,163 +2879,8 @@ order: its rebuilt rows enforce a kink that the solution does not have, as in
 one dimension (Section~\ref{sec:construction1d}). Its flux reading is the
 naive operator's mirror image: $0.018$ to $0.020$ while $h \ge 4\delta$ at
 $\delta = 0.0025$, where its RMS error is the floor, and $0.81$ to $0.89$ at
-$h \approx \delta$. The construction beats the naive operator only while
-$h \gtrsim 3\delta$, and by at most $6$ times, so that using it means knowing
-$\delta$ and switching it off near $h \approx 3\delta$.
-
-\begin{table}
-  \centering
-  \caption{The $\delta = 0$ construction on case 1 at equilibrium: its RMS
-  error; the floor, the two references' RMS difference at the nodes; the
-  error over the floor; and the error over the naive operator's on the same
-  nodes. At the jump it is the jump-aware operator. The jump and the wider
-  edges; Table~\ref{tab:floor2dthin} has the thinner.}
-  \label{tab:floor2d}
-  \footnotesize
-  % figures/tab_2d_floor.tex: scripts/paper_tables.py; never hand-edited.
-  \input{figures/tab_2d_floor.tex}
-\end{table}
-
-\begin{table}
-  \centering
-  \caption{Table~\ref{tab:floor2d} continued: the $\delta = 0$ construction
-  on case 1 through the thinner edges.}
-  \label{tab:floor2dthin}
-  \footnotesize
-  % figures/tab_2d_floor_thin.tex: scripts/paper_tables.py; never hand-edited.
-  \input{figures/tab_2d_floor_thin.tex}
-\end{table}
-
-\subsection{Solvability and spectra}
-\label{sec:spectra2d}
-% TRACE: stiff 4.4 (H5, H6: the row study at 2500 and 10,000 nodes, the
-% reduced interior system; the DDR, Appendix B eq. 93, least and median over
-% the rows each method recomputes; the one-norm condition estimate, a lower
-% bound read across operators; rtol 1e-8; the spectra at 1600 and 4900; the
-% plain rows' loop), 4.7 (H6 on case 2), 5.3 (6) with E4.10's roundtable
-% correction there (bounded, not monotone; case 1 only). Checks where "§6.3;
-% stiff §5.3 (6)": 0.409 and 0.239, 0.404 and 0.211, never below the
-% jump's; 7.1e3, 1.7e4, 1.5e4; 134, 155, 147, 160, 161; 161-208; 1e-14;
-% none right of the axis; -7.27 and -7.73; 0.23; 0.826; at 4900 -7.27,
-% -13.19, 0.385, 0.897 and plain's 1.49; case 2's none. In results_2d, where
-% "§6.3; stiff §4.4 H5" and "H6": the construction's and the naive
-% operator's condition estimates, 1.3e4-1.7e4 and 2.0e4-5.5e4; BiCGSTAB's
-% 95-101 against 100-147; every preconditioned solve converged; the naive
-% operator's +1003 and its BD4 root 1.038 at 1600. Notes only: SuperLU's
-% 0.04-0.06 s (a timing); the ring's iterative sweep, not run (stiff 5.5);
-% the companion's 19 / 3 warning, stiff 3.4.
-The seed rows change the global matrix only where they replace rows, and the
-question is whether it stays as solvable as the two operators the seeds pass
-between: the direct operator on a resolved edge and the jump-aware operator
-at $\delta = 0$. We measure the matrices on case 1 at $\delta / h = 8$, $1$,
-$1/8$, $1/64$ and $0$, on the interior system with the Dirichlet values
-eliminated, at $2500$ and $10{,}000$ nodes (Table~\ref{tab:solvability2d} and
-Figure~\ref{fig:dominance2d}). The diagonal dominance ratio of a row is
-$|a_{ii}| / \sum_{j \ne i} |a_{ij}|$ \cite[App.~B]{Martin2016}, read over the
-rows each method rebuilds: the seeded rows for the seeds, the crossing rows
-for the others.
-
-\begin{figure}
-  \centering
-  % figures/heat2d_stiff_dominance.pdf: scripts/paper_figures.py from
-  % paper/data/heat2d_stiff_eigenvalues.json (rows); never hand-edited.
-  % TRACE: stiff 4.4 (H5).
-  \includegraphics{heat2d_stiff_dominance}
-  \caption{Case 1 at $2500$ nodes against $\delta/h$ (leftmost: the jump).
-  Left: the least (solid) and median (dashed) diagonal dominance ratio over
-  the seeded rows for the seeds and over the crossing rows for the other
-  operators. Right: the iterations of GMRES (solid) and BiCGSTAB (dashed)
-  without a preconditioner, to a relative residual of $10^{-8}$. Seeds,
-  plain: the seed rows with plain Gaussians.}
-  \label{fig:dominance2d}
-\end{figure}
-
-\para{Dominance and conditioning}
-The seeded rows' least ratio falls from $0.409$ at $\delta = 8h$ to $0.239$
-at the jump on $2500$ nodes, and from $0.404$ to $0.211$ on $10{,}000$,
-towards the jump-aware rows' value, which it reaches at the jump and never
-goes below; the median hardly moves. On $2500$ nodes a one-norm estimate of the seed
-matrix's condition number, a lower bound read across operators, rises from
-$\sci{7.1}{3}$ at $\delta = 8h$ to $\sci{1.7}{4}$ and is $\sci{1.5}{4}$ at the
-jump, inside the construction's range over the same widths, $\sci{1.3}{4}$
-to $\sci{1.7}{4}$, and below the naive operator's, $\sci{2.0}{4}$ to
-$\sci{5.5}{4}$. GMRES without a preconditioner takes $134$, $155$, $147$,
-$160$ and $161$ iterations from $\delta = 8h$ to the jump, bounded but not
-monotone, and no more than the construction's $161$ to $208$; BiCGSTAB takes
-$95$ to $101$ against the construction's $100$ to $147$. With the
-preconditioner of \cite[App.~B]{Martin2016} or an incomplete LU factorisation
-every solve converges at every width, and the direct solves leave residuals
-of $10^{-14}$ or below. Nothing breaks down as $\delta \to 0$: the readings
-move towards the jump's, as they should. This is case 1; the ring's
-iterative solves were not run.
-
-\begin{table}
-  \centering
-  \caption{The matrices on case 1, interior system: the seeded rows'
-  diagonal dominance ratio (least and median), a one-norm condition estimate
-  of the matrix, and the iterations of GMRES and BiCGSTAB without a
-  preconditioner to a relative residual of $10^{-8}$. Italic lines: the
-  other operators' ranges over the same widths, their ratios over the
-  crossing rows.}
-  \label{tab:solvability2d}
-  \footnotesize
-  % figures/tab_2d_solvability.tex: scripts/paper_tables.py; never
-  % hand-edited.
-  \input{figures/tab_2d_solvability.tex}
-\end{table}
-
-\para{Spectra}
-The interior spectrum of the seed operator at $1600$ nodes is that of the
-warped jump-aware operator at the jump and moves with the edge to that of
-the resolved medium (Table~\ref{tab:spectra2d} and
-Figure~\ref{fig:spectra2d}): no eigenvalue in the right half-plane at any
-width, the rightmost the physical mode, $-7.27$ at the jump and $-7.73$ at
-$\delta = 0.04$, the direct operator's value there, and $h^2 \max |\mathrm{Im}\, \lambda| \le 0.23$.
-BD4 at $\Delta t = h$ damps every mode. At $4900$ nodes the seed operator at
-the jump reproduces the port's warped jump-aware line to the digit: the
-rightmost eigenvalue $-7.27$, $h^2 \min \mathrm{Re}\, \lambda = -13.19$,
-$h^2 \max |\mathrm{Im}\, \lambda| = 0.385$, and BD4's largest root modulus
-$0.897$. With plain Gaussians the complex loop of the jump-aware operator's
-crossing rows returns at the jump, $h^2 \max |\mathrm{Im}\, \lambda| = 1.49$
-against $0.385$ at $4900$ nodes: a wider spectrum and not an instability,
-since no eigenvalue crosses the axis and BD4's largest root is unchanged,
-$0.826$ at $1600$ nodes. The naive operator keeps the coarse node set's
-growing mode at $1600$ nodes, $+1003$ at the jump, where BD4's root reaches
-$1.038$. On case 2 the tangential chain, the frozen profile of
-Section~\ref{sec:curved} and the jump-aware operator have no eigenvalue in
-the right half-plane either, at any width. Our companion paper found
-degree-four seed stencils unstable across a sharp edge in the wave equation
-\cite{Martin2026seeds}; in diffusion, whose implicit march needs no
-hyperviscosity, the spectra show no sign of it.
-
-\begin{figure}
-  \centering
-  % figures/heat2d_stiff_spectra.pdf: scripts/paper_figures.py from
-  % paper/data/heat2d_stiff_eigenvalues.json (spectra/figure, delta = 0.005,
-  % --figure-delta); never hand-edited. TRACE: stiff 4.4 (H6).
-  \includegraphics{heat2d_stiff_spectra}
-  \caption{Interior eigenvalues $\lambda$ on case 1 at $1600$ nodes and
-  $\delta = 0.005$. Top: $h^2 \lambda$ for the naive operator, the direct
-  operator, the $\delta = 0$ construction, the seeds and the seeds with plain
-  Gaussians (plain). Bottom: all five near the origin, with the boundary of
-  BD4's region of absolute stability at $\Delta t = h$, left of which every
-  mode is damped; the naive operator's rightmost eigenvalue lies off the
-  panel.}
-  \label{fig:spectra2d}
-\end{figure}
-
-\begin{table}
-  \centering
-  \caption{Interior eigenvalues $\lambda$ on case 1, the seeds with warped
-  Gaussians unless marked plain: the rightmost, the number in the right
-  half-plane, the extremes of $h^2 \mathrm{Re}\, \lambda$ and
-  $h^2 |\mathrm{Im}\, \lambda|$, and the largest root modulus of BD4 at
-  $\Delta t = h$.}
-  \label{tab:spectra2d}
-  \footnotesize
-  % figures/tab_2d_spectra.tex: scripts/paper_tables.py; never hand-edited.
-  \input{figures/tab_2d_spectra.tex}
-\end{table}
+$h \approx \delta$. The $\delta = 0$ construction beats the naive operator only while
+$h \gtrsim 3\delta$, and by at most $6$ times.
 
 \subsection{The flat sweep}
 \label{sec:flat2d}
@@ -3075,12 +2889,12 @@ hyperviscosity, the spectra show no sign of it.
 % widths' spread at every count; "no deterioration ... not a proven
 % delta-uniform constant"; the 42 / 5 naive product passing the seeds; the
 % warp's errors of 1e-7 to 1e-6), 5.6 (the 30 / 4 naive control, scratch).
-% Checks where "§6.4; stiff §5.3 (4)", "(5)" and "(7)": 1.598e-5, 3.58e-10,
+% Checks where "§6.3; stiff §5.3 (4)", "(5)" and "(7)": 1.598e-5, 3.58e-10,
 % 4.54, 4.77; the fits 4.23-4.48 and 4.22-4.44; 3.8-4.3 and 4.6-4.8; the
 % spread 1.2-2.4, 1.16, 2.38, 1.67, 2.53; 1.04-1.17; 7.99e-9, 8.36e-5,
 % 6.18e-4; 2000 and 670; 0.10-0.22 and 0.086-0.22; 0.98, 1.07, 1.15; 5.2
 % and 4.2; 2.3 and 6.9; 5.5-11.7; 1.7-7.9; 2.6; 0.55-1.1; 7.95e-7 and
-% 4.39e-7. In results_2d, where "§6.4; stiff §4.5 H4" and "H8": the rates
+% 4.39e-7. In results_2d, where "§6.3; stiff §4.5 H4" and "H8": the rates
 % 2.6-5.9; the seeded shares at 40,000, 6, 25, 61 and 100 %; the naive
 % fits 1.50 and 5.18 and the direct 1.87 to 4.24 over 1250-40,000; the
 % seeds over naive at delta = 0.01 on 20,000 and 40,000, 0.003-0.004. Notes
@@ -3161,7 +2975,7 @@ weaker test of the two.
   \input{figures/tab_2d_seeds.tex}
 \end{table}
 
-\para{The rule}
+\para{The reach rule}
 Every row whose $30$ nodes see an edge within $20\delta$ is seeded
 (Section~\ref{sec:assembly2d}), with no threshold in $\delta$. At
 $40{,}000$ nodes that is $6\%$ of the rows at the jump, $25\%$ at
@@ -3176,14 +2990,14 @@ assembly. The reach of $20\delta$ was never varied.
 \para{Against the baselines}
 At $40{,}000$ nodes (Table~\ref{tab:baselines2d}) the seeds are four orders
 below the naive operator at $\delta = 0.0025$, $\sci{7.99}{-9}$ against
-$\sci{8.36}{-5}$, and five below the construction's $\sci{6.18}{-4}$. The
+$\sci{8.36}{-5}$, and five below the $\delta = 0$ construction's $\sci{6.18}{-4}$. The
 readings at the edge say why: the seeds' flux error on the first rows off the
 edge falls $2000$ times from $1250$ to $40{,}000$ nodes at the jump and $670$
 times at $\delta = 0.0025$, where the naive operator's does not fall at all
 while $h \gtrsim 4\delta$ (Section~\ref{sec:naive2d}). The seeds are the only
 line whose order does not move with $\delta$: over these counts the naive
 operator walks its knee from a fit of $1.50$ at the jump to $5.18$ at
-$\delta = 0.04$, the construction is flat at the small widths and of negative
+$\delta = 0.04$, the $\delta = 0$ construction is flat at the small widths and of negative
 order at $\delta = 0.04$, and the direct operator, blind to the jump, fits
 $1.87$ at $\delta = 0.0025$ and rises to $4.24$ at $\delta = 0.04$.
 
@@ -3203,8 +3017,8 @@ $1.87$ at $\delta = 0.0025$ and rises to $4.24$ at $\delta = 0.04$.
 At $\delta = 0.04$ every row is seeded, and the whole matrix is marched
 (Table~\ref{tab:resolved2d}). The seeds' error is $0.10$ to $0.22$ of the
 direct operator's at every count, and $0.086$ to $0.22$ of the direct
-operator's on their own stencils. A marched row costs nothing in accuracy
-where the grid resolves the edge: it carries the profile of $\alpha$ through
+operator's on their own stencils. A marched row costs no order where the
+grid resolves the edge: it carries the profile of $\alpha$ through
 the stencil, where the direct row carries $\alpha$ and $\nabla \alpha$ at the
 evaluation node and pays for the rest in powers of $h$. The one line that
 catches the seeds is the naive operator, at $20{,}000$ and $40{,}000$ nodes,
@@ -3250,16 +3064,126 @@ unresolved regime that is this study's subject and for the spectrum at the
 jump (Section~\ref{sec:spectra2d}), and pay up to $2.6$ times once the grid
 resolves the edge.
 
+\subsection{Solvability and spectra}
+\label{sec:spectra2d}
+% TRACE: stiff 4.4 (H5, H6: the row study at 2500 and 10,000 nodes, the
+% reduced interior system; the DDR, Appendix B eq. 93, least and median over
+% the rows each method recomputes; the one-norm condition estimate, a lower
+% bound read across operators; rtol 1e-8; the spectra at 1600 and 4900; the
+% plain rows' loop), 4.7 (H6 on case 2), 5.3 (6) with E4.10's roundtable
+% correction there (bounded, not monotone; case 1 only). Checks where "§6.4;
+% stiff §5.3 (6)": 0.409 and 0.239, 0.404 and 0.211, never below the
+% jump's; 7.1e3, 1.7e4, 1.5e4; 134, 155, 147, 160, 161; 161-208; 1e-14;
+% none right of the axis; -7.27 and -7.73; 0.23; 0.826; at 4900 -7.27,
+% -13.19, 0.385, 0.897 and plain's 1.49; case 2's none. In results_2d, where
+% "§6.4; stiff §4.4 H5" and "H6": the construction's and the naive
+% operator's condition estimates, 1.3e4-1.7e4 and 2.0e4-5.5e4; BiCGSTAB's
+% 95-101 against 100-147; every preconditioned solve converged; the naive
+% operator's +1003 and its BD4 root 1.038 at 1600. Notes only: SuperLU's
+% 0.04-0.06 s (a timing); the ring's iterative sweep, not run (stiff 5.5);
+% the companion's 19 / 3 warning, stiff 3.4.
+The seed rows change the global matrix only where they replace rows, and the
+question is whether it stays as solvable as the two operators the seeds pass
+between: the direct operator on a resolved edge and the jump-aware operator
+at $\delta = 0$. We measure the matrices on case 1 at $\delta / h = 8$, $1$,
+$1/8$, $1/64$ and $0$, on the interior system with the Dirichlet values
+eliminated, at $2500$ and $10{,}000$ nodes (Table~\ref{tab:solvability2d} and
+Figure~\ref{fig:dominance2d}). The diagonal dominance ratio of a row is
+$|a_{ii}| / \sum_{j \ne i} |a_{ij}|$ \cite[App.~B]{Martin2016}, read over the
+rows each method rebuilds: the seeded rows for the seeds, the crossing rows
+for the others.
+
+\begin{figure}
+  \centering
+  % figures/heat2d_stiff_dominance.pdf: scripts/paper_figures.py from
+  % paper/data/heat2d_stiff_eigenvalues.json (rows); never hand-edited.
+  % TRACE: stiff 4.4 (H5).
+  \includegraphics{heat2d_stiff_dominance}
+  \caption{Case 1 at $2500$ nodes against $\delta/h$ (leftmost: the jump).
+  Left: the least (solid) and median (dashed) diagonal dominance ratio over
+  the seeded rows for the seeds and over the crossing rows for the other
+  operators. Right: the iterations of GMRES (solid) and BiCGSTAB (dashed)
+  without a preconditioner, to a relative residual of $10^{-8}$. Seeds,
+  plain: the seed rows with plain Gaussians.}
+  \label{fig:dominance2d}
+\end{figure}
+
+\para{Dominance and conditioning}
+The seeded rows' least ratio falls from $0.409$ at $\delta = 8h$ to $0.239$
+at the jump on $2500$ nodes, and from $0.404$ to $0.211$ on $10{,}000$,
+towards the jump-aware rows' value, which it reaches at the jump and never
+goes below; the median hardly moves. On $2500$ nodes a one-norm estimate of the seed
+matrix's condition number, a lower bound read across operators, rises from
+$\sci{7.1}{3}$ at $\delta = 8h$ to $\sci{1.7}{4}$ and is $\sci{1.5}{4}$ at the
+jump, inside the $\delta = 0$ construction's range over the same widths, $\sci{1.3}{4}$
+to $\sci{1.7}{4}$, and below the naive operator's, $\sci{2.0}{4}$ to
+$\sci{5.5}{4}$. GMRES without a preconditioner takes $134$, $155$, $147$,
+$160$ and $161$ iterations from $\delta = 8h$ to the jump, bounded but not
+monotone, and no more than the $\delta = 0$ construction's $161$ to $208$; BiCGSTAB takes
+$95$ to $101$ against the $\delta = 0$ construction's $100$ to $147$. With the
+preconditioner of \cite[App.~B]{Martin2016} or an incomplete LU factorisation
+every solve converges at every width, and the direct solves leave residuals
+of $10^{-14}$ or below. Nothing breaks down as $\delta \to 0$: the readings
+move towards the jump's, as they should. This is case 1; the ring's
+iterative solves were not run.
+
 \begin{table}
   \centering
-  \caption{The warp: the RMS error of the seed rows with plain Gaussians over
-  that with warped ones (above $1$, the warp wins), for the seeds on case 1
-  and for the tangential chain on case 2.}
-  \label{tab:warp2d}
+  \caption{The matrices on case 1, interior system: the seeded rows'
+  diagonal dominance ratio (least and median), a one-norm condition estimate
+  of the matrix, and the iterations of GMRES and BiCGSTAB without a
+  preconditioner to a relative residual of $10^{-8}$. Italic lines: the
+  other operators' ranges over the same widths, their ratios over the
+  crossing rows.}
+  \label{tab:solvability2d}
   \footnotesize
-  % figures/tab_2d_warp.tex: scripts/paper_tables.py; never hand-edited.
-  \input{figures/tab_2d_warp.tex}
+  % figures/tab_2d_solvability.tex: scripts/paper_tables.py; never
+  % hand-edited.
+  \input{figures/tab_2d_solvability.tex}
 \end{table}
+
+\para{Spectra}
+The spectra are computed at $1600$ nodes for every width and, at the jump,
+at $4900$, the count of \cite[Fig.~5-6]{Martin2016}. At $1600$ nodes the
+interior spectrum of the seed operator is that of the
+warped jump-aware operator at the jump and moves with the edge to that of
+the resolved medium (Table~\ref{tab:spectra2d} and
+Figure~\ref{fig:spectra2d}): no eigenvalue in the right half-plane at any
+width, the rightmost the physical mode, $-7.27$ at the jump and $-7.73$ at
+$\delta = 0.04$, the direct operator's value there, and $h^2 \max |\mathrm{Im}\, \lambda| \le 0.23$.
+BD4 at $\Delta t = h$ damps every mode. At $4900$ nodes the seed operator at
+the jump reproduces the port's warped jump-aware line to the digit: the
+rightmost eigenvalue $-7.27$, $h^2 \min \mathrm{Re}\, \lambda = -13.19$,
+$h^2 \max |\mathrm{Im}\, \lambda| = 0.385$, and BD4's largest root modulus
+$0.897$. With plain Gaussians the complex loop of the jump-aware operator's
+crossing rows returns at the jump, $h^2 \max |\mathrm{Im}\, \lambda| = 1.49$
+against $0.385$ at $4900$ nodes: a wider spectrum and not an instability,
+since no eigenvalue crosses the axis and BD4's largest root is unchanged,
+$0.826$ at $1600$ nodes. The naive operator keeps the coarse node set's
+growing mode at $1600$ nodes, $+1003$ at the jump, where BD4's root reaches
+$1.038$. On case 2 the tangential chain, the frozen profile of
+Section~\ref{sec:curved} and the jump-aware operator have no eigenvalue in
+the right half-plane either, at any width. Our companion paper found
+degree-four seed stencils unstable across a sharp edge in the wave equation
+\cite{Martin2026seeds}; in diffusion, whose implicit march needs no
+hyperviscosity, the spectra show no sign of it.
+
+\begin{figure}
+  \centering
+  % figures/heat2d_stiff_spectra.pdf: scripts/paper_figures.py from
+  % paper/data/heat2d_stiff_eigenvalues.json (spectra/figure, delta = 0.005,
+  % --figure-delta); never hand-edited. TRACE: stiff 4.4 (H6).
+  \includegraphics{heat2d_stiff_spectra}
+  \caption{Interior eigenvalues $\lambda$ on case 1 at $1600$ nodes and
+  $\delta = 0.005$. Top: $h^2 \lambda$ for the naive operator, the direct
+  operator, the $\delta = 0$ construction (construction), the seeds and the
+  seeds with plain Gaussians (plain); the naive panel has its own axes, the
+  others share theirs. Bottom: all five near the origin, with the boundary of
+  BD4's region of absolute stability at $\Delta t = h$, left of which every
+  mode is damped; the naive operator's rightmost eigenvalue lies off the
+  panel.}
+  \label{fig:spectra2d}
+\end{figure}
 
 \subsection{The curved feature}
 \label{sec:curved2d}
@@ -3334,9 +3258,9 @@ still $130$ times the flat seeds' at $40{,}000$ nodes. The frozen profile's orde
 resolution of the edge, not the seeds: its fits fall from $3.07$ at
 $\delta = 0.01$ through $2.40$ to $1.71$ at $\delta = 0.0025$, where
 $h / \delta$ never falls below $2.1$. Through a smooth edge it is still
-below the naive operator, the direct operator and the construction at every
+below the naive operator, the direct operator and the $\delta = 0$ construction at every
 width and count, at $0.04$ to $0.39$ of the naive operator's error, at most
-$0.05$ of the direct operator's and at most $0.46$ of the construction's,
+$0.05$ of the direct operator's and at most $0.46$ of the $\delta = 0$ construction's,
 which reads the edge as a jump and sits on its floor.
 
 \begin{table}
@@ -3371,7 +3295,7 @@ profile's rows stall (Table~\ref{tab:probe2d}). On two concentric circles, where
 coupling along the curve vanishes, its rows converge at $3.45$ and lie $4.6$
 to $7.3$ times below the jump-aware rows.
 
-Three things do not come back. On the two coarsest node sets the chain is
+Three qualifications remain. On the two coarsest node sets the chain is
 $2.8$ to $8.0$ times the flat seeds, which steepens its fits over $1250$ to
 $40{,}000$ nodes to $4.24$ to $5.72$. At $\delta = 0.0025$ its probe slows to
 $1.7$ to $2.2$ between $20{,}000$ and $40{,}000$ nodes on all three
@@ -3393,35 +3317,6 @@ profile.
   over warped Gaussians.}
   \label{fig:tangential2d}
 \end{figure}
-
-\begin{table}
-  \centering
-  \caption{Case 2 and the split geometries over the flat seeds of case 1 at
-  the same width and count, RMS error at equilibrium unless marked: the
-  frozen profile and the tangential chain on case 2; the tangential chain on
-  A (the sine pair, $\alpha = 0.2$ in the band) and on B (flat lines, case
-  2's $\alpha$); the chain in the maximum norm; and, at the jump, the chain
-  over the jump-aware operator on case 2.}
-  \label{tab:curvedratios2d}
-  \footnotesize
-  % figures/tab_2d_curved_ratios.tex: scripts/paper_tables.py; never
-  % hand-edited.
-  \input{figures/tab_2d_curved_ratios.tex}
-\end{table}
-
-\begin{table}
-  \centering
-  \caption{The probe: the RMS over the crossing rows of each operator applied
-  to the equilibrium reference at the nodes, at the first and the finest
-  count, and its fitted order in $h$. A: the sine pair with $\alpha = 0.2$ in
-  the band (the curvature alone); B: flat lines with case 2's $\alpha$ (its
-  variation along the edge alone). At $\delta > 0$ the jump-aware rows read
-  the smooth edge as a jump and are not listed.}
-  \label{tab:probe2d}
-  \footnotesize
-  % figures/tab_2d_probe.tex: scripts/paper_tables.py; never hand-edited.
-  \input{figures/tab_2d_probe.tex}
-\end{table}
 
 \subsection{The ring and the extremizing sweep}
 \label{sec:ring2d}
@@ -3588,28 +3483,12 @@ stable (Section~\ref{sec:ring}). The diagonal rule removes both, and where it
 keeps rows plain it is within $0.91$ to $1.25$ times the better of the two
 uniform choices, warped or plain Gaussians on every row, at every $s$,
 $\delta$ and count through $40{,}000$ nodes. At $s = 10^{11}$ and
-$\delta = 0.001$ the rule's own $160{,}000$-node solution is the discrepant
+$\delta = 0.001$ the diagonal rule's own $160{,}000$-node solution is the discrepant
 one: a second fine run built with plain Gaussians differs from it by
 $\sci{3.55}{-6}$ in the RMS, every coarse line converges towards the second
 run, the seeds to $\sci{8.0}{-7}$ at $40{,}000$ nodes with a fit of $4.77$,
 and against the first they stop at $\sci{3.6}{-6}$. So at that $s$ and
-$\delta$ the rule's convergence past $40{,}000$ nodes is unresolved.
-
-\begin{table}
-  \centering
-  \caption{The smooth ring: RMS error on the far field against the fine seed
-  run at $160{,}000$ nodes, for the seeds with the diagonal rule and with the
-  warp on every row; the rule over the better of warped and plain Gaussians
-  on every row (--: the rule keeps no row plain and is the warp); the other
-  operators at $40{,}000$ nodes, the construction being the $\delta = 0$
-  construction; and at $s = 10^{11}$, $\delta = 0.001$, the seeds against a
-  second fine run built with plain Gaussians.}
-  \label{tab:ringsmooth2d}
-  \footnotesize
-  % figures/tab_2d_ring_smooth.tex: scripts/paper_tables.py; never
-  % hand-edited.
-  \input{figures/tab_2d_ring_smooth.tex}
-\end{table}
+$\delta$ the diagonal rule's convergence past $40{,}000$ nodes is unresolved.
 
 \subsection{Coefficient treatments}
 \label{sec:treatments2d}
@@ -3649,14 +3528,11 @@ case 2's shear, in which both curves are coordinate lines. No conservative
 scheme on scattered nodes, a twin of T1-FV with control volumes and face
 conductances, was built, so that the two-dimensional comparators are the
 naive operator and the $\delta = 0$ construction, and a statement about the
-strongest low-order comparator is a statement about these six; as in one
+strongest low-order comparator is a statement about these six
+treatments, the two means at two radii and the two widenings; as in one
 dimension, the band-limited coefficient is left out.
 
-The comparison is against coefficient sampling on the same nodes and against
-our implementation of the cell harmonic and arithmetic means, a widened edge
-and, in one dimension, the conservative scheme with exact face conductances,
-on two media or test cases per dimension, with no sweep in contrast. On
-cases 1 and 2 (Figures~\ref{fig:treatments2d}
+On cases 1 and 2 (Figures~\ref{fig:treatments2d}
 and~\ref{fig:treatments2dcurved}, Tables~\ref{tab:treatments2d}
 and~\ref{tab:treatmentsbest2d}) no treatment improves on sampling by more
 than $1.75$ times in the RMS norm anywhere in either sweep, the parabolic
@@ -3771,10 +3647,10 @@ operators on one node set, as Section~\ref{sec:snapshot1d} did in one
 dimension: case 1 at $2500$ nodes and $\delta = 0.0025$, so that
 $h = 8.3\,\delta$, for the parabolic problem at $t = 0.1$. It is the count at
 which the lines are ordered and apart: the naive operator at
-$\sci{2.63}{-3}$, $3.8$ times the construction's $\sci{6.97}{-4}$, the direct
+$\sci{2.63}{-3}$, $3.8$ times the $\delta = 0$ construction's $\sci{6.97}{-4}$, the direct
 operator at $\sci{3.71}{-2}$, and the seeds at $\sci{3.33}{-6}$, $210$ times
-below the construction and $790$ times below the naive operator. At $5000$
-nodes the naive operator and the construction are $1.3$ times apart, and at
+below the $\delta = 0$ construction and $790$ times below the naive operator. At $5000$
+nodes the naive operator and the $\delta = 0$ construction are $1.3$ times apart, and at
 $10{,}000$ they cross.
 
 \begin{figure}
@@ -3799,7 +3675,7 @@ $1.6$ times and three quarters of it lie elsewhere: the flux defect at the
 edge of Section~\ref{sec:naive2d}, spread by the operator's reach to the
 neighbours of the neighbours into every row the band's rows couple to. In one
 dimension too, $84\%$ of the naive error's energy lay away from the edge
-(Section~\ref{sec:snapshot1d}). The construction's error is a smooth shift
+(Section~\ref{sec:snapshot1d}). The $\delta = 0$ construction's error is a smooth shift
 with the shape $\sin 2\pi x$ of the solution, largest beside the upper curve,
 with $65\%$ of its energy within $2h$ of a curve, four times the nodes'
 share: it is the floor, at $0.98$ of it. The direct operator, blind to the
@@ -3928,20 +3804,22 @@ analytic history, which tests the operators' spectra under BD4 more than a
 transient through the edge. The one-dimensional equilibrium ranks nothing on constant
 pieces (Remark~\ref{rem:elliptic1d}), and on the sinusoidal medium the
 seeds' line at $\delta = 0$ and $0.0025$ is the pre-asymptotic error of the
-standard rows inside the layer, which puts the conservative scheme ahead of
+direct rows inside the layer, which puts the conservative scheme ahead of
 them at $\delta = 0$ below $801$ nodes (Section~\ref{sec:treatments1d}). The reach of
 $20\delta$ that decides which rows are seeded is the operator's one
 parameter, in either dimension, and it was never varied.
 
-% TRACE: LITERATURE.md 1a K10 (iii) and 6b (our implementations, one
-% contrast and one test problem per dimension); K10 (i) (the disc means: no
+% TRACE: LITERATURE.md 1a K10 (iii) and 6b (our implementations, two media
+% or test cases per dimension with no sweep in contrast, as #51 rescoped the
+% caveat); K10 (i) (the disc means: no
 % source found, "the natural scattered-node analogue", sec:treatments2d);
 % stiff 5.3 (10) and 5.5 (no conservative scattered-node scheme built); 1d
 % and sec:treatments1d (T3, the band-limited coefficient, not found in use
 % for diffusion and left out).
 \para{The comparison}
-The coefficient treatments are our implementations, each run on one contrast
-and one test problem per dimension, and in two dimensions the cell means
+The coefficient treatments are our implementations, run on two media or
+test cases per dimension with no sweep in contrast, and in two dimensions
+the cell means
 are taken over discs about the nodes, a reading of the cell rule for
 scattered nodes for which we found no source
 (Section~\ref{sec:treatments2d}). No conservative scheme was built on the
@@ -3978,8 +3856,9 @@ there compare the seeds with the jump's rows and take residuals by finite
 differences, and neither resolves a floor of that size. The seeds need a
 continuous description of the medium, since the march samples $\alpha$ at
 arbitrary points along each stencil's line; the tangential chain needs the
-curve's foot points and curvature as well, and the ring its gap. The
-standard stencils need $\alpha$ at the nodes only. The tangential chain
+curve's foot points and curvature as well, and the ring its gap. The naive
+operator needs $\alpha$ at the nodes only; the direct rows that fill the rest
+of the seed operator need $\nabla \alpha$ there as well. The tangential chain
 refuses a stencil whose line comes near the focal distance of its curve
 (Section~\ref{sec:curved}), which excludes the coarsest node sets of the
 tightest curves run, and at $\delta = 0$ it admits a second curve only as a
@@ -4010,8 +3889,8 @@ systems were measured at every $s$, but the global
 matrix's conditioning was not, and its iterative solves were not run. The
 smooth ring's reference is a fine run of the seeds themselves, read on the
 far field, and one $(s, \delta)$ was read against a second fine run built
-with plain Gaussians; there the rule's own fine solution is the discrepant
-one, $\sci{3.55}{-6}$ from the other, so the rule's convergence at
+with plain Gaussians; there the diagonal rule's own fine solution is the discrepant
+one, $\sci{3.55}{-6}$ from the other, so the diagonal rule's convergence at
 $s = 10^{11}$ and $\delta = 0.001$ past $40{,}000$ nodes is unresolved
 (Section~\ref{sec:ring2d}). Why the jump-aware basis fits the ring's mode at
 $O(h^5)$ with fifteen functions, where the seeds need twenty, we have not
@@ -4113,16 +3992,20 @@ recorded in the notes alone; no script checks either.
 % and the 3-D ansatz of the cost paragraph above.
 In the order we would do them.
 \begin{enumerate}
-\item \emph{The runs left open.} The drivers take these as they stand: a
+\item \emph{The runs left open.} The existing scripts take these as they
+  stand: a
   second fine run of the smooth ring at each of the five $(s, \delta)$ read
-  against a single one, and the rule at $80{,}000$ and $320{,}000$ nodes at
+  against a single one, and the diagonal rule at $80{,}000$ and $320{,}000$ nodes at
   $s = 10^{11}$ and $\delta = 0.001$; the seeds at $\delta = 0.04$ to
   $160{,}000$ nodes, where the bulk's degree should pass them; the seeds'
   sweeps on the other two node sets to $20{,}000$ nodes; and the reach
-  swept. These need changes to the drivers: the contrast swept, rows
+  swept. These need changes to the scripts: the contrast swept, rows
   shifted against the edges, the ring's iterative solves and global
-  conditioning, and the ring's error near the ring and in the maximum
-  norm. Each sharpens a
+  conditioning, the ring's error near the ring and in the maximum norm, and
+  a two-dimensional transient driven through the edge, the counterpart of
+  the one-dimensional ramp problem, where the separable mode of
+  Section~\ref{sec:problems2d} tests the spectrum under BD4 more than the
+  edge. Each sharpens a
   statement of Section~\ref{sec:results2d}; none changes the construction.
 \item \emph{A conservative scheme on the scattered nodes.} Control volumes
   about the nodes with the exact face conductances, the scattered-node
@@ -4171,15 +4054,13 @@ In the order we would do them.
 % after its first sentence, the abstract's lead-in). The first two
 % sentences are the abstract's and section 1's framing: stiff 2.5 (1) and
 % 5.3 (2) (the knee), 2.5 (1) and 5.3 (3) (the construction's floor of
-% order delta and its switch-off). The numbers are section 6's, checks
-% where "§1, §6.x, §7.3; stiff ...": stiff 5.3 (4) (fits 4.23-4.48 at
-% delta = 0.04 ... 0.0025 over 1250-40,000; the five widths' spread 1.2-2.4
-% at every count, the jump included; 7.99e-9 against 8.36e-5 at 40,000 and
-% delta = 0.0025; "no deterioration ... on these node sets"), 5.3 (8)
-% (1.4-3.9 from 5000 nodes, RMS), 5.3 (9) (fits 4.43-4.71; 0.52-0.97 from
-% 5000 to 40,000; the five flux seeds; the smooth ring fourth order on the
-% far field). The caveat's 801, 1.75 and 2.3 to 4.7 orders: stiff 2.5 (3)
-% and 5.3 (10). The last sentence: the rule of sec:flat2d and sec:chain (seed
+% order delta and its switch-off). #51 (the full-draft review) took the
+% second paragraph's numbers out, which section 1 and section 6 carry; it
+% states stiff 5.3 (4) ("no deterioration ... on these node sets", the
+% five widths within small factors), 5.3 (8) and 5.3 (9) (the five flux
+% seeds; the smooth ring against a 160,000-node seed run) without them. The
+% caveat's 801 and 101, 1.75 and 1.6 to 4.9 orders: stiff 2.5 (3), 2.4 and
+% 5.3 (10). The last sentence: the rule of sec:flat2d and sec:chain (seed
 % the rows within 20 delta of an edge; no threshold in delta) and the
 % input the construction paragraph of section 7.1 names.
 Between a coefficient that varies on the scale of the grid and one that
@@ -4196,19 +4077,15 @@ interface-aware stencils of a jump. On scattered nodes the resulting RBF-FD
 stencils are fourth order at every $\delta$ tested, elliptic and parabolic,
 with no switch between regimes.
 
-Through the flat band the seeds' elliptic fits at the four widths are
-$4.23$ to $4.48$ over $1250$ to $40{,}000$ nodes, and the elliptic errors at
-the five widths, the jump included, lie within factors of $1.2$ to $2.4$ of one
-another at each count, which is no deterioration as $\delta \to 0$ on these
-node sets, not a proven $\delta$-uniform constant; at $40{,}000$ nodes and $\delta = 0.0025$ their error is
-$\sci{7.99}{-9}$ against the naive operator's $\sci{8.36}{-5}$. Through the
-curved band the tangential chain is within $1.4$ to $3.9$ times of the flat
-seeds' RMS error from $5000$ nodes at every $\delta$. On the ring thinned at
-a fixed resistance, where the block adds five flux seeds, the seeds converge
-at fourth order at every $s$, with fits of $4.43$ to $4.71$, at $0.52$ to $0.97$ times
-the jump-aware operator's error from $5000$ to $40{,}000$ nodes, and
-through a smooth ring whose width and edges are both below $h$ they
-converge at fourth order on the nodes away from it. An imperfect contact
+The measurements say the same in every setting we ran. Through the flat
+band the seeds' elliptic errors at the five widths, the jump included, stay
+within small factors of one another at each count, which is no
+deterioration as $\delta \to 0$ on these node sets, not a proven
+$\delta$-uniform constant; through the curved band the tangential chain
+keeps fourth order; and on the ring, where the block adds five flux seeds,
+the seeds converge at fourth order at every $s$, measured against a fine
+run of the seeds where the ring is smooth.
+An imperfect contact
 costs strong-form schemes a derivative in the jump conditions, as Lombard
 and Piraux observed for elastic waves
 \cite{LombardPiraux2003,LombardPiraux2006}; the flux seeds add the functions
@@ -4238,6 +4115,7 @@ for each row within $20\delta$ of an edge; they need no threshold on
 $h / \delta$.
 
 % ===========================================================================
+\clearpage
 \appendix
 \section{Notation}
 \label{sec:notation}
@@ -4250,7 +4128,7 @@ Symbols that recur, with the section that defines them. Indices, a proof's
 own letters and constants used in one paragraph are defined where they
 appear.
 \begin{center}
-\small
+\footnotesize
 \begin{tabular}{@{}lp{0.6\textwidth}l@{}}
 \toprule
 Symbol & Meaning & Where \\
@@ -4267,12 +4145,15 @@ $\delta$; $\sigma$; $d$ & edge width; blend weight
   \ref{sec:problem} \\
 $c$ & resistance deficit per unit $\delta$ of a $\tanh$ edge,
   \eqref{eq:deficit} & \ref{sec:problem} \\
+$\omega$ & growth rate of the separable modes $e^{\omega t}$, $0$ at
+  equilibrium & \ref{sec:truncation}, \ref{sec:problems2d} \\
 $x_c$ & an edge's centre & \ref{sec:setting1d} \\
 $s$; $w$ & the ring's thinness; its width $1/s$ & \ref{sec:setting2d} \\
 $x_e$; $\alpha_e$ & a stencil's evaluation node (anchor); $\alpha$ there &
   \ref{sec:chain} \\
-$h_s$; $\xi$ & stencil radius; stencil coordinate, $(x - x_e) / h_s$ &
-  \ref{sec:chain} \\
+$h_s$; $\xi$ & stencil radius; stencil coordinate, $(x - x_e) / h_s$ in
+  one dimension, tangential in two \eqref{eq:frame2d}, arclength along a
+  curve's parallels in Section~\ref{sec:curved} & \ref{sec:chain} \\
 $w_i$, $\tilde w$ & stencil weights; the same before the factor
   $h_s^{-2}$ & \ref{sec:chain} \\
 $\phi_k$; $\psi_k$ & the one-dimensional seeds \eqref{eq:chain}; their
@@ -4292,7 +4173,8 @@ T0, T1, T2, T1-FV & widened edge $\max(\delta, m h)$; harmonic and
   arithmetic cell means; the conservative scheme & \ref{sec:treatments1d}
   \\
 $N_s$; $p$; $\varphi$, $\varepsilon$ & stencil size; polynomial degree;
-  the Gaussian and its shape parameter & \ref{sec:setting2d} \\
+  the Gaussian and its shape parameter $0.4 / r_1$, $r_1$ the distance to
+  the nearest node & \ref{sec:setting2d} \\
 $(x', y')$ & a stencil's local frame, $y'$ along the normal &
   \ref{sec:jump} \\
 $\eta$; $\alpha_n$ & normal stencil coordinate; $\alpha$ along the normal
@@ -4314,6 +4196,185 @@ $R$; $F$ & the ring's contact resistance; the flux through it &
 \bottomrule
 \end{tabular}
 \end{center}
+
+\noindent\begin{minipage}{\textwidth}
+The names the sections use for operators, problems and diagnostics:
+\begin{center}
+\footnotesize
+\begin{tabular}{@{}p{0.25\textwidth}p{0.52\textwidth}l@{}}
+\toprule
+Name & Meaning & Where \\
+\midrule
+naive & $D_x A D_x$ ($+ D_y A D_y$), $\alpha$ sampled at the nodes &
+  \ref{sec:setting1d}, \ref{sec:setting2d} \\
+direct; direct rows & $\alpha \nabla^2 u + \nabla \alpha \cdot \nabla u$ on
+  one stencil, $\alpha$ and $\nabla \alpha$ of the owning piece; the rows
+  of the other operators that do not see an edge & \ref{sec:setting1d},
+  \ref{sec:jump} \\
+interface-aware; jump-aware & the 2016 stencils of a jump in one
+  dimension; in two, with warped Gaussians & \ref{sec:jump} \\
+the $\delta = 0$ construction & the jump-aware rows applied at a smooth
+  edge's centre, its other rows direct & \ref{sec:jump} \\
+seeds; seed operator & the basis of Definition~\ref{def:seeds} and its
+  two-dimensional forms; the operator whose rows that see an edge are built
+  on them & \ref{sec:chain}, \ref{sec:seeds2d} \\
+reach rule & a row is seeded when its stencil sees an edge within
+  $20\delta$ & \ref{sec:chain}, \ref{sec:assembly2d} \\
+knee; floor & the turn of the naive operator's error at $h \approx
+  \delta$; the distance between the jump problem's solution and the smooth
+  one & \ref{sec:knee1d}, \ref{sec:construction1d} \\
+warp; plain Gaussians & Gaussians in the warped normal coordinate; in the
+  frame's own & \ref{sec:jump}, \ref{sec:assembly2d} \\
+frozen profile; tangential chain & straight-feature seeds along the true
+  normal, curvature dropped; seeds marched in the curve's own coordinates
+  & \ref{sec:curved} \\
+flux seeds; diagonal rule & the five seeds of degree five added on a ring;
+  its choice of Gaussian block by the larger diagonal share &
+  \ref{sec:ring} \\
+two-constant, sinusoidal; ramp problem & the one-dimensional media; their
+  time-dependent problem & \ref{sec:setting1d} \\
+cases 1--3; geometries A, B & the flat band, the curved band and the ring;
+  case 2's curvature and tangential variation apart & \ref{sec:setting2d},
+  \ref{sec:curved2d} \\
+probe & a row applied to the equilibrium reference, its truncation error &
+  \ref{sec:curved2d} \\
+the port & our Python reimplementation of the 2016--2017 methods &
+  \ref{sec:scope} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{minipage}
+
+% ===========================================================================
+\section{Tables of the two-dimensional study}
+\label{sec:tables2d}
+% #51 (the full-draft review): the tables of section 6 that only hold
+% numbers the text quotes, moved here so the section's text and its
+% figures stay together; the order is section 6's.
+The tables of Section~\ref{sec:results2d} that hold the sweeps' numbers,
+which the text quotes and reads as ratios, in the order of that section.
+
+\begin{table}
+  \centering
+  \caption{The naive operator on case 1: RMS error at equilibrium; that error
+  over the jump's on the same nodes, at equilibrium and for the parabolic
+  problem; the parabolic RMS error over the equilibrium one; and the
+  relative flux error on the first rows off the edge, at equilibrium. Fits
+  over every count. The jump and the wider edges;
+  Table~\ref{tab:knee2dthin} has the thinner.}
+  \label{tab:knee2d}
+  \footnotesize
+  % figures/tab_2d_knee.tex: scripts/paper_tables.py; never hand-edited.
+  \input{figures/tab_2d_knee.tex}
+\end{table}
+
+\begin{table}
+  \centering
+  \caption{Table~\ref{tab:knee2d} continued, at $\delta = 0.005$ and
+  $0.0025$: the naive operator on case 1, its RMS error at equilibrium; that
+  error over the jump's on the same nodes, at equilibrium and for the
+  parabolic problem; the parabolic RMS error over the equilibrium one; and
+  the relative flux error on the first rows off the edge, at equilibrium.
+  Fits over every count.}
+  \label{tab:knee2dthin}
+  \footnotesize
+  % figures/tab_2d_knee_thin.tex: scripts/paper_tables.py; never hand-edited.
+  \input{figures/tab_2d_knee_thin.tex}
+\end{table}
+
+\begin{table}
+  \centering
+  \caption{The $\delta = 0$ construction on case 1 at equilibrium: its RMS
+  error; the floor, the two references' RMS difference at the nodes; the
+  error over the floor; and the error over the naive operator's on the same
+  nodes. At the jump it is the jump-aware operator. The jump and the wider
+  edges; Table~\ref{tab:floor2dthin} has the thinner.}
+  \label{tab:floor2d}
+  \footnotesize
+  % figures/tab_2d_floor.tex: scripts/paper_tables.py; never hand-edited.
+  \input{figures/tab_2d_floor.tex}
+\end{table}
+
+\begin{table}
+  \centering
+  \caption{Table~\ref{tab:floor2d} continued, at $\delta = 0.005$ and
+  $0.0025$: the $\delta = 0$ construction on case 1 at equilibrium, its RMS
+  error; the floor, the two references' RMS difference at the nodes; the
+  error over the floor; and the error over the naive operator's on the same
+  nodes.}
+  \label{tab:floor2dthin}
+  \footnotesize
+  % figures/tab_2d_floor_thin.tex: scripts/paper_tables.py; never hand-edited.
+  \input{figures/tab_2d_floor_thin.tex}
+\end{table}
+
+\begin{table}
+  \centering
+  \caption{The warp: the RMS error of the seed rows with plain Gaussians over
+  that with warped ones (above $1$, the warp wins), for the seeds on case 1
+  and for the tangential chain on case 2.}
+  \label{tab:warp2d}
+  \footnotesize
+  % figures/tab_2d_warp.tex: scripts/paper_tables.py; never hand-edited.
+  \input{figures/tab_2d_warp.tex}
+\end{table}
+
+\begin{table}
+  \centering
+  \caption{Interior eigenvalues $\lambda$ on case 1, the seeds with warped
+  Gaussians unless marked plain: the rightmost, the number in the right
+  half-plane, the extremes of $h^2 \mathrm{Re}\, \lambda$ and
+  $h^2 |\mathrm{Im}\, \lambda|$, and the largest root modulus of BD4 at
+  $\Delta t = h$.}
+  \label{tab:spectra2d}
+  \footnotesize
+  % figures/tab_2d_spectra.tex: scripts/paper_tables.py; never hand-edited.
+  \input{figures/tab_2d_spectra.tex}
+\end{table}
+
+\begin{table}
+  \centering
+  \caption{Case 2 and the split geometries over the flat seeds of case 1 at
+  the same width and count, RMS error at equilibrium unless marked: the
+  frozen profile and the tangential chain on case 2; the tangential chain on
+  A (the sine pair, $\alpha = 0.2$ in the band) and on B (flat lines, case
+  2's $\alpha$); the chain in the maximum norm; and, at the jump, the chain
+  over the jump-aware operator on case 2.}
+  \label{tab:curvedratios2d}
+  \footnotesize
+  % figures/tab_2d_curved_ratios.tex: scripts/paper_tables.py; never
+  % hand-edited.
+  \input{figures/tab_2d_curved_ratios.tex}
+\end{table}
+
+\begin{table}
+  \centering
+  \caption{The probe: the RMS over the crossing rows of each operator applied
+  to the equilibrium reference at the nodes, at the first and the finest
+  count, and its fitted order in $h$. A: the sine pair with $\alpha = 0.2$ in
+  the band (the curvature alone); B: flat lines with case 2's $\alpha$ (its
+  variation along the edge alone). At $\delta > 0$ the jump-aware rows read
+  the smooth edge as a jump and are not listed.}
+  \label{tab:probe2d}
+  \footnotesize
+  % figures/tab_2d_probe.tex: scripts/paper_tables.py; never hand-edited.
+  \input{figures/tab_2d_probe.tex}
+\end{table}
+
+\begin{table}
+  \centering
+  \caption{The smooth ring: RMS error on the far field against the fine seed
+  run at $160{,}000$ nodes, for the seeds with the diagonal rule and with the
+  warp on every row; the diagonal rule over the better of warped and plain Gaussians
+  on every row (--: the diagonal rule keeps no row plain and is the warp); the other
+  operators at $40{,}000$ nodes; and at $s = 10^{11}$, $\delta = 0.001$, the seeds against a
+  second fine run built with plain Gaussians.}
+  \label{tab:ringsmooth2d}
+  \footnotesize
+  % figures/tab_2d_ring_smooth.tex: scripts/paper_tables.py; never
+  % hand-edited.
+  \input{figures/tab_2d_ring_smooth.tex}
+\end{table}
 
 \section*{Acknowledgments}
 % Decision of 2026-09-24 (#51): as in the companion, Bengt Fornberg only, for
@@ -4337,8 +4398,11 @@ interface-aware stencils for heat transfer of
 % the models and their tickets by the Co-Authored-By trailers of the commits
 % (Fable 5.1: E0-E3 and E4.1, #9-#32; Opus 5: E4.2-E4.6, #33-#37; Opus 5.5:
 % E4.7-E4.12 and E5, #38-#51, #81, #84), the reviews by the pull requests'
-% descriptions and comments (a Sonnet review on each; GPT-6 Astra and Fable
-% 5.1 on the 2-D results in PR #88 and on the complete draft in #51).
+% descriptions and comments (a Sonnet review recorded on every ticket PR,
+% #55-#97, none on #1, #53 or #54; claude-sonnet-5 is the only Sonnet id in
+% the session logs; GPT-6 Astra and Fable 5.1 on the 2-D results in PR #88
+% and on the complete draft in #51's PR). Resources: the machine's sysctl and
+% the venv's versions (#51); paper_data.py's ten minutes, paper/README.md.
 Following arXiv's policy on generative AI language tools and the Leiden
 Declaration on Artificial Intelligence and Mathematics (2 June 2026), the
 author discloses the following.
@@ -4351,10 +4415,11 @@ in dialogue with the author: Fable~5.1 for the plan, the port, the
 one-dimensional study and the design of the two-dimensional one; Opus~5 for
 the straight feature in two dimensions; Opus~5.5 for the curved feature,
 the ring, the treatments on scattered nodes, the literature search and this
-manuscript. Reviews were a separate step: a Claude Sonnet model reviewed
-every pull request against the repository, and GPT-6~Astra (OpenAI) and
-Claude Fable~5.1 reviewed the two-dimensional results before the writing
-began and the complete draft after it. The author assessed their findings
+manuscript. Reviews were a separate step: Claude Sonnet~5
+(\texttt{claude-sonnet-5}) reviewed the pull request of every ticket from
+the port on against the repository, and GPT-6~Astra (OpenAI,
+\texttt{gpt-6-astra}) and Claude Fable~5.1 reviewed the two-dimensional
+results before the writing began and the complete draft after it. The author assessed their findings
 one by one and applied those the author agreed with.
 
 \para{Division of labour}
@@ -4380,9 +4445,17 @@ commit and the command line that made them, and a further script
 recomputes from those files every number the text quotes and fails when
 one no longer rounds to the quoted figure; the numbers it cannot recompute
 (timings, scratch runs) are traced in the source to the notes that record
-them. The assembly pass re-read the draft as one paper against the notes
-and the results files and corrected the text where the draft had it wrong.
+them. A final pass re-read the draft as one paper against the notes and
+the results files and corrected the text where the draft had it wrong.
 The author has read every result and the whole text.
+
+\para{Resources}
+The computations ran on one Apple M4 Pro machine (14 cores, 48~GB of
+memory) with Python~3.13, NumPy~2.5 and SciPy~1.18; no GPU or cluster was
+used, and the language models above ran as their vendors' services. The
+documented runs behind the results files take about ten minutes from the
+working caches; the run times of the sweeps that built those caches, and
+every time the text quotes, are recorded in the repository's notes.
 
 \para{Attribution}
 Automated tools are known to reproduce ideas without crediting their

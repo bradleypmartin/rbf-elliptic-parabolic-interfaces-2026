@@ -1214,7 +1214,11 @@ the face-conductance (K1) and formal-powers (K2) sentences, the only
 support §1 then gives "classical in every part" and the abstract's
 formal-powers clause beyond K3. Brad accepted the longer paragraph over
 that; the 250–350 target is retired. It stays one paragraph, since O1 asks
-for K3–K6 beside the claim.
+for K3–K6 beside the claim. *#51 (the full-draft review) split it in two at
+"In two dimensions", the one-dimensional sentences apart; K3–K6 stay in the
+paragraph with the claim. #51 also dropped the resistive-layer sentence that
+#45's third cut had moved into the manuscript's §5.4; §1.1 keeps its
+citations.*
 
 ### 6b. Claim sentences (abstract, contributions, conclusions)
 
@@ -1252,6 +1256,11 @@ Bucket §1b, worded as "no prior instance found":
   strong-form schemes a derivative in the jump conditions, as Lombard and
   Piraux observed for elastic waves; the flux seeds add the functions of
   one degree higher that carry the flux, and nothing else."
+
+*Placement (#51, the full-draft review): the abstract no longer carries the
+treatments comparison, so the caveat stands in the manuscript's §1
+(contribution 5) and §7.3 only; §4.5 and §6.7 give the comparison itself
+and no longer repeat the caveat's first sentence.*
 
 Not to be used:
 
