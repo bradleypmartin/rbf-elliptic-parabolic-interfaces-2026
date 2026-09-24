@@ -70,6 +70,8 @@ docs/                  plan.md, paper-index.md, port-notes.md (E1–E2 results a
 papers/                README.md (sources, checksums), fetch_papers.sh; PDFs gitignored
 paper/                 the manuscript (E5): main.tex → main.pdf, references.bib,
                        data/, figures/, make_arxiv.py, LICENSE (CC BY 4.0)
+LITERATURE.md          the novelty ledger (E5.2): buckets, refuter log, bib
+                       verification; §6 the only novelty wording allowed
 outputs/               generated (gitignored)
 ```
 

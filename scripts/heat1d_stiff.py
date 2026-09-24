@@ -230,8 +230,8 @@ TREATMENTS = {
 
 Each is a changed medium sampled by the naive operator, except T1-FV, the
 conservative three-point scheme with exact face conductances, which is an
-operator of its own (stiff note §1.8). T3, the band-limited alpha, waits on
-the literature pass (E5.2, #43).
+operator of its own (stiff note §1.8). T3, the band-limited alpha, is
+dropped (E5.2, #43, ``LITERATURE.md`` §1d).
 """
 
 COMPARATORS = {"naive": naive_operator, **TREATMENTS, "seeds": seed_operator}

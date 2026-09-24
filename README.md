@@ -30,10 +30,12 @@ where standard stencils are first order.
    *seeds*, functions continued through the edge by ODEs that say what the
    diffusion operator allows, whose δ → 0 limit is the 2016 construction.
    Measured against the coefficient treatments in common use (harmonic and
-   arithmetic cell means, widened edges, band-limited coefficients), in 1-D
-   and 2-D, elliptic and parabolic.
-3. **Manuscript.** An arXiv write-up in `paper/`, with a novelty ledger and
-   scripted figures.
+   arithmetic cell means, widened edges, the finite-volume scheme with exact
+   face conductances), in 1-D and 2-D, elliptic and parabolic.
+3. **Manuscript.** An arXiv write-up in `paper/`, with scripted figures and
+   a novelty ledger, [`LITERATURE.md`](LITERATURE.md): what is prior work,
+   what survived the search, and the only novelty wording the manuscript
+   may use.
 
 The plan, decisions, risks, epics and tickets are in
 [`docs/plan.md`](docs/plan.md). The same construction for the wave equation
@@ -84,6 +86,7 @@ reproduction tables are in `docs/port-notes.md` (§1.7 and §2.10). See
 | `docs/` | `plan.md`, `paper-index.md` (page ranges per PDF), `port-notes.md`, `stiff-diffusion.md`, `figures/` |
 | `papers/` | Index of reference PDFs with checksums and a fetch script; PDFs not committed |
 | `paper/` | The manuscript (CC BY 4.0): `main.tex` → `main.pdf`, `references.bib`, data, figures, arXiv packaging |
+| `LITERATURE.md` | The novelty ledger (E5.2): prior work by bucket, the refuter-pass log, the verification of every bibliography entry, the manuscript's novelty wording |
 
 ## Licence
 

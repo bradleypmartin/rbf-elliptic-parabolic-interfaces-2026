@@ -178,7 +178,11 @@ in the literature pass (E5.2) before any wording claims anything:
   m = 1, 2 (regularise α itself; the diffuse-interface reflex).
 - **T3, band-limited α**: the anti-aliasing filter of the seismic literature
   applied to α (less standard for diffusion; include if the literature pass
-  finds it used, otherwise drop it and say so).
+  finds it used, otherwise drop it and say so). *Decided by E5.2 (#43,
+  `LITERATURE.md` §1d): dropped, not built. The pass found it in use for
+  waves only, proposed but not demonstrated for the diffusive Maxwell
+  equations of marine CSEM, whose codes average the conductivity; the
+  manuscript says so in one sentence.*
 - **The δ = 0 construction at the edge centre**: the dissertation's
   translated basis, treating the smooth edge as a jump. This is the
   "what we did 10–15 years ago" baseline the user asked for, not a comparator;
@@ -265,7 +269,16 @@ otherwise. `CLAUDE.md` carries the working set.
   sub-grid smooth layer, elliptic and parabolic, with the jump construction as
   its δ → 0 limit, measured against the harmonic-mean practice. E5.2 buckets
   it before any section is drafted; §6 of `LITERATURE.md` holds the only
-  wording the manuscript may use.
+  wording the manuscript may use. *Answered by E5.2 (#43, `LITERATURE.md`
+  §1d): confirmed, and thinner in 1-D than this list knew. The 1-D chain is
+  Kravchenko's formal powers of the Sturm–Liouville operator, and stencils
+  of any order from Cauchy problems through a piecewise-smooth coefficient
+  are Samarskii–Makarov's exact and truncated schemes, so the manuscript
+  claims nothing for the 1-D construction. The 2-D claim survives scoped
+  to stencils on an unchanged node set: FLAME puts local solutions in
+  difference stencils for piecewise-constant media, and the LOD line
+  reaches high order through under-resolved coefficients in Galerkin form,
+  and §6a names both.*
 - **R2 The 1-D elliptic degeneracy** (§3.2) surprises a reader who expects a
   knee plot first. Lead with the parabolic knee and state the exactness as a
   remark with its FV twin; do not let 1-D elliptic carry a headline.
@@ -301,7 +314,12 @@ otherwise. `CLAUDE.md` carries the working set.
   2.25–3.33 per halving from 10,000 nodes at s = 10³ and ends 8.2 and 11.8×
   E2.3's at 40,000 and 80,000, stiff note §4.8). *Answered in E4.8:* on a ring the block adds the
   five degree-5 seeds that carry a flux (20 on the 30 nodes), and the seeds
-  are fourth order at or below E2.3's line (§4.8).
+  are fourth order at or below E2.3's line (§4.8). *E5.2 (#43,
+  `LITERATURE.md` §1a K9) found the observation partly prior: Lombard &
+  Piraux (SISC 2006) lose order for 2-D elastic waves across spring-mass
+  contacts until the jump conditions carry one more derivative. The
+  manuscript cites them and claims only the diffusion, scattered-node form
+  and the targeted remedy.*
 
 ## 6. Epics and tickets
 
@@ -665,8 +683,9 @@ Depends on: E3.4
 
 `heat1d/treatments.py`: T1 harmonic mean of α over one and two cells, T2
 arithmetic mean, T0 widened edge (m = 1, 2), T3 band-limited α (kept only if
-E5.2 finds it in use for diffusion); each a material the naive operator
-samples, errors against the true-δ reference, elliptic and parabolic.
+E5.2 finds it in use for diffusion; it did not, `LITERATURE.md` §1d); each
+a material the naive operator samples, errors against the true-δ reference,
+elliptic and parabolic.
 
 **Done when**
 - Tests: T1 is exact on the 1-D equilibrium problem with a piecewise-constant α; each treatment reduces to its δ = 0 form; the parabolic table has every treatment at every δ.

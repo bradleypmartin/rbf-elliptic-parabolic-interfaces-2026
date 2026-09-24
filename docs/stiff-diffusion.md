@@ -280,7 +280,16 @@ claimed: splines whose pieces lie in `ker L` are the L-splines of Schultz
 & Varga (1967), and the harmonic-mean coefficient `h / ∫ dx/α` of the
 conservative difference schemes of Tikhonov & Samarskii (1962) is the
 two-point version of `φ₁` (§1.8). The literature ledger (E5.2, #43)
-places the construction; nothing here claims novelty.
+places the construction; nothing here claims novelty. *E5.2 found the 1-D
+construction classical in every part (`LITERATURE.md` §1a K1–K3). With
+`q = 0`, `u₀ = 1` and `p = α`, the seeds are the recursive integrals of
+Kravchenko & Porter's spectral-parameter power series, `φ_k = k! α_e^⌈k/2⌉`
+times their `X^(k)` (odd k) or `X̃^(k)` (even k), taken from the anchor
+(`tests/heat1d/test_stiff.py::test_the_seeds_are_the_formal_powers_of_the_
+sturm_liouville_operator`). Three-point schemes of any order whose
+coefficients come from Cauchy problems through a piecewise-smooth
+coefficient are Samarskii & Makarov's exact and truncated schemes (1990;
+Gavrilyuk et al. 2011).*
 
 ### 1.6 Truncation error: third order locally on the seeded rows, fourth globally
 
@@ -485,7 +494,9 @@ The predictions above, numbered so §2 can tick them off:
 
 Verified entries are those of the companion's `paper/references.bib`
 (fetched 2026-09-20) plus two Crossref records fetched 2026-09-21; the
-E5.2 ledger re-verifies before any enters `paper/references.bib`.
+E5.2 ledger re-verifies before any enters `paper/references.bib`. *Done
+2026-09-24 (#43): every entry below is in `paper/references.bib` with a
+dated note, and `LITERATURE.md` §2 P6 logs the fetches.*
 
 - Martin, B. P. (2016), *Application of RBF-FD to Wave and Heat Transport
   Problems in Domains with Interfaces*, PhD thesis, CU Boulder; ch. 4.
@@ -511,7 +522,8 @@ E5.2 ledger re-verifies before any enters `paper/references.bib`.
 - Patankar, S. V. (1980), *Numerical Heat Transfer and Fluid Flow*,
   Hemisphere; the Crossref record found is the CRC Press 2018 edition,
   doi:10.1201/9781482234213, ch. 4 "Heat Conduction" (the interface
-  conductivity). Section number and page to be pinned in E5.2.
+  conductivity). Pinned by E5.2 from the 1980 edition: §4.2-3 "The
+  Interface Conductivity", pp. 44–47, eqs. 4.9–4.10 (`LITERATURE.md` P4).
 
 ## 2. Results in 1-D (E3.2–E3.6)
 
@@ -1186,7 +1198,8 @@ target:
   scheme with `a_{i+½} = h / ∫_{x_i}^{x_{i+1}} dξ/α` (§1.8 item 3), an
   operator, not a medium; zero end rows for the Dirichlet rows to replace.
 - **T3**, the band-limited α, is not built: the ticket keeps it only if
-  E5.2 (#43) finds it in use for diffusion.
+  E5.2 (#43) finds it in use for diffusion. *It did not (waves only;
+  `LITERATURE.md` §1d), so T3 is dropped.*
 
 Errors `‖e‖₂/‖u‖₂` at the nodes (the rate in parentheses), the ramp
 problem at t = 2, MATLAB medium, the comparator columns in P10's order
@@ -2259,7 +2272,11 @@ manuscript, never as files, plan D2), dissertation §5.3 and EABE
 for routes (b) and (c) of §3.5, the multiscale FEM of Hou & Wu and the
 harmonic coordinates of Owhadi & Zhang named in plan R1; those two
 enter `paper/references.bib` only through E5.2's verification, and
-nothing in §3 claims novelty over them.
+nothing in §3 claims novelty over them. *E5.2 added the nearest stencil
+relative, Tsukerman's FLAME (local solutions satisfying the interface
+conditions in difference stencils, for piecewise-constant media), and the
+LOD line's high order through under-resolved coefficients in Galerkin form
+(`LITERATURE.md` §1a K4–K5).*
 
 ### 3.10 The tangential chain: seeds in the curve's own coordinates (E4.11, #81)
 
@@ -5204,7 +5221,7 @@ The builds are cheap (the disc quadrature is 0.2–13 s per (δ, radius) at
   at y = 0 and y = 1 and periodic in x.
 - *Nothing else is built.* There is no twin of T1-FV: a conservative scheme
   with exact face conductances needs faces, which a scattered node set does
-  not have. T3 waits on E5.2 (#43). The smooth ring (the E4.8 breadcrumb) is
+  not have. T3 is dropped (E5.2, #43, `LITERATURE.md` §1d). The smooth ring (the E4.8 breadcrumb) is
   left out by Brad's call (2026-09-23): it is not in the ticket, and E4.12
   (#84) reruns the ring's δ > 0 lines first. If it is taken up,
   `disc_integrals` needs one more frame (polar about the ring's centre,
@@ -5420,7 +5437,10 @@ switches itself off, since `max(δ, m h)` knows δ.
   the driver's docstring; `--data-dir` and the results file are not added
   here.
 - *E5.2 (#43)*: pin the scattered-node form of the conductance rule to a
-  source before the manuscript names it, and decide T3.
+  source before the manuscript names it, and decide T3. *Done: no source
+  averages α over a disc about each node, so the manuscript calls it the
+  natural scattered-node analogue of the harmonic-mean conductance; T3 is
+  dropped (`LITERATURE.md` §1a K10, §1d).*
 - *The ring*: see the decisions above.
 
 **Tests.** `tests/heat2d/test_treatments.py`:
@@ -6287,6 +6307,9 @@ tables are a results file of §5.1. For E5:
   proposed and was left for later.
 - *E5.2 (#43)*: the scattered-node form of the conductance rule and T3 (§4.9),
   and the contact-resistance literature for the ring's `s w = 1` (§4.8).
+  *Done: `LITERATURE.md` §1a K9–K10 and §1d; the flux seeds meet Lombard &
+  Piraux's order loss across imperfect contacts for elastic waves (SISC
+  2006), which the manuscript cites.*
 
 Tests: `tests/test_results_cache.py` (`finite` nulling the named placeholders,
 refusing any other non-finite value and naming its key; `write` warning when it

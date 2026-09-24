@@ -125,7 +125,7 @@ operator (``heat2d/treatments.py``). Six opt-in lines (``TREATMENT_LABELS``):
 the harmonic (T1) and arithmetic (T2) means of alpha over a disc of radius
 h/2 and h about each node, exact to rounding by quadrature in the product
 grid's sheared coordinates, and the edge widened (T0) to ``max(δ, m h)`` for
-m = 1, 2; T1-FV has no twin on scattered nodes and T3 waits on E5.2. They run
+m = 1, 2; T1-FV has no twin on scattered nodes and T3 is dropped (E5.2). They run
 beside E4.3's naive and construction lines and the seed line (case 1's
 ``seeds``, the tangential chain on another geometry), all reread from the
 geometry's cache, against the same references. The tables: every line's error
