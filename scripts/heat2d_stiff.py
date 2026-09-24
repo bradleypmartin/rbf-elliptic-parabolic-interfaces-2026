@@ -1774,9 +1774,18 @@ def chain_residual(sb: SeedBasis, medium: SmoothBand) -> float:
         if b >= 2:
             rhs += b * (b - 1) * phi[..., EXPONENTS.index((a, b - 2))]
         rhs *= sb.alpha_e
-        err = np.nanmax(np.abs(lf - rhs)) / max(np.abs(rhs).max(), 1.0)
-        worst = max(worst, float(err))
+        # The differences are NaN only on their 2 RESIDUAL_HALF-wide ends; the
+        # max is over the rest, so that a NaN there (a failed march or alpha)
+        # propagates to the table and stops its results file (E4.10, /spar).
+        inner = (slice(2 * RESIDUAL_HALF, -2 * RESIDUAL_HALF),) * 2
+        err = np.abs(lf - rhs)[inner].max() / max(np.abs(rhs).max(), 1.0)
+        worst = float(np.maximum(worst, err))
     return worst
+
+
+def _or_dash(value: float | None, width: int) -> str:
+    """``value`` in ``.1e`` at ``width``, or a dash where there is none (δ = 0)."""
+    return f"{'–':>{width}}" if value is None else f"{value:{width}.1e}"
 
 
 def chain_rows(nodes: NodeSet, h: float, xy: np.ndarray) -> list[dict]:
@@ -1811,7 +1820,7 @@ def chain_rows(nodes: NodeSet, h: float, xy: np.ndarray) -> list[dict]:
                 "ratio": ratio,
                 "monomials": float(monomials),
                 "shift": float(shift),
-                "residual": chain_residual(sb, medium) if ratio > 0 else float("nan"),
+                "residual": chain_residual(sb, medium) if ratio > 0 else None,
                 "one_d": float(
                     np.abs(one[0].T - two[:, cols]).max() / np.abs(one).max()
                 ),
@@ -1930,7 +1939,7 @@ def print_stencil_study(tables: dict, n: int, h: float) -> None:
     for r in tables["chain"]:
         print(
             f"  {r['ratio']:5g}  {r['monomials']:9.1e}  {r['shift']:9.1e}"
-            f"  {r['residual']:9.1e}  {r['one_d']:8.1e}  {r['warp']:9.1e}"
+            f"  {_or_dash(r['residual'], 9)}  {r['one_d']:8.1e}  {r['warp']:9.1e}"
             f"  {r['largest']:7.3g}"
         )
     print(
@@ -3557,10 +3566,11 @@ def run_snapshot(args) -> dict:
 # --- E4.10: the results file -----------------------------------------------------
 
 
-NOT_APPLICABLE = frozenset({"h_over_delta", "residual"})
+NOT_APPLICABLE = frozenset({"h_over_delta"})
 """The row keys whose non-finite value is a placeholder, written as JSON null: the
-jump's ``h/δ`` (inf) and the chain's residual at δ = 0 (nan, no edge to difference
-across). Found by running every documented command (stiff note §5)."""
+jump's ``h/δ`` (inf), found by running every documented command (stiff note §5).
+It is ``h`` over δ and never a solve's output, so no failure can hide under it;
+δ = 0's chain residual, the other placeholder, is None where it is made."""
 
 
 def results_name(

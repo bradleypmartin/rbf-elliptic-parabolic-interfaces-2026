@@ -94,7 +94,9 @@ def test_another_preconditioner_setting_is_not_read_from_the_cache(tmp_path):
     argv = ["--mode", "rows", "--n", "1250", "--ratios", "0", "--labels", "naive"]
     argv += ["--outputs", str(tmp_path)]
     three = main(argv)["rows"][0]
-    one = main([*argv, "--sweeps", "1"])["rows"][0]
+    # The same results file from a run with other --sweeps: said, not silent.
+    with pytest.warns(UserWarning, match="other sweeps"):
+        one = main([*argv, "--sweeps", "1"])["rows"][0]
     assert one["b-median"] != three["b-median"]
     assert one["median"] == three["median"]
     assert len(load_cache(tmp_path)) == 2

@@ -155,8 +155,10 @@ default ``--mode all``, ``<stem>_rows_n<N>.json`` and ``<stem>_spectra_n<N>.json
 for the documented 10,000- and 4900-node runs, under ``--outputs`` and
 ``--data-dir``."""
 
-NOT_APPLICABLE = frozenset({"least", "median", "below1"})
-"""``dominance`` of an empty row group: written as JSON null."""
+NOT_APPLICABLE = frozenset()
+"""No placeholder is written as null: ``dominance`` of an empty row group is
+NaN, which no documented run has, and a NaN in a results file stops its write
+(``results_cache.finite``) rather than hiding a degenerate matrix (E4.10, /spar)."""
 
 VALUES = (0.0, lambda x, y: np.sin(2.0 * np.pi * x))
 """The elliptic problem's Dirichlet rows: 0 on ``y = 0``, ``sin 2πx`` on ``y = 1``."""

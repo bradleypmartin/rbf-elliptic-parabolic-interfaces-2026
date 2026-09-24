@@ -26,7 +26,9 @@ from heat2d_stiff import (  # noqa: E402
     STUDY_DELTAS,
     TREATMENT_LABELS,
     Geometry,
+    anchor_stencil,
     cached_line,
+    chain_residual,
     curve_level,
     edge_diagnostics,
     figure_name,
@@ -61,6 +63,7 @@ from heat_interfaces.heat2d import (  # noqa: E402
     case2,
     harmonic_discs,
     naive_operator,
+    seed_basis,
     seed_operator,
 )
 from heat_interfaces.results_cache import read_results  # noqa: E402
@@ -270,7 +273,8 @@ def test_the_stencil_study_at_1250_nodes(tmp_path, capsys):
     # set; the 2500-node numbers the notes quote are the default run's.
     argv = ["--mode", "stencils", "--stencil-n", "1250", "--outputs", str(tmp_path)]
     tables = main(argv)["stencils"]
-    # δ = 0's residual is a placeholder (no edge to difference across): null.
+    # δ = 0's residual is None where it is made (no edge to difference
+    # across), not a NaN nulled by key: null in the file, a dash on screen.
     written = read_results(tmp_path / "heat2d_stiff_stencils.json")
     assert written["tables"]["stencils"]["chain"][0]["residual"] is None
     out = capsys.readouterr().out
@@ -806,7 +810,7 @@ def test_one_results_file_per_documented_run():
     )
     assert results_name("seeds", a) == "heat2d_stiff_seeds_a0.02_constant.json"
     assert results_name("seeds", b, 0, [0.0]) == "heat2d_stiff_seeds_a0_sine_jump.json"
-    assert NOT_APPLICABLE == {"h_over_delta", "residual"}
+    assert NOT_APPLICABLE == {"h_over_delta"}
     assert figure_name(CASE1, False, [0.0]) == "heat2d_stiff_seeds_jump.png"
     assert figure_name(b, True, [0.0, 0.0025]) == "heat2d_stiff_tangential_a0_sine.png"
     assert figure_name(b, True, [0.0]) == "heat2d_stiff_tangential_a0_sine_jump.png"
@@ -851,3 +855,22 @@ def test_the_snapshot_is_the_sweeps_grid(tmp_path, capsys):
     assert rows["construction"]["near_share"] > 0.5 > rows["seeds"]["near_share"]
     written = read_results(tmp_path / "heat2d_stiff_snapshot.json")
     assert [r["operator"] for r in written["tables"]["snapshot"]] == list(rows)
+
+
+def test_a_nan_in_the_chain_residual_propagates():
+    # E4.10's /spar review: the residual's max ran over NaN-padded differences
+    # with nanmax and then max(0.0, nan), which drops a NaN, so a failed alpha
+    # would have read as a perfect residual. The max is now over the valid
+    # interior and a NaN there reaches the table (and stops its results file).
+    nodes = nodes_2500()
+    medium = SmoothBand(case1().material, 0.0025)
+    sb = seed_basis(anchor_stencil(nodes, 0.5896), medium, 4)
+    clean = chain_residual(sb, medium)
+    assert 0.0 < clean < 1e-9
+
+    class Broken(SmoothBand):
+        def alpha(self, x, y):
+            a = super().alpha(x, y)
+            return np.where(np.abs(x - x.mean()) < 1e-3, np.nan, a)
+
+    assert np.isnan(chain_residual(sb, Broken(case1().material, 0.0025)))

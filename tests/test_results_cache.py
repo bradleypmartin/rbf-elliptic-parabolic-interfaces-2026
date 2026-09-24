@@ -1,6 +1,7 @@
 """``results_cache`` (plan D1; E5.3, #44): the schema of a driver's results file."""
 
 import json
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -89,6 +90,25 @@ def test_finite_nulls_the_named_placeholders_and_refuses_any_other(tmp_path):
     assert finite([1.0, float("inf")], {"rates"}, "rates") == [1.0, None]
     with pytest.raises(ValueError, match="'knee'"):
         finite([float("inf")], set(), "knee")
+
+
+def test_write_warns_when_it_overwrites_another_runs_file(tmp_path):
+    # E4.10's /spar review: a near-miss of a documented command must not
+    # replace its results file in silence; where it writes does not count.
+    path = tmp_path / "demo.json"
+    ResultsCache("demo", {"counts": [1250, 2500], "outputs": "a"}).write(path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        ResultsCache("demo", {"counts": [1250, 2500], "outputs": "b"}).write(path)
+        ResultsCache(
+            "demo", {"counts": [1250, 2500], "outputs": "a", "data_dir": "d"}
+        ).write(path)
+    with pytest.warns(UserWarning, match="other counts"):
+        ResultsCache("demo", {"counts": [1250], "outputs": "a"}).write(path)
+    assert read_results(path)["args"]["counts"] == [1250]
+    path.write_text("{}")
+    with pytest.warns(UserWarning, match="the file"):
+        ResultsCache("demo", {}).write(path)
 
 
 def test_git_state_names_this_checkout_and_nothing_outside_one(tmp_path):
