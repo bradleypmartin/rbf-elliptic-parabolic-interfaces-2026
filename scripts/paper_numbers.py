@@ -31,7 +31,9 @@ changed since its commit may or may not have moved (the working caches key on
 labels, stiff note §5.1).
 
 Each check names where the quoted figure stands, ``stiff §5.3 (4)``: the notes
-section and statement. The drafting tickets (E5.4–E5.9, #45–#50) prepend the
+section and statement, or for the construction's own tables that §3 of the
+manuscript quotes, the section and the prediction of the notes' §1.9 that the
+table answers (``stiff §2.3 P4``). The drafting tickets (E5.4–E5.9, #45–#50) prepend the
 manuscript section when the text quotes a number (``§6.4; stiff §5.3 (4)``)
 and add a check for any cache-backed number the text quotes that is not here;
 numbers the notes take from elsewhere (scratch runs, the port notes, timings)
@@ -383,10 +385,20 @@ def one_d(f: Files, b: Book) -> None:
         "1e-12",
     )
     jump = [r for r in f(ONE_D, "weights_vs_jump/matlab") if r["ratio"] == 0.0]
-    b.eq(w, "seed weights against E1.2's at δ = 0 (P4)", jump[0]["difference"], "7e-16")
+    b.eq(
+        cited(w, "§3.2"),
+        "seed weights against E1.2's at δ = 0 (P4)",
+        jump[0]["difference"],
+        "7e-16",
+    )
     functions = f(ONE_D, "seed_functions")["rows"]
     (limit,) = [r for r in functions if r["ratio"] == 0.0]
-    b.eq(w, "seed functions against E1.2's at δ = 0", max(limit["vs_jump"]), "3e-15")
+    b.eq(
+        cited(w, "§3.2"),
+        "seed functions against E1.2's at δ = 0",
+        max(limit["vs_jump"]),
+        "3e-15",
+    )
     eq75 = column(knee_1d(f, "ramp", "eq75", 0.0), "seeds")
     eq75_rates = rates_per_doubling([eq75[n] for n in EQ75_COUNTS])
     b.eq(w, "eq. 75 seeds' first rate, δ = 0", eq75_rates[0], "2.7")
@@ -495,6 +507,86 @@ def one_d(f: Files, b: Book) -> None:
     naive = column(knee_1d(f, "equilibrium", "matlab", 0.01), "naive")
     b.eq(w, "naive at equilibrium, h = 4δ (50), δ = 0.01", naive[50], "7.6e-3")
     b.eq(w, "naive at equilibrium, h = δ/8 (1600), δ = 0.01", naive[1600], "9.3e-9")
+
+
+def seeds_1d(f: Files, b: Book) -> None:
+    """The construction's own measurements that §3 of the manuscript quotes.
+
+    Stiff §2.3's P4–P7 tables, at the stencil of the seed-function figure (P4's
+    window: 200 nodes, the ``1/9 | 1`` edge half a cell right of ``x_e``) and at
+    eq. 75's edge on a node (201 nodes). E5.5 (#46) added them. Skipped, and
+    traced to the notes: the constant-α condition number 23.5 and the 24 of
+    δ ≥ 10 h, the double-cross (7.6e-15; 22 %, 1.9 %, 0.18 %), E1.2's h³
+    moments, the separable solution's truncation rates, eq. 75's first order in
+    h, the march floor's solution error and every count and timing of the
+    march (tests and scratch runs, not the results file).
+    """
+    # P4: the weights against E1.2's, first order in δ/h. §2.3's table has
+    # 0.465 at δ/h = 1/2, which is 46 %, not §1.4's scratch 47 %.
+    w = "stiff §2.3 P4"
+    rows = {r["ratio"]: r for r in f(ONE_D, "weights_vs_jump/matlab")}
+    ratios = (1.0, 0.5, 0.1, 0.01, 0.001)
+    b.each(
+        cited(w, "§3.2"),
+        "seed weights off E1.2's, %, δ/h = 1 … 0.001",
+        [100 * rows[r]["difference"] for r in ratios],
+        ["84", "46", "11", "1.1", "0.11"],
+    )
+    eq75 = {r["ratio"]: r for r in f(ONE_D, "weights_vs_jump/eq75")}
+    b.eq(
+        cited(w, "§3.2"),
+        "eq. 75 weights off E1.2's at δ = 0, edge on a node, 201",
+        eq75[0.0]["difference"],
+        "1.25",
+    )
+    b.span(
+        cited(w, "§3.2"),
+        "eq. 75 weights off E1.2's, δ/h = 0.001 … 1",
+        [eq75[r]["difference"] for r in ratios],
+        "1.26",
+        "2.24",
+    )
+    # P5: the stencil solve's condition number in ξ, as built.
+    w = "stiff §2.3 P5"
+    b.eq(cited(w, "§3.1"), "cond A at δ = 0, P4's window", rows[0.0]["cond"], "90")
+    b.eq(cited(w, "§3.1"), "cond A at δ = h/2, P4's window", rows[0.5]["cond"], "138")
+    # P6: the seeded rows' residual h² max |L_h u| on the exact equilibrium at 200
+    # nodes: rounding while the march crosses the edge in a few steps, the
+    # march's floor below.
+    w = "stiff §2.3 P6"
+    residuals = {r["ratio"]: r["seeds"] for r in f(ONE_D, "row_residuals/matlab")}
+    b.le(
+        cited(w, "§3.1"),
+        "seeded rows' residual, δ/h ≥ 0.1",
+        max(residuals[r] for r in (1.0, 0.5, 0.1)),
+        "2.5e-16",
+    )
+    b.eq(
+        cited(w, "§3.1"),
+        "seeded rows' residual, δ/h = 0.01",
+        residuals[0.01],
+        "2.4e-13",
+    )
+    b.eq(
+        cited(w, "§3.1"),
+        "seeded rows' residual, δ/h = 0.001",
+        residuals[0.001],
+        "5.8e-13",
+    )
+    # P6–P7 on eq. 75 at δ = 0: E1.2's operator (the construction's column at δ =
+    # 0) over the seed operator, 101–1601 nodes.
+    for problem, high, where in (
+        ("equilibrium", "44", "stiff §2.3 P6"),
+        ("ramp", "38", "stiff §2.3 P7"),
+    ):
+        line = knee_1d(f, problem, "eq75", 0.0)
+        b.span(
+            cited(where, "§3.2"),
+            f"eq. 75 E1.2 over seeds at δ = 0, {problem}",
+            [r[CONSTRUCTION_1D] / r["seeds"] for r in line],
+            "6",
+            high,
+        )
 
 
 # --- stiff note §5.1 and §5.3: what the 2-D study states ---------------------------
@@ -1681,6 +1773,7 @@ def treatments(f: Files, b: Book) -> None:
 
 STATEMENTS = (
     one_d,
+    seeds_1d,
     snapshot_2d,
     references_2d,
     naive_knee,

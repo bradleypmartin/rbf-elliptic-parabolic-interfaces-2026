@@ -89,7 +89,7 @@ def test_the_committed_data_hold_every_number(capsys):
 
 SECTION = r"(?:abstract|§\d+(?:\.\d+)*)"
 WHERE = re.compile(
-    rf"^(?:{SECTION}(?:, {SECTION})*; )?stiff §\d+\.\d+ (?:\(\d+\)|snapshot)$"
+    rf"^(?:{SECTION}(?:, {SECTION})*; )?stiff §\d+\.\d+ (?:\(\d+\)|snapshot|P\d+)$"
 )
 
 
@@ -101,11 +101,15 @@ def test_every_where_is_the_notes_statement_after_any_quoting_sections():
     assert all(WHERE.match(c.where) for c in checks), [
         c.where for c in checks if not WHERE.match(c.where)
     ]
-    # The drafts so far (E5.4, #45) quote from the abstract, §1 and §2.
+    # The drafts so far (E5.4, #45; E5.5, #46) quote from the abstract and §1–3;
+    # §3 quotes the construction's own tables, keyed by stiff §2.3's predictions.
     quoting = {
         s for c in checks if "; " in c.where for s in c.where.split("; ")[0].split(", ")
     }
-    assert {"abstract", "§1", "§1.1", "§2.1"} <= quoting
+    assert {"abstract", "§1", "§1.1", "§2.1", "§3.1", "§3.2"} <= quoting
+    assert {f"stiff §2.3 P{k}" for k in (4, 5, 6, 7)} <= {
+        c.where.split("; ")[-1] for c in checks
+    }
 
 
 def test_a_failed_check_fails_the_run(capsys, monkeypatch):
